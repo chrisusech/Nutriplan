@@ -3,12 +3,12 @@
 from io import BytesIO
 
 import pytest
+from tests.fixtures.plan_builder import build_fixed_plan, catalog_by_name
 
 from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer, render_plan_html
 from nutriplan.adapters.render.view import natural_units
 from nutriplan.domain.errors import RenderError
-from tests.fixtures.plan_builder import build_fixed_plan, catalog_by_name
 
 
 @pytest.fixture(scope="module")

@@ -3,8 +3,6 @@
 from io import BytesIO
 from uuid import UUID
 
-from nutriplan.domain.errors import RenderError
-from nutriplan.domain.models import Branding, FoodItem, PlanCycle
 from nutriplan.adapters.render.view import (
     ANOTACIONES_IMPORTANTES,
     DAY_LABELS,
@@ -12,6 +10,8 @@ from nutriplan.adapters.render.view import (
     SLOT_LABELS,
     build_grid,
 )
+from nutriplan.domain.errors import RenderError
+from nutriplan.domain.models import Branding, FoodItem, PlanCycle
 
 
 class DocxRenderer:

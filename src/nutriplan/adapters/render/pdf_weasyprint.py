@@ -9,8 +9,6 @@ from uuid import UUID
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from nutriplan.domain.errors import RenderError
-from nutriplan.domain.models import Branding, FoodItem, PlanCycle
 from nutriplan.adapters.render.view import (
     ANOTACIONES_IMPORTANTES,
     DAY_LABELS,
@@ -18,6 +16,8 @@ from nutriplan.adapters.render.view import (
     SLOT_LABELS,
     build_grid,
 )
+from nutriplan.domain.errors import RenderError
+from nutriplan.domain.models import Branding, FoodItem, PlanCycle
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
