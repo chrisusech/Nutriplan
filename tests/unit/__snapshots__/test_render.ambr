@@ -1,0 +1,244 @@
+# serializer version: 1
+# name: test_html_snapshot
+  '''
+  <!DOCTYPE html>
+  <html lang="es">
+  <head>
+  <meta charset="utf-8">
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 12mm 10mm;
+      @bottom-center {
+        content: "Valeria Fit · @valeria.fit — página " counter(page) " de " counter(pages);
+        font-size: 7.5pt;
+        color: #888;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #222; font-size: 8.5pt; margin: 0; }
+    header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #2E7D32; padding-bottom: 6px; margin-bottom: 10px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand img { height: 42px; }
+    .brand .name { font-size: 15pt; font-weight: 700; color: #2E7D32; }
+    .brand .handle { font-size: 8pt; color: #666; }
+    .title { text-align: right; }
+    .title h1 { margin: 0; font-size: 13pt; }
+    .title .phase { color: #F9A825; font-weight: 700; font-size: 10pt; }
+    .targets { margin: 6px 0 8px; }
+    .targets span { display: inline-block; background: #2E7D3214; border: 1px solid #2E7D3255;
+                    border-radius: 4px; padding: 2px 8px; margin-right: 6px; font-size: 8pt; }
+    table.plan { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    table.plan th, table.plan td { border: 1px solid #ccc; padding: 4px 5px; vertical-align: top; }
+    table.plan thead th { background: #2E7D32; color: white; font-size: 8.5pt; padding: 5px; }
+    table.plan th.slot { width: 9%; background: #2E7D320f; color: #2E7D32;
+                         text-transform: uppercase; font-size: 7.5pt; letter-spacing: .4px; text-align: left; }
+    ul.portions { margin: 0; padding-left: 11px; }
+    ul.portions li { margin-bottom: 2px; }
+    .extra { color: #F9A825; font-weight: 600; font-size: 7.5pt; }
+    .kcal { color: #999; font-size: 7pt; text-align: right; margin-top: 2px; }
+    section.notes { margin-top: 10px; page-break-inside: avoid; }
+    section.notes h2 { font-size: 10pt; color: #2E7D32; border-bottom: 1px solid #2E7D3255; padding-bottom: 2px; }
+    section.notes ol { margin: 4px 0 0; padding-left: 16px; }
+    section.notes li { margin-bottom: 2px; }
+    .provenance { margin-top: 8px; font-size: 6.5pt; color: #aaa; }
+  </style>
+  </head>
+  <body>
+  <header>
+    <div class="brand">
+      <div>
+        <div class="name">Valeria Fit</div>
+  <div class="handle">@valeria.fit</div>    </div>
+    </div>
+    <div class="title">
+      <h1>Plan nutricional — Cliente Ejemplo</h1>
+      <div class="phase">Días 1 – 15</div>
+    </div>
+  </header>
+  
+  <div class="targets">
+    <span><strong>1437</strong> kcal/día</span>
+    <span>Proteína <strong>128 g</strong></span>
+    <span>Carbohidratos <strong>143 g</strong></span>
+    <span>Grasas <strong>40 g</strong></span>
+  </div>
+  
+  <table class="plan">
+    <thead>
+      <tr>
+        <th class="slot"></th>
+  <th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th><th>Sábado</th><th>Domingo</th>    </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th class="slot">Desayuno</th>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Huevo entero — 100 g (≈ 2 und)</li><li>Arepa de maíz — 70 g (≈ 1 und)</li><li>Aguacate — 50 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">376 kcal</div>      </td>
+      </tr>
+      <tr>
+        <th class="slot">Snack AM</th>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Yogur griego natural — 170 g (≈ 1 und)</li><li>Banano — 120 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">207 kcal</div>      </td>
+      </tr>
+      <tr>
+        <th class="slot">Almuerzo</th>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Pechuga de pollo — 150 g (≈ 1 und)</li><li>Arroz blanco cocido — 120 g (≈ 1 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">404 kcal</div>      </td>
+      </tr>
+      <tr>
+        <th class="slot">Snack PM</th>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Queso fresco — 60 g (≈ 2 und)</li><li>Manzana — 180 g (≈ 1 und)</li>        </ul>
+  <div class="kcal">252 kcal</div>      </td>
+      </tr>
+      <tr>
+        <th class="slot">Cena</th>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+        <td>
+          <ul class="portions">
+  <li>Tilapia — 150 g (≈ 1 und)</li><li>Batata cocida — 60 g (≈ 0.5 und)</li>        </ul>
+  <div class="extra">Ensalada libre</div><div class="kcal">198 kcal</div>      </td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <section class="notes">
+    <h2>Anotaciones Importantes</h2>
+    <ol>
+  <li>Pesar los alimentos ya cocidos, con gramera.</li><li>Tomar mínimo 2 litros de agua al día.</li><li>La ensalada es libre: verduras verdes, tomate, cebolla, limón y especias sin restricción.</li><li>Cocinar con poco aceite (medir el que indica el plan) y preferir aire, horno o plancha.</li><li>Respetar los horarios de las 5 comidas; no saltarse ninguna.</li><li>Endulzantes sin calorías permitidos con moderación; evitar azúcar y bebidas azucaradas.</li><li>Este plan es un borrador profesional revisado y aprobado por tu entrenador(a).</li>  </ol>
+  </section>
+  
+  <div class="provenance">
+    Config 2026.07.01 · Prompt plan_generation.v1 · Modelo claude-sonnet-5 · Hash f1x3dh45h000
+  </div>
+  </body>
+  </html>
+  '''
+# ---
