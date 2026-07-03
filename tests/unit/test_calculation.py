@@ -1,7 +1,8 @@
 """Golden values (calculados a mano) para el motor de cálculo."""
 
-import pytest
 from uuid import uuid4
+
+import pytest
 
 from nutriplan.domain.calculation import apply_overrides, compute_targets
 from nutriplan.domain.errors import CalculationError

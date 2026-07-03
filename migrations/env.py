@@ -17,6 +17,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # La URL viene de Settings (.env), no de alembic.ini — un solo lugar de verdad.
+import nutriplan.adapters.db.models  # noqa: E402, F401  (registra las tablas en Base.metadata)
 from nutriplan.adapters.db.session import Base  # noqa: E402
 from nutriplan.config.settings import get_settings  # noqa: E402
 

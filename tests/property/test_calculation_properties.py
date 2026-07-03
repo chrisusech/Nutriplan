@@ -8,7 +8,8 @@ Para cualquier cliente válido:
 from uuid import uuid4
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from nutriplan.domain.calculation import compute_targets
 from nutriplan.domain.errors import CalculationError
