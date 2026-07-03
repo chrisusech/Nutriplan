@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Entorno y secretos
+.env
+
+# Datos locales y artefactos
+data/*.db
+data/*.db-journal
+data/exports/
+
+# macOS
+.DS_Store
