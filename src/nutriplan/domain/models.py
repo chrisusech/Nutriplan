@@ -5,24 +5,24 @@ tenant_id. Ningún modelo de este módulo conoce I/O, frameworks ni la IA.
 """
 
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class Sex(str, Enum):
+class Sex(StrEnum):
     FEMALE = "female"
     MALE = "male"
 
 
-class Goal(str, Enum):
+class Goal(StrEnum):
     LOSE_FAT = "lose_fat"
     MAINTAIN = "maintain"
     GAIN_MUSCLE = "gain_muscle"
 
 
-class ActivityLevel(str, Enum):
+class ActivityLevel(StrEnum):
     SEDENTARY = "sedentary"
     LIGHT = "light"
     MODERATE = "moderate"
@@ -30,7 +30,7 @@ class ActivityLevel(str, Enum):
     VERY_ACTIVE = "very_active"
 
 
-class MealSlot(str, Enum):
+class MealSlot(StrEnum):
     BREAKFAST = "desayuno"
     SNACK_AM = "snack_am"
     LUNCH = "almuerzo"
@@ -38,7 +38,7 @@ class MealSlot(str, Enum):
     DINNER = "cena"
 
 
-class FoodCategory(str, Enum):
+class FoodCategory(StrEnum):
     PROTEIN = "protein"
     CARB = "carb"
     FAT = "fat"
@@ -118,12 +118,12 @@ class DayPlan(BaseModel):
     totals: MacroTargets
 
 
-class PlanPhase(str, Enum):
+class PlanPhase(StrEnum):
     FIRST_15 = "first_15"
     NEXT_15 = "next_15"
 
 
-class PlanStatus(str, Enum):
+class PlanStatus(StrEnum):
     DRAFT = "draft"
     APPROVED = "approved"
     EXPORTED = "exported"
@@ -147,7 +147,7 @@ class PlanCycle(BaseModel):
     approved_at: datetime | None = None
 
 
-class IntakeStatus(str, Enum):
+class IntakeStatus(StrEnum):
     PARSED = "parsed"
     NEEDS_REVIEW = "needs_review"
     CONFIRMED = "confirmed"

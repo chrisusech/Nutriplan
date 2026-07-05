@@ -1,19 +1,19 @@
 """Puerto de jobs persistidos y artefactos exportados (sección 14)."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
 
 
-class JobKind(str, Enum):
+class JobKind(StrEnum):
     GENERATE = "generate"
     EXPORT = "export"
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     DONE = "done"

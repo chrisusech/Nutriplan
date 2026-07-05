@@ -5,14 +5,14 @@ y se accede vía el puerto ConfigProvider. Aquí solo hay configuración de
 infraestructura (DB, claves, modelos por tarea, logging).
 """
 
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Environment(str, Enum):
+class Environment(StrEnum):
     LOCAL = "local"
     PROD = "prod"
 
