@@ -16,6 +16,7 @@ import structlog
 
 from nutriplan.adapters.llm.prompts import load_prompt
 from nutriplan.domain.errors import GenerationError
+from nutriplan.domain.food_filter import allowed_foods
 from nutriplan.domain.generation_rules import (
     SLOT_STRUCTURE,
     check_variety,
@@ -37,7 +38,9 @@ from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import solve_day_portions
 from nutriplan.domain.selection_schema import build_selection_schema
 from nutriplan.domain.validation import day_totals, validate_day
+from nutriplan.ports.food_repository import FoodRepository
 from nutriplan.ports.llm_client import LLMClient
+from nutriplan.ports.repository import PlanRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -237,3 +240,60 @@ async def generate_cycle(
         f"{1 + config.generation.max_retries} intentos. Detalle: "
         + "; ".join(failures[:10])
     )
+
+
+_PHASE_ORDER = {PlanPhase.FIRST_15: 0, PlanPhase.NEXT_15: 1}
+
+
+async def generate_plan_for_client(
+    *,
+    client: Client,
+    targets: NutritionTargets,
+    food_repo: FoodRepository,
+    plan_repo: PlanRepository,
+    config: NutritionConfig,
+    llm: LLMClient | None,
+    prompts_dir: Path,
+    model: str,
+) -> list[PlanCycle]:
+    """Orquesta el plan de 30 días: dos ciclos (first_15, next_15).
+
+    Idempotente (11.6): si ya existen ciclos con el mismo input_hash se
+    devuelven sin regenerar (misma entrada → mismo plan, sin llamar a la IA).
+    Sin `llm` (modo offline) selecciona el HeuristicSelector determinista.
+    """
+    liked = await food_repo.get_by_ids(client.liked_food_ids)
+    allowed = allowed_foods(liked, client.restrictions)
+    if not allowed:
+        raise GenerationError(
+            "El conjunto permitido quedó vacío: revisa alimentos que le gustan "
+            "y restricciones del cliente."
+        )
+
+    prompt = load_prompt(prompts_dir, "plan_generation")
+    input_hash = compute_input_hash(client, targets, config.version, prompt.version, allowed)
+    existing = await plan_repo.find_by_input_hash(input_hash)
+    if len(existing) == 2:
+        logger.info("plan_reused_by_hash", input_hash=input_hash[:12])
+        return sorted(existing, key=lambda c: _PHASE_ORDER[c.phase])
+
+    if llm is None:
+        from nutriplan.adapters.llm.heuristic import HeuristicSelector
+
+        llm = HeuristicSelector(allowed)
+
+    cycles: list[PlanCycle] = []
+    for phase in (PlanPhase.FIRST_15, PlanPhase.NEXT_15):
+        cycle = await generate_cycle(
+            client=client,
+            targets=targets,
+            allowed=allowed,
+            config=config,
+            llm=llm,
+            prompts_dir=prompts_dir,
+            model=model,
+            phase=phase,
+        )
+        await plan_repo.add(cycle)
+        cycles.append(cycle)
+    return cycles

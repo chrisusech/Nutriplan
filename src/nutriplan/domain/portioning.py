@@ -94,6 +94,10 @@ def solve_day_portions(
         ):
             raise GenerationError(f"Slot {slot.value}: sin fuente de carbohidrato")
 
+    fat_items = [
+        (slot, f) for slot, foods in meals for f in foods if f.category in FAT_GROUP
+    ]
+
     for _ in range(FIXED_POINT_ITERATIONS):
         for slot, foods in meals:
             p_target = daily.protein_g * distribution[slot]
@@ -132,21 +136,20 @@ def solve_day_portions(
                         )
                     grams[(slot, str(f.id))] = min(share / density, MAX_PORTION_G)
 
-    # --- Paso 2: la grasa cierra a nivel de día con los ítems de grasa
-    fat_items = [
-        (slot, f) for slot, foods in meals for f in foods if f.category in FAT_GROUP
-    ]
-    fat_so_far = sum(
-        f.fat_100g * grams[(slot, str(f.id))] / 100.0
-        for slot, foods in meals
-        for f in foods
-        if f.category not in FAT_GROUP
-    )
-    fat_needed = daily.fat_g - fat_so_far
-    if fat_items:
-        share = max(fat_needed, 0.0) / len(fat_items)
-        for slot, f in fat_items:
-            grams[(slot, str(f.id))] = min(share / (f.fat_100g / 100.0), MAX_PORTION_G)
+        # --- Paso 2 (dentro del punto fijo): la grasa cierra a nivel de día.
+        # Un ítem de grasa puede traer proteína/carbo (maní, aguacate); al
+        # iterar, las fuentes de arriba compensan ese aporte cruzado.
+        fat_so_far = sum(
+            f.fat_100g * grams[(slot, str(f.id))] / 100.0
+            for slot, foods in meals
+            for f in foods
+            if f.category not in FAT_GROUP
+        )
+        fat_needed = daily.fat_g - fat_so_far
+        if fat_items:
+            share = max(fat_needed, 0.0) / len(fat_items)
+            for slot, f in fat_items:
+                grams[(slot, str(f.id))] = min(share / (f.fat_100g / 100.0), MAX_PORTION_G)
 
     # --- Paso 3: redondeo y recálculo (el código es dueño de los números)
     solved: list[SolvedMeal] = []
