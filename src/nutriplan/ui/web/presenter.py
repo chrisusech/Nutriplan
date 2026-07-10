@@ -172,6 +172,29 @@ def macro_tiles(daily: MacroTargets) -> list[dict[str, Any]]:
     ]
 
 
+def formula_view(client: Client, targets: NutritionTargets) -> dict[str, Any]:
+    """g/kg vigentes (de la fórmula o derivados del resultado) + reparto %."""
+    w = client.weight_kg or 1.0
+    f = targets.formula
+    ppk = f.protein_g_per_kg if f.protein_g_per_kg is not None else targets.daily.protein_g / w
+    fpk = f.fat_g_per_kg if f.fat_g_per_kg is not None else targets.daily.fat_g / w
+    p_kcal = targets.daily.protein_g * 4
+    c_kcal = targets.daily.carb_g * 4
+    f_kcal = targets.daily.fat_g * 9
+    total = max(p_kcal + c_kcal + f_kcal, 1.0)
+    return {
+        "protein_g_per_kg": round(ppk, 2),
+        "fat_g_per_kg": round(fpk, 2),
+        "kcal": round(targets.daily.kcal),
+        "kcal_manual": f.kcal_override is not None,
+        "pct": {
+            "protein": round(p_kcal / total * 100),
+            "carb": round(c_kcal / total * 100),
+            "fat": round(f_kcal / total * 100),
+        },
+    }
+
+
 def portion_chip(grams: float, food: FoodItem) -> str:
     g = int(grams) if float(grams).is_integer() else grams
     text = f"{food.name_es.capitalize()} · {g} g"

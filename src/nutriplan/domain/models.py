@@ -88,6 +88,20 @@ class MacroTargets(BaseModel):
     fat_g: float
 
 
+class MacroFormula(BaseModel):
+    """Cómo se fijan los macros diarios (el lever principal, no la IA).
+
+    g/kg es el pensamiento del entrenador: proteína y grasa por kg de peso; el
+    carbohidrato cierra el resto hasta las kcal objetivo. Cualquier campo en
+    None usa el default de la config por objetivo — una fórmula vacía reproduce
+    exactamente el cálculo base (los golden tests siguen valiendo).
+    """
+
+    protein_g_per_kg: float | None = Field(default=None, gt=0)
+    fat_g_per_kg: float | None = Field(default=None, gt=0)
+    kcal_override: float | None = Field(default=None, gt=0)  # None = TDEE del objetivo
+
+
 class NutritionTargets(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -96,7 +110,8 @@ class NutritionTargets(BaseModel):
     per_meal: dict[MealSlot, MacroTargets]
     method: str = "mifflin_st_jeor"
     config_version: str  # procedencia
-    overrides: dict[str, float] = {}  # ajustes manuales del entrenador
+    overrides: dict[str, float] = {}  # ajustes manuales del entrenador (gramos sueltos)
+    formula: MacroFormula = Field(default_factory=MacroFormula)  # g/kg y kcal elegidos
     computed_at: datetime
 
 

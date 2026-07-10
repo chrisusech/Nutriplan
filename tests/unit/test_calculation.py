@@ -6,7 +6,14 @@ import pytest
 
 from nutriplan.domain.calculation import apply_overrides, compute_targets
 from nutriplan.domain.errors import CalculationError
-from nutriplan.domain.models import ActivityLevel, Client, Goal, MacroTargets, Sex
+from nutriplan.domain.models import (
+    ActivityLevel,
+    Client,
+    Goal,
+    MacroFormula,
+    MacroTargets,
+    Sex,
+)
 
 
 def make_client(**overrides) -> Client:
@@ -96,3 +103,31 @@ def test_unknown_override_rejected() -> None:
     daily = MacroTargets(kcal=2000, protein_g=100, carb_g=200, fat_g=60)
     with pytest.raises(CalculationError):
         apply_overrides(daily, {"fiber_g": 30})
+
+
+def test_empty_formula_reproduces_base(nutrition_config) -> None:
+    """Una fórmula vacía da exactamente el cálculo por objetivo (procedencia)."""
+    base = compute_targets(make_client(), nutrition_config)
+    with_empty = compute_targets(make_client(), nutrition_config, formula=MacroFormula())
+    assert with_empty.daily == base.daily
+
+
+def test_formula_g_per_kg_drives_macros(nutrition_config) -> None:
+    # 62 kg · proteína 1.6 g/kg = 99.2 g ; grasa 0.8 g/kg = 49.6 g ; carbo cierra kcal
+    formula = MacroFormula(protein_g_per_kg=1.6, fat_g_per_kg=0.8)
+    targets = compute_targets(make_client(), nutrition_config, formula=formula)
+    assert targets.daily.protein_g == pytest.approx(99.2, abs=0.1)
+    assert targets.daily.fat_g == pytest.approx(49.6, abs=0.1)
+    assert targets.formula.protein_g_per_kg == 1.6
+    # el carbo cierra el invariante energético contra las kcal del objetivo
+    recomposed = (
+        targets.daily.protein_g * 4 + targets.daily.carb_g * 4 + targets.daily.fat_g * 9
+    )
+    assert recomposed == pytest.approx(targets.daily.kcal, abs=1.0)
+
+
+def test_manual_kcal_override(nutrition_config) -> None:
+    formula = MacroFormula(protein_g_per_kg=2.0, fat_g_per_kg=1.0, kcal_override=1800.0)
+    targets = compute_targets(make_client(), nutrition_config, formula=formula)
+    assert targets.daily.kcal == 1800.0
+    assert targets.daily.protein_g == pytest.approx(124.0, abs=0.1)  # 2.0 * 62

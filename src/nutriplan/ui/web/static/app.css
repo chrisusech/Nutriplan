@@ -189,6 +189,24 @@ select.plain {
   width: 100%; cursor: pointer; outline: none; appearance: none;
 }
 
+.formula-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 14px; }
+.formula-field label { font: 500 11px Poppins; color: var(--muted-2); display: block; margin-bottom: 5px; }
+.formula-field .fin {
+  display: flex; align-items: baseline; gap: 4px;
+  border: 1.5px solid var(--line); border-radius: 13px; padding: 8px 11px;
+}
+.formula-field .fin:focus-within { border-color: var(--brand); }
+.formula-field input {
+  font: 700 17px Poppins; color: var(--ink); border: none; background: transparent;
+  width: 100%; outline: none; padding: 0; min-width: 0;
+}
+.formula-field .fin span { font: 600 11px Poppins; color: var(--faint); flex-shrink: 0; }
+.formula-split { font: 500 11.5px Poppins; color: var(--muted-2); margin-top: 10px; }
+.formula-split b { color: var(--ink-2); font-weight: 700; }
+.linkish {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font: 600 11.5px Poppins; color: var(--brand); text-decoration: underline;
+}
 .macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
 .macro-tile {
   display: flex; align-items: center; gap: 12px;

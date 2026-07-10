@@ -178,6 +178,34 @@ def test_macro_override_marks_targets_as_overridden(offline) -> None:
     assert "Ajustado a mano" in response.text
 
 
+def test_formula_g_per_kg_moves_kcal_live(offline) -> None:
+    client, _ = offline
+    cid = _create_client(client)
+
+    # subir la proteína g/kg recalcula y re-renderiza sin recargar la página
+    response = client.post(
+        f"/generador/{cid}/formula",
+        data={"protein_g_per_kg": "2.2", "fat_g_per_kg": "1.0", "kcal_override": ""},
+    )
+    assert response.status_code == 200
+    assert 'name="protein_g_per_kg"' in response.text and 'value="2.2"' in response.text
+    # el reparto % aparece calculado en vivo
+    assert "reparto" in response.text and "%" in response.text
+
+
+def test_manual_kcal_override_sticks(offline) -> None:
+    client, _ = offline
+    cid = _create_client(client)
+    response = client.post(
+        f"/generador/{cid}/formula",
+        data={"protein_g_per_kg": "1.8", "fat_g_per_kg": "0.8", "kcal_override": "1750"},
+    )
+    assert response.status_code == 200
+    assert 'name="kcal" type="number" step="1" min="0"\n                     value="1750"' in (
+        response.text
+    )
+
+
 def test_food_and_restriction_toggles_flip_state(offline) -> None:
     client, _ = offline
     cid = _create_client(client)

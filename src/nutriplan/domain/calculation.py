@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from nutriplan.domain.errors import CalculationError
 from nutriplan.domain.models import (
     Client,
+    MacroFormula,
     MacroTargets,
     MealSlot,
     NutritionTargets,
@@ -44,20 +45,41 @@ def bmr_mifflin_st_jeor(sex: Sex, weight_kg: float, height_cm: float, age_years:
     return base + 5.0 if sex == Sex.MALE else base - 161.0
 
 
-def compute_daily_macros(client: Client, config: NutritionConfig) -> MacroTargets:
+def compute_daily_macros(
+    client: Client, config: NutritionConfig, formula: MacroFormula | None = None
+) -> MacroTargets:
+    """Macros diarios desde el peso y la fórmula g/kg.
+
+    Con `formula=None` (o vacía) usa los defaults de la config por objetivo, así
+    que reproduce bit a bit el cálculo previo. Con g/kg fijados por el entrenador,
+    esos mandan; el carbohidrato siempre cierra el resto hasta las kcal.
+    """
+    formula = formula or MacroFormula()
     age = resolve_age_years(client)
     bmr = bmr_mifflin_st_jeor(client.sex, client.weight_kg, client.height_cm, age)
     tdee = bmr * config.activity_factors[client.activity_level]
-    kcal = tdee * (1.0 + config.goal_adjustments[client.goal])
 
-    protein_g = config.protein_g_per_kg[client.goal] * client.weight_kg
-    fat_g = (kcal * config.fat_pct_of_kcal) / KCAL_PER_G_FAT
+    if formula.kcal_override is not None:
+        kcal = formula.kcal_override
+    else:
+        kcal = tdee * (1.0 + config.goal_adjustments[client.goal])
+
+    ppk = formula.protein_g_per_kg
+    if ppk is None:
+        ppk = config.protein_g_per_kg[client.goal]
+    protein_g = ppk * client.weight_kg
+
+    if formula.fat_g_per_kg is not None:
+        fat_g = formula.fat_g_per_kg * client.weight_kg
+    else:
+        fat_g = (kcal * config.fat_pct_of_kcal) / KCAL_PER_G_FAT
+
     carb_g = (kcal - protein_g * KCAL_PER_G_PROTEIN - fat_g * KCAL_PER_G_FAT) / KCAL_PER_G_CARB
 
     if carb_g < 0:
         raise CalculationError(
             f"Cliente {client.id}: los macros no cierran (carbohidratos negativos: "
-            f"{carb_g:.1f} g). Revisar peso/objetivo o fijar overrides."
+            f"{carb_g:.1f} g). Baja la proteína/grasa g/kg o sube las kcal."
         )
 
     return MacroTargets(
@@ -111,12 +133,18 @@ def compute_targets(
     client: Client,
     config: NutritionConfig,
     *,
+    formula: MacroFormula | None = None,
     overrides: dict[str, float] | None = None,
     targets_id: UUID | None = None,
     now: datetime | None = None,
 ) -> NutritionTargets:
-    """De Client + config (+ overrides) → NutritionTargets con procedencia."""
-    daily = compute_daily_macros(client, config)
+    """De Client + config (+ fórmula g/kg + overrides) → NutritionTargets.
+
+    La fórmula fija el modelo (g/kg, kcal); los overrides son nudges de gramos
+    sueltos aplicados encima. Se guardan ambos para procedencia.
+    """
+    formula = formula or MacroFormula()
+    daily = compute_daily_macros(client, config, formula)
     if overrides:
         daily = apply_overrides(daily, overrides)
     per_meal = split_per_meal(daily, config.meal_distribution)
@@ -129,5 +157,6 @@ def compute_targets(
         per_meal=per_meal,
         config_version=config.version,
         overrides=overrides or {},
+        formula=formula,
         computed_at=now or datetime.now(UTC),
     )

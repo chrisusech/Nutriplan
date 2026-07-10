@@ -36,6 +36,7 @@ from nutriplan.domain.models import (
     Goal,
     IntakeDocument,
     IntakeStatus,
+    MacroFormula,
     MacroTargets,
     MealEntry,
     MealFoodPortion,
@@ -304,6 +305,7 @@ class SqlTargetsRepository:
             method=row.method,
             config_version=row.config_version,
             overrides=dict(row.overrides or {}),
+            formula=MacroFormula(**(row.formula or {})),
             computed_at=_aware(row.computed_at),
         )
 
@@ -318,6 +320,7 @@ class SqlTargetsRepository:
                 method=targets.method,
                 config_version=targets.config_version,
                 overrides=targets.overrides,
+                formula=targets.formula.model_dump(exclude_none=True),
                 computed_at=targets.computed_at,
             )
         )

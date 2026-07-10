@@ -119,6 +119,7 @@ class NutritionTargetsRow(Base):
     method: Mapped[str] = mapped_column(String(40), default="mifflin_st_jeor")
     config_version: Mapped[str] = mapped_column(String(40))
     overrides: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
+    formula: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

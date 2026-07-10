@@ -18,7 +18,7 @@ from nutriplan.application.jobs import new_job, run_generation_job
 from nutriplan.container import Container
 from nutriplan.domain.calculation import compute_targets as compute_targets_domain
 from nutriplan.domain.food_filter import allowed_foods, forbidden_tags
-from nutriplan.domain.models import Client, Goal, NutritionTargets
+from nutriplan.domain.models import Client, Goal, MacroFormula, NutritionTargets
 from nutriplan.ports.job_repository import JobKind, JobStatus
 from nutriplan.ui.web import presenter
 from nutriplan.ui.web.deps import container_of, db_session, render, repos_of
@@ -31,17 +31,23 @@ OVERRIDABLE = ("kcal", "protein_g", "carb_g", "fat_g")
 
 
 async def _fresh_targets(request: Request, session: AsyncSession, client: Client,
+                         formula: MacroFormula | None = None,
                          overrides: dict[str, float] | None = None) -> NutritionTargets:
-    """Targets vigentes: los últimos persistidos o recién calculados."""
+    """Targets vigentes: los últimos persistidos o recién calculados.
+
+    Al recomputar sin fórmula explícita (cambio de objetivo, nudge de un tile)
+    se conserva la fórmula g/kg vigente — el modelo del entrenador no se pierde.
+    """
     container = container_of(request)
     repos = repos_of(request, session)
-    if overrides is None:
-        existing = await repos.targets.latest_for_client(client.id)
-        if existing is not None:
-            return existing
+    existing = await repos.targets.latest_for_client(client.id)
+    if formula is None and overrides is None and existing is not None:
+        return existing
+    if formula is None and existing is not None:
+        formula = existing.formula
     return await compute_and_store_targets(
         client=client, config_provider=container.config_provider,
-        targets_repo=repos.targets, overrides=overrides,
+        targets_repo=repos.targets, formula=formula, overrides=overrides,
     )
 
 
@@ -98,6 +104,7 @@ async def _generator_context(request: Request, session: AsyncSession,
         "goal_meta": goal_meta,
         "targets": targets,
         "tiles": presenter.macro_tiles(targets.daily),
+        "formula": presenter.formula_view(client, targets),
         "has_overrides": bool(targets.overrides),
         "groups": groups,
         "pair": pair,
@@ -154,6 +161,33 @@ async def set_goal(request: Request, session: Annotated[AsyncSession, Depends(db
     return await _rerender(request, session, client)
 
 
+@router.post("/generador/{cid}/formula", response_class=HTMLResponse)
+async def set_formula(request: Request, session: Annotated[AsyncSession, Depends(db_session)],
+                      cid: str,
+                      protein_g_per_kg: Annotated[str, Form()] = "",
+                      fat_g_per_kg: Annotated[str, Form()] = "",
+                      kcal_override: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Fórmula g/kg: el lever principal. Recalcula todo y descarta nudges viejos."""
+    client = await _get_client(request, session, cid)
+
+    def num(v: str) -> float | None:
+        v = v.strip()
+        if not v:
+            return None
+        try:
+            return max(float(v), 0.0) or None
+        except ValueError:
+            return None
+
+    formula = MacroFormula(
+        protein_g_per_kg=num(protein_g_per_kg),
+        fat_g_per_kg=num(fat_g_per_kg),
+        kcal_override=num(kcal_override),
+    )
+    await _fresh_targets(request, session, client, formula=formula)
+    return await _rerender(request, session, client)
+
+
 @router.post("/generador/{cid}/macros", response_class=HTMLResponse)
 async def set_macros(request: Request, session: Annotated[AsyncSession, Depends(db_session)],
                      cid: str,
@@ -161,11 +195,14 @@ async def set_macros(request: Request, session: Annotated[AsyncSession, Depends(
                      protein_g: Annotated[float, Form()],
                      carb_g: Annotated[float, Form()],
                      fat_g: Annotated[float, Form()]) -> HTMLResponse:
-    """El entrenador edita tiles: solo lo que difiere del cálculo es override."""
+    """El entrenador edita un tile: solo lo que difiere de la fórmula es override."""
     container = container_of(request)
+    repos = repos_of(request, session)
     client = await _get_client(request, session, cid)
     config = container.config_provider.get_nutrition_config()
-    base = compute_targets_domain(client, config).daily.model_dump()
+    existing = await repos.targets.latest_for_client(client.id)
+    formula = existing.formula if existing else None
+    base = compute_targets_domain(client, config, formula=formula).daily.model_dump()
     submitted = {"kcal": kcal, "protein_g": protein_g, "carb_g": carb_g, "fat_g": fat_g}
     overrides = {k: v for k, v in submitted.items() if abs(v - base[k]) > 0.5}
     await _fresh_targets(request, session, client, overrides=overrides)

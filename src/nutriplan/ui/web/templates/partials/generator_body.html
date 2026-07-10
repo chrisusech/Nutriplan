@@ -51,6 +51,38 @@
         </span>
         {% endif %}
       </div>
+
+      <form class="formula-grid"
+            hx-post="/generador/{{ ctx.client.id }}/formula"
+            hx-trigger="change from:find input" hx-target="#gen-root" hx-swap="innerHTML">
+        <div class="formula-field">
+          <label>Proteína</label>
+          <div class="fin"><input name="protein_g_per_kg" type="number" step="0.1" min="0.5" max="4"
+                 value="{{ ctx.formula.protein_g_per_kg }}"><span>g/kg</span></div>
+        </div>
+        <div class="formula-field">
+          <label>Grasa</label>
+          <div class="fin"><input name="fat_g_per_kg" type="number" step="0.1" min="0.2" max="2"
+                 value="{{ ctx.formula.fat_g_per_kg }}"><span>g/kg</span></div>
+        </div>
+        <div class="formula-field">
+          <label>Calorías {% if not ctx.formula.kcal_manual %}· auto{% endif %}</label>
+          <div class="fin"><input name="kcal_override" type="number" step="10" min="800"
+                 placeholder="TDEE"
+                 value="{% if ctx.formula.kcal_manual %}{{ ctx.formula.kcal }}{% endif %}"><span>kcal</span></div>
+        </div>
+      </form>
+      <div class="formula-split">
+        El carbohidrato cierra el resto · reparto
+        <b>P {{ ctx.formula.pct.protein }}%</b> · <b>C {{ ctx.formula.pct.carb }}%</b> ·
+        <b>G {{ ctx.formula.pct.fat }}%</b>
+        {% if ctx.formula.kcal_manual %}
+        · <button class="linkish" hx-post="/generador/{{ ctx.client.id }}/formula"
+            hx-vals='{"protein_g_per_kg":"{{ ctx.formula.protein_g_per_kg }}","fat_g_per_kg":"{{ ctx.formula.fat_g_per_kg }}","kcal_override":""}'
+            hx-target="#gen-root" hx-swap="innerHTML">volver a kcal automáticas</button>
+        {% endif %}
+      </div>
+
       <form class="macro-grid"
             hx-post="/generador/{{ ctx.client.id }}/macros"
             hx-trigger="change from:find input" hx-target="#gen-root" hx-swap="innerHTML">

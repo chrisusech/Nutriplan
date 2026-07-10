@@ -8,7 +8,7 @@ tal cual y quedan registrados como procedencia.
 import structlog
 
 from nutriplan.domain.calculation import compute_targets
-from nutriplan.domain.models import Client, NutritionTargets
+from nutriplan.domain.models import Client, MacroFormula, NutritionTargets
 from nutriplan.ports.config_provider import ConfigProvider
 from nutriplan.ports.repository import TargetsRepository
 
@@ -20,15 +20,17 @@ async def compute_and_store_targets(
     client: Client,
     config_provider: ConfigProvider,
     targets_repo: TargetsRepository,
+    formula: MacroFormula | None = None,
     overrides: dict[str, float] | None = None,
 ) -> NutritionTargets:
     config = config_provider.get_nutrition_config()
-    targets = compute_targets(client, config, overrides=overrides)
+    targets = compute_targets(client, config, formula=formula, overrides=overrides)
     await targets_repo.add(targets)
     logger.info(
         "targets_computed",
         client_id=str(client.id),
         kcal=targets.daily.kcal,
+        formula=targets.formula.model_dump(exclude_none=True),
         overrides=bool(overrides),
     )
     return targets
