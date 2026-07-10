@@ -114,8 +114,20 @@
       <span class="icon fill" style="font-size:20px;color:var(--ok)">verified</span>Aprobado
     </span>
     {% endif %}
+    <button class="btn btn-outline"
+            hx-post="/generador/{{ ctx.client.id }}/nueva-version"
+            hx-target="#preview-col" hx-swap="innerHTML"
+            title="Genera otra semana distinta (mes siguiente)">
+      <span class="icon" style="font-size:20px">refresh</span>Nueva versión
+    </button>
     <a class="btn btn-primary" href="/planes/{{ cycle.id }}">
       <span class="icon" style="font-size:20px">picture_as_pdf</span>Exportar PDF
     </a>
   </div>
+  {% if ctx.history_count > 1 %}
+  <div style="text-align:center;font:500 11.5px Poppins;color:var(--muted-3);margin-top:10px">
+    <span class="icon" style="font-size:14px">history</span>
+    {{ ctx.history_count }} versiones generadas para {{ ctx.client.name.split(' ')[0] }}
+  </div>
+  {% endif %}
 </div>

@@ -63,6 +63,7 @@ async def run_generation_job(
     llm: LLMClient | None,
     prompts_dir: Path,
     model: str,
+    variant: int = 0,
 ) -> Job:
     job = await _finish(job, job_repo, status=JobStatus.RUNNING)
     try:
@@ -83,6 +84,7 @@ async def run_generation_job(
             llm=llm,
             prompts_dir=prompts_dir,
             model=model,
+            variant=variant,
         )
         return await _finish(
             job,

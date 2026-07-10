@@ -224,6 +224,23 @@ def test_variety_relaxes_when_only_one_option(foods) -> None:
     assert not any(v.food_name == "pechuga de pollo" for v in violations)
 
 
+async def test_new_version_differs_from_previous(foods) -> None:
+    """Anti-repetición: otra versión (seed distinto) da un menú diferente."""
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+
+    allowed = list(foods.values())
+    schema = build_selection_schema(allowed)
+    v0 = await HeuristicSelector(allowed, 150.0, seed=0).select_plan(
+        system="", prompt="", schema=schema, model="x"
+    )
+    v1 = await HeuristicSelector(allowed, 150.0, seed=1).select_plan(
+        system="", prompt="", schema=schema, model="x"
+    )
+    menu0 = [tuple(m.food_ids) for d in v0.days for m in d.meals]
+    menu1 = [tuple(m.food_ids) for d in v1.days for m in d.meals]
+    assert menu0 != menu1  # el mes 2 no repite el menú del mes 1
+
+
 def test_variety_rotated_week_is_clean(foods) -> None:
     lookup = {str(f.id): f for f in foods.values()}
     days = []

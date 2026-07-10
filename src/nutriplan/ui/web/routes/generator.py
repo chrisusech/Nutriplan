@@ -105,6 +105,7 @@ async def _generator_context(request: Request, session: AsyncSession,
         "has_overrides": bool(targets.overrides),
         "groups": groups,
         "plan": plan,
+        "history_count": len(cycles),
         "stale": stale,
         "dia": max(0, min(dia, 6)),
         "dv": day_view,
@@ -231,7 +232,9 @@ async def toggle_restriction(request: Request,
     return await _rerender(request, session, client)
 
 
-async def _run_generation(container: Container, job_id: UUID, client_id: UUID) -> None:
+async def _run_generation(
+    container: Container, job_id: UUID, client_id: UUID, variant: int
+) -> None:
     """Tarea de fondo: sesión propia, job persistido, commit al final."""
     async with container.session_factory() as session:
         repos = container.repos(session)
@@ -246,7 +249,7 @@ async def _run_generation(container: Container, job_id: UUID, client_id: UUID) -
             food_repo=repos.foods, plan_repo=repos.plans,
             config=container.config_provider.get_nutrition_config(),
             llm=container.llm_client,
-            prompts_dir=container.settings.prompts_dir, model=model,
+            prompts_dir=container.settings.prompts_dir, model=model, variant=variant,
         )
         await session.commit()
 
@@ -259,13 +262,10 @@ def _spawn(request: Request, coro: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(in_flight.discard)
 
 
-@router.post("/generador/{cid}/generar", response_class=HTMLResponse)
-async def start_generation(request: Request,
-                           session: Annotated[AsyncSession, Depends(db_session)],
-                           cid: str) -> HTMLResponse:
+async def _launch_generation(request: Request, session: AsyncSession,
+                             client: Client, variant: int) -> HTMLResponse:
     container = container_of(request)
     repos = repos_of(request, session)
-    client = await _get_client(request, session, cid)
     targets = await _fresh_targets(request, session, client)
     config = container.config_provider.get_nutrition_config()
 
@@ -277,7 +277,9 @@ async def start_generation(request: Request,
                             "gusten (que no choquen con las restricciones).")
 
     prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
-    input_hash = compute_input_hash(client, targets, config.version, prompt.version, allowed)
+    input_hash = compute_input_hash(
+        client, targets, config.version, prompt.version, allowed, variant
+    )
     key = f"gen:{client.id}:{input_hash[:16]}"
 
     job = await repos.jobs.get_by_idempotency_key(key)
@@ -286,17 +288,36 @@ async def start_generation(request: Request,
                       idempotency_key=key)
         await repos.jobs.add(job)
         await session.commit()
-        _spawn(request, _run_generation(container, job.id, client.id))
+        _spawn(request, _run_generation(container, job.id, client.id, variant))
     elif job.status == JobStatus.FAILED:
         job = job.model_copy(update={"status": JobStatus.QUEUED, "error": None,
                                      "updated_at": datetime.now(UTC)})
         await repos.jobs.update(job)
         await session.commit()
-        _spawn(request, _run_generation(container, job.id, client.id))
+        _spawn(request, _run_generation(container, job.id, client.id, variant))
 
     return render(request, "partials/gen_loading.html", client=client,
                   job_id=str(job.id), msg_index=0,
                   loading_msg=presenter.LOADING_MSGS[0].format(name=client.name.split()[0]))
+
+
+@router.post("/generador/{cid}/generar", response_class=HTMLResponse)
+async def start_generation(request: Request,
+                           session: Annotated[AsyncSession, Depends(db_session)],
+                           cid: str) -> HTMLResponse:
+    client = await _get_client(request, session, cid)
+    return await _launch_generation(request, session, client, variant=0)
+
+
+@router.post("/generador/{cid}/nueva-version", response_class=HTMLResponse)
+async def new_version(request: Request,
+                      session: Annotated[AsyncSession, Depends(db_session)],
+                      cid: str) -> HTMLResponse:
+    """Otra versión del plan (mes siguiente): menú distinto al historial."""
+    repos = repos_of(request, session)
+    client = await _get_client(request, session, cid)
+    variant = len(await repos.plans.list_for_client(client.id))
+    return await _launch_generation(request, session, client, variant=variant)
 
 
 @router.get("/generador/{cid}/estado", response_class=HTMLResponse)

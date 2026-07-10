@@ -58,7 +58,12 @@ def _fits_protein(food: FoodItem, target_g: float) -> bool:
 class HeuristicSelector:
     """Implementa el puerto LLMClient (solo select_plan). Motor principal offline."""
 
-    def __init__(self, allowed: list[FoodItem], daily_protein_g: float = 120.0) -> None:
+    def __init__(
+        self, allowed: list[FoodItem], daily_protein_g: float = 120.0, seed: int = 0
+    ) -> None:
+        # `seed` desplaza la rotación: dos versiones del plan del mismo cliente
+        # (mes 1 vs mes 2) arrancan en combinaciones distintas → menús diferentes.
+        self._seed = seed
         def by_cat(c: FoodCategory) -> list[FoodItem]:
             return sorted((f for f in allowed if f.category == c), key=lambda f: f.name_es)
 
@@ -110,7 +115,7 @@ class HeuristicSelector:
         return {"input_tokens": 0, "output_tokens": 0, "calls": self.calls}
 
     async def select_plan(self, *, system: str, prompt: str, schema: type[T], model: str) -> T:
-        offset = self.calls  # cada reintento explora otra rotación
+        offset = self._seed + self.calls  # seed = versión; calls = reintento
         self.calls += 1
 
         Pm, Ps, Pb = self.main_proteins, self.snack_proteins, self.breakfast_proteins

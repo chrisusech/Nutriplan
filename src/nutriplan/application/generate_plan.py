@@ -57,9 +57,16 @@ def compute_input_hash(
     config_version: str,
     prompt_version: str,
     allowed: list[FoodItem],
+    variant: int = 0,
 ) -> str:
-    """Idempotencia (11.6): mismo insumo → mismo hash → mismo plan."""
+    """Idempotencia (11.6): mismo insumo → mismo hash → mismo plan.
+
+    `variant` distingue versiones del plan con los MISMOS insumos (mes 1 vs mes
+    2): al pedir una versión nueva se incrementa → otro hash → otro menú, sin
+    romper la idempotencia de "generar" (variant fijo).
+    """
     snapshot = {
+        "variant": variant,
         "client": {
             "sex": client.sex.value,
             "age": client.age_years,
@@ -130,12 +137,13 @@ async def generate_cycle(
     llm: LLMClient,
     prompts_dir: Path,
     model: str,
+    variant: int = 0,
 ) -> PlanCycle:
     prompt = load_prompt(prompts_dir, "plan_generation")
     schema = build_selection_schema(allowed)
     foods_by_id = {str(f.id): f for f in allowed}
     input_hash = compute_input_hash(
-        client, targets, config.version, prompt.version, allowed
+        client, targets, config.version, prompt.version, allowed, variant
     )
 
     feedback: str | None = None
@@ -243,12 +251,14 @@ async def generate_plan_for_client(
     llm: LLMClient | None,
     prompts_dir: Path,
     model: str,
+    variant: int = 0,
 ) -> PlanCycle:
     """Orquesta el plan semanal: UN ciclo de 7 días variados.
 
-    Idempotente (11.6): si ya existe un plan con el mismo input_hash se devuelve
-    sin regenerar (misma entrada → mismo plan, sin llamar a la IA). Sin `llm`
-    (modo offline) usa el HeuristicSelector determinista como motor principal.
+    Idempotente (11.6): si ya existe un plan con el mismo input_hash (incluida la
+    `variant`) se devuelve sin regenerar. Una versión nueva (variant+1) produce
+    un menú distinto al anterior. Sin `llm` (modo offline) usa el
+    HeuristicSelector determinista como motor principal.
     """
     liked = await food_repo.get_by_ids(client.liked_food_ids)
     allowed = allowed_foods(liked, client.restrictions)
@@ -259,7 +269,9 @@ async def generate_plan_for_client(
         )
 
     prompt = load_prompt(prompts_dir, "plan_generation")
-    input_hash = compute_input_hash(client, targets, config.version, prompt.version, allowed)
+    input_hash = compute_input_hash(
+        client, targets, config.version, prompt.version, allowed, variant
+    )
     existing = await plan_repo.find_by_input_hash(input_hash)
     if existing:
         logger.info("plan_reused_by_hash", input_hash=input_hash[:12])
@@ -268,7 +280,7 @@ async def generate_plan_for_client(
     if llm is None:
         from nutriplan.adapters.llm.heuristic import HeuristicSelector
 
-        selector: LLMClient = HeuristicSelector(allowed, targets.daily.protein_g)
+        selector: LLMClient = HeuristicSelector(allowed, targets.daily.protein_g, seed=variant)
     else:
         selector = llm
 
@@ -280,6 +292,7 @@ async def generate_plan_for_client(
         llm=selector,
         prompts_dir=prompts_dir,
         model=model,
+        variant=variant,
     )
     await plan_repo.add(cycle)
     return cycle
