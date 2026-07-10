@@ -24,6 +24,7 @@ from nutriplan.adapters.db.models import (
     MealEntryRow,
     NutritionTargetsRow,
     PlanCycleRow,
+    RecipeRow,
     TenantRow,
     UserRow,
 )
@@ -47,6 +48,9 @@ from nutriplan.domain.models import (
     PlanCycle,
     PlanPhase,
     PlanStatus,
+    Recipe,
+    RecipeIngredient,
+    RecipeStatus,
     Sex,
     Trainer,
     UnitGranularity,
@@ -638,6 +642,92 @@ class SqlAuthRepository:
         self._s.add(user)
         await self._s.flush()
         return self._to_domain(user)
+
+
+class SqlRecipeRepository:
+    """Recetas del tenant. Con `tenant_id=None` (modo admin) no filtra: el
+    admin ve y verifica las recetas pendientes de todos los entrenadores."""
+
+    def __init__(self, session: AsyncSession, tenant_id: UUID | None) -> None:
+        self._s = session
+        self._tenant = tenant_id
+
+    @staticmethod
+    def _to_domain(row: RecipeRow) -> Recipe:
+        return Recipe(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            name=row.name,
+            ingredients=[
+                RecipeIngredient(food_id=UUID(i["food_id"]), grams=i["grams"])
+                for i in row.ingredients
+            ],
+            macros=MacroTargets(**row.macros),
+            total_grams=row.total_grams,
+            status=RecipeStatus(row.status),
+            created_by=row.created_by,
+            created_at=_aware(row.created_at),
+            compound_food_id=row.compound_food_id,
+        )
+
+    async def add(self, recipe: Recipe) -> None:
+        self._s.add(
+            RecipeRow(
+                id=recipe.id,
+                tenant_id=recipe.tenant_id,
+                name=recipe.name,
+                ingredients=[
+                    {"food_id": str(i.food_id), "grams": i.grams} for i in recipe.ingredients
+                ],
+                macros=recipe.macros.model_dump(),
+                total_grams=recipe.total_grams,
+                status=recipe.status.value,
+                created_by=recipe.created_by,
+                created_at=recipe.created_at,
+                compound_food_id=recipe.compound_food_id,
+            )
+        )
+        await self._s.flush()
+
+    async def _row(self, recipe_id: UUID) -> RecipeRow | None:
+        stmt = select(RecipeRow).where(RecipeRow.id == recipe_id)
+        if self._tenant is not None:
+            stmt = stmt.where(RecipeRow.tenant_id == self._tenant)
+        return (await self._s.execute(stmt)).scalar_one_or_none()
+
+    async def get(self, recipe_id: UUID) -> Recipe | None:
+        row = await self._row(recipe_id)
+        return self._to_domain(row) if row else None
+
+    async def list_for_tenant(self) -> list[Recipe]:
+        stmt = select(RecipeRow).order_by(RecipeRow.created_at.desc())
+        if self._tenant is not None:
+            stmt = stmt.where(RecipeRow.tenant_id == self._tenant)
+        rows = (await self._s.execute(stmt)).scalars().all()
+        return [self._to_domain(r) for r in rows]
+
+    async def list_pending(self) -> list[Recipe]:
+        """Cola de verificación (admin): pendientes de todos los tenants."""
+        stmt = (
+            select(RecipeRow)
+            .where(RecipeRow.status == RecipeStatus.PENDING.value)
+            .order_by(RecipeRow.created_at)
+        )
+        if self._tenant is not None:
+            stmt = stmt.where(RecipeRow.tenant_id == self._tenant)
+        rows = (await self._s.execute(stmt)).scalars().all()
+        return [self._to_domain(r) for r in rows]
+
+    async def set_status(
+        self, recipe_id: UUID, status: RecipeStatus, *, compound_food_id: UUID | None = None
+    ) -> None:
+        row = await self._row(recipe_id)
+        if row is None:
+            raise TenantIsolationError("Receta inexistente para este contexto")
+        row.status = status.value
+        if compound_food_id is not None:
+            row.compound_food_id = compound_food_id
+        await self._s.flush()
 
 
 class SqlAuditLogRepository:

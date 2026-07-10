@@ -143,6 +143,21 @@
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title" style="margin-bottom:3px">Acceso del cliente</div>
+      <div class="card-sub" style="margin-bottom:12px">Dale a {{ ctx.client.name.split(' ')[0] }} un correo y clave para ver su plan aprobado</div>
+      <form method="post" action="/clientes/{{ ctx.client.id }}/acceso"
+            style="display:flex;flex-direction:column;gap:8px">
+        <input name="email" type="email" placeholder="correo del cliente" required
+               style="border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font:500 13px Poppins">
+        <input name="password" type="password" placeholder="clave (mín. 8)" minlength="8" required
+               style="border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font:500 13px Poppins">
+        <button class="btn btn-outline" type="submit" style="justify-content:center;padding:10px">
+          <span class="icon" style="font-size:18px">key</span>Crear acceso
+        </button>
+      </form>
+    </div>
+
     <div>
       <button class="btn btn-primary btn-big"
               hx-post="/generador/{{ ctx.client.id }}/generar"

@@ -207,6 +207,21 @@ class ExportArtifactRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class RecipeRow(Base):
+    __tablename__ = "recipes"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # [{food_id, grams}]
+    macros: Mapped[dict[str, float]] = mapped_column(JSON)
+    total_grams: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(20), index=True, default="pending")
+    created_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    compound_food_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+
+
 class AuditLogRow(Base):
     __tablename__ = "audit_log"
 

@@ -26,6 +26,10 @@ class CalculationError(NutriPlanError):
     """Datos insuficientes para calcular targets (HTTP 422)."""
 
 
+class ValidationError(NutriPlanError):
+    """Datos de entrada inválidos para un caso de uso (HTTP 422)."""
+
+
 class GenerationError(NutriPlanError):
     """No se logró cuadrar macros tras max_retries (HTTP 422)."""
 

@@ -62,6 +62,7 @@ async def signup(request: Request,
             name=name, email=email, password=password, business_name=business_name,
             auth_repo=container.auth_repo(session),
             branding_dir=container.settings.branding_dir,
+            admin_email=container.settings.admin_email,
         )
     except SignupError as exc:
         return render(request, "auth.html", mode="signup", error=str(exc))

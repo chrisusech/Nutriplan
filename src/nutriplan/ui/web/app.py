@@ -51,23 +51,49 @@ def create_app(container: Container | None = None) -> FastAPI:
     async def require_login(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Guard: sin sesión, todo redirige a /login salvo las rutas públicas."""
+        """Guard por sesión y por rol.
+
+        Sin sesión → /login (salvo rutas públicas). El cliente solo ve su portal;
+        las rutas de admin exigen rol admin; el entrenador/admin no entra al portal.
+        """
         path = request.url.path
-        if not path.startswith(_PUBLIC_PREFIXES) and not request.session.get("tenant_id"):
+        if path.startswith(_PUBLIC_PREFIXES):
+            return await call_next(request)
+        if not request.session.get("tenant_id"):
             return RedirectResponse("/login", status_code=303)
+
+        role = request.session.get("role", "trainer")
+        if role == "client":
+            if not path.startswith("/portal"):
+                return RedirectResponse("/portal", status_code=303)
+        else:  # entrenador o admin
+            if path.startswith("/portal"):
+                return RedirectResponse("/", status_code=303)
+            if path.startswith("/admin") and role != "admin":
+                return RedirectResponse("/", status_code=303)
         return await call_next(request)
 
     app.add_middleware(SessionMiddleware, secret_key=container.settings.session_secret)
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    from nutriplan.ui.web.routes import auth, dashboard, generator, intake, plans
+    from nutriplan.ui.web.routes import (
+        auth,
+        dashboard,
+        generator,
+        intake,
+        plans,
+        portal,
+        recipes,
+    )
 
     app.include_router(auth.router)
     app.include_router(dashboard.router)
     app.include_router(intake.router)
     app.include_router(generator.router)
     app.include_router(plans.router)
+    app.include_router(recipes.router)
+    app.include_router(portal.router)
     return app
 
 

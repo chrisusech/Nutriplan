@@ -56,6 +56,22 @@ def current_trainer(request: Request) -> dict[str, str] | None:
     return None
 
 
+def role_of(request: Request) -> str:
+    sess = request.session if "session" in request.scope else {}
+    return str(sess.get("role", "")) if sess else ""
+
+
+def client_id_of(request: Request) -> UUID | None:
+    """El Client asociado a la cuenta logueada (solo cuentas de cliente)."""
+    raw = request.session.get("client_id") if "session" in request.scope else None
+    if raw:
+        try:
+            return UUID(raw)
+        except ValueError:
+            pass
+    return None
+
+
 async def db_session(request: Request) -> AsyncIterator[AsyncSession]:
     """Sesión por request; commit al final si la vista no falló."""
     container = container_of(request)
@@ -81,6 +97,7 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
             "brand_soft": presenter.soft_of(branding.primary_color),
             "trainer_initials": presenter.initials(branding.tenant_name),
             "trainer": current_trainer(request),
+            "role": role_of(request),
             "offline": container.llm_client is None,
             **context,
         },

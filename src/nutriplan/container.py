@@ -26,6 +26,7 @@ from nutriplan.adapters.db.repositories import (
     SqlIntakeRepository,
     SqlJobRepository,
     SqlPlanRepository,
+    SqlRecipeRepository,
     SqlTargetsRepository,
 )
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
@@ -51,6 +52,7 @@ class Repos:
     jobs: SqlJobRepository
     artifacts: SqlArtifactRepository
     audit: SqlAuditLogRepository
+    recipes: SqlRecipeRepository
 
 
 @dataclass
@@ -80,10 +82,15 @@ class Container:
             jobs=SqlJobRepository(session, t),
             artifacts=SqlArtifactRepository(session, t),
             audit=SqlAuditLogRepository(session, t),
+            recipes=SqlRecipeRepository(session, t),
         )
 
     def auth_repo(self, session: AsyncSession) -> SqlAuthRepository:
         return SqlAuthRepository(session)
+
+    def admin_recipe_repo(self, session: AsyncSession) -> SqlRecipeRepository:
+        """Repo de recetas sin filtro de tenant (solo rutas de admin)."""
+        return SqlRecipeRepository(session, None)
 
     @cached_property
     def config_provider(self) -> YamlConfigProvider:

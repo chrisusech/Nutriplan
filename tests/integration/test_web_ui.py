@@ -40,6 +40,7 @@ def container(tmp_path, monkeypatch) -> Container:
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path}/web.db",
         anthropic_api_key="",  # explícito: gana sobre un .env local del desarrollador
+        admin_email="admin@nutriplan.test",  # este correo, al registrarse, es admin
     )
     return Container(settings=settings, tenant_id=DEFAULT_TENANT_ID)
 
@@ -399,6 +400,75 @@ def test_login_rejects_bad_password_and_accepts_good_one(container) -> None:
                            follow_redirects=False)
         assert good.status_code == 303
         assert good.headers["location"] == "/"
+
+
+# --- Portal del cliente + recetas verificadas (Workstream H) ----------------
+
+
+def test_recipe_upload_pending_then_admin_verifies_and_it_becomes_a_food(offline) -> None:
+    trainer, _ = offline
+    foods = _food_ids(trainer)[:2]
+
+    created = trainer.post("/recetas", data={
+        "name": "Bowl de prueba",
+        "food_id": [foods[0], foods[1]],
+        f"grams_{foods[0]}": "150",
+        f"grams_{foods[1]}": "80",
+    }, follow_redirects=False)
+    assert created.status_code == 303
+    assert "Bowl de prueba" in trainer.get("/recetas").text
+    assert "Pendiente" in trainer.get("/recetas").text
+
+    # el trainer normal no puede entrar a la cola de admin
+    assert trainer.get("/admin/recetas", follow_redirects=False).status_code == 303
+
+    # un admin (correo designado en settings) verifica
+    admin = TestClient(trainer.app)
+    admin.post("/signup", data={
+        "name": "Admin", "business_name": "Plataforma",
+        "email": "admin@nutriplan.test", "password": "clave-admin-1",
+    }, follow_redirects=False)
+    queue = admin.get("/admin/recetas").text
+    assert "Bowl de prueba" in queue
+    rid = re.search(r"/admin/recetas/([0-9a-f-]{36})/verificar", queue).group(1)
+    assert admin.post(f"/admin/recetas/{rid}/verificar", follow_redirects=False).status_code == 303
+
+    # ahora la receta figura verificada y aparece como alimento del entrenador
+    assert "Verificada" in trainer.get("/recetas").text
+    assert "Bowl de prueba" in trainer.get("/clientes/nuevo").text
+
+
+def test_client_portal_shows_plan_read_only_and_blocks_trainer_routes(offline) -> None:
+    trainer, _ = offline
+    cid = _create_client(trainer)
+    _generate_and_wait(trainer, cid)
+    cycle = _cycle_id(trainer)
+    trainer.post(f"/planes/{cycle}/aprobar", follow_redirects=False)
+
+    # el entrenador da acceso al cliente
+    granted = trainer.post(f"/clientes/{cid}/acceso",
+                           data={"email": "ana@correo.com", "password": "clave-ana-11"},
+                           follow_redirects=False)
+    assert granted.status_code == 303
+
+    # el cliente entra: login lo lleva al portal
+    portal = TestClient(trainer.app)
+    login = portal.post("/login", data={"email": "ana@correo.com", "password": "clave-ana-11"},
+                        follow_redirects=False)
+    assert login.status_code == 303
+    assert login.headers["location"] == "/portal"
+
+    view = portal.get("/portal")
+    assert view.status_code == 200
+    assert "Tu plan de la semana" in view.text
+    assert "Lunes" in view.text  # las tarjetas de día se renderizan
+    # PDF descargable
+    pdf = portal.get("/portal/plan.pdf")
+    assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"
+
+    # el cliente no puede tocar rutas del entrenador: lo devuelven al portal
+    assert portal.get("/", follow_redirects=False).headers["location"] == "/portal"
+    assert portal.get("/planes", follow_redirects=False).headers["location"] == "/portal"
 
 
 # --- Edición de porciones (ejercita SqlPlanRepository.update_days) ----------

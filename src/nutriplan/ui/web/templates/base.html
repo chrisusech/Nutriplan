@@ -22,6 +22,10 @@
       <a class="tab {% if active_tab == 'clientes' %}active{% endif %}" href="/">Clientes</a>
       <a class="tab {% if active_tab == 'generador' %}active{% endif %}" href="/generador">Generador</a>
       <a class="tab {% if active_tab == 'planes' %}active{% endif %}" href="/planes">Planes</a>
+      <a class="tab {% if active_tab == 'recetas' %}active{% endif %}" href="/recetas">Recetas</a>
+      {% if role == 'admin' %}
+      <a class="tab {% if active_tab == 'verificar' %}active{% endif %}" href="/admin/recetas">Verificar</a>
+      {% endif %}
     </nav>
     <div class="topbar-right">
       <details class="brand-picker">

@@ -260,3 +260,34 @@ class Trainer(BaseModel):
     email: str
     role: str = "trainer"  # "trainer" | "client" | "admin"
     client_id: UUID | None = None  # solo para cuentas de cliente
+
+
+class RecipeStatus(StrEnum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
+class RecipeIngredient(BaseModel):
+    food_id: UUID
+    grams: float = Field(gt=0)
+
+
+class Recipe(BaseModel):
+    """Receta = nombre + ingredientes con macros agregados por el dominio.
+
+    El entrenador la sube (pending); un admin verifica los macros (verified).
+    Una receta verificada se materializa como 'alimento compuesto' del tenant
+    y queda disponible para armar planes (aporta sus macros a un slot).
+    """
+
+    id: UUID
+    tenant_id: UUID
+    name: str
+    ingredients: list[RecipeIngredient]
+    macros: MacroTargets  # totales de la receta, calculados por el dominio
+    total_grams: float = Field(gt=0)
+    status: RecipeStatus = RecipeStatus.PENDING
+    created_by: UUID | None = None  # cuenta de entrenador que la subió
+    created_at: datetime
+    compound_food_id: UUID | None = None  # alimento generado al verificar

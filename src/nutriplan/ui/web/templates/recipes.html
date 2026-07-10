@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Recetas{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>Recetas</h2>
+    <p>Arma una receta con sus ingredientes; sus macros se calculan solos. Un admin la verifica y queda disponible como alimento compuesto para tus planes.</p>
+  </div>
+</div>
+
+<div class="review-grid">
+  <div class="review-main card" style="padding:22px">
+    <div style="font:700 16px Poppins;color:var(--ink);margin-bottom:14px">Mis recetas</div>
+    {% if cards %}
+    <div style="display:flex;flex-direction:column;gap:10px">
+      {% for r in cards %}
+      <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:14px">
+        <div style="flex:1">
+          <div style="font:700 14.5px Poppins;color:var(--ink)">{{ r.name }}</div>
+          <div style="font:500 12px Poppins;color:var(--muted-2);margin-top:2px">
+            {{ r.n_ingredients }} ingredientes · {{ r.total_grams }} g ·
+            {{ r.kcal }} kcal · P {{ r.protein }} · C {{ r.carb }} · G {{ r.fat }}
+          </div>
+        </div>
+        <span class="badge" style="color:{{ r.status_color }};background:{{ r.status_soft }};font-weight:700">
+          {{ r.status_label }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="font:500 13px Poppins;color:var(--muted-2)">Aún no tienes recetas. Crea la primera aquí al lado.</p>
+    {% endif %}
+  </div>
+
+  <div class="review-side card" style="padding:22px">
+    <div style="font:700 16px Poppins;color:var(--ink);margin-bottom:12px">Nueva receta</div>
+    <form method="post" action="/recetas">
+      <div class="auth-field" style="margin-bottom:14px">
+        <span>Nombre</span>
+        <input name="name" type="text" placeholder="Bowl de pollo y arroz" required>
+      </div>
+      <div style="font:600 12px Poppins;color:var(--muted-2);margin-bottom:8px">
+        Ingredientes (pon los gramos de los que uses)
+      </div>
+      <div style="max-height:360px;overflow:auto;display:flex;flex-direction:column;gap:6px">
+        {% for g in groups %}
+        <div style="font:700 11px Poppins;color:var(--faint);text-transform:uppercase;margin-top:6px">{{ g.label }}</div>
+        {% for it in g["items"] %}
+        <label style="display:flex;align-items:center;gap:8px;font:500 12.5px Poppins;color:var(--ink-2)">
+          <input type="hidden" name="food_id" value="{{ it.id }}">
+          <span style="flex:1">{{ it.name }}</span>
+          <input name="grams_{{ it.id }}" type="number" min="0" step="5" placeholder="g"
+                 style="width:70px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px">
+        </label>
+        {% endfor %}
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;margin-top:14px;padding:12px">
+        <span class="icon" style="font-size:19px">add</span>Crear receta (pendiente)
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -41,6 +41,7 @@ async def signup_trainer(
     business_name: str,
     auth_repo: AuthRepository,
     branding_dir: Path,
+    admin_email: str = "",
 ) -> Trainer:
     email = email.strip().lower()
     if not email or "@" not in email:
@@ -50,10 +51,12 @@ async def signup_trainer(
     if await auth_repo.get_by_email(email) is not None:
         raise SignupError("Ese correo ya tiene una cuenta")
 
+    # El admin de plataforma verifica recetas; se designa por correo en settings.
+    role = "admin" if admin_email and email == admin_email.strip().lower() else "trainer"
     tenant_id = uuid4()
     trainer = await auth_repo.create_account(
         tenant_id=tenant_id, tenant_name=business_name.strip() or name.strip(),
-        name=name.strip(), email=email, password_hash=hash_password(password),
+        name=name.strip(), email=email, password_hash=hash_password(password), role=role,
     )
     save_branding(
         branding_dir, Branding(tenant_name=business_name.strip() or name.strip()),
