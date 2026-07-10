@@ -17,6 +17,7 @@ htmlcov/
 data/*.db
 data/*.db-journal
 data/exports/
+config/branding/
 
 # macOS
 .DS_Store
