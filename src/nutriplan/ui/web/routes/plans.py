@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutriplan.application.approve_plan import approve_plan
+from nutriplan.application.approve_plan import approve_plan, reopen_plan
 from nutriplan.application.export_plan import export_plan
 from nutriplan.domain.models import (
     MealFoodPortion,
@@ -98,6 +98,19 @@ async def approve(request: Request,
     if cycle is not None:
         await approve_plan(plan_id=cycle.id, plan_repo=repos.plans, audit_repo=repos.audit)
     return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
+
+
+@router.post("/planes/{cycle_id}/reabrir")
+async def reopen(request: Request,
+                 session: Annotated[AsyncSession, Depends(db_session)],
+                 cycle_id: str) -> RedirectResponse:
+    """Reabre un plan aprobado para corregirlo, y lleva al editor del generador."""
+    repos = repos_of(request, session)
+    cycle = await repos.plans.get(UUID(cycle_id))
+    if cycle is None:
+        return RedirectResponse("/planes", status_code=303)
+    await reopen_plan(plan_id=cycle.id, plan_repo=repos.plans, audit_repo=repos.audit)
+    return RedirectResponse(f"/generador?cliente={cycle.client_id}&editar=1", status_code=303)
 
 
 @router.get("/planes/{cycle_id}/export.{fmt}")

@@ -293,6 +293,11 @@ select.plain {
   border: 1.5px solid var(--line); border-radius: 999px; padding: 3px 8px; outline: none; background: #fff;
 }
 .portion-edit input:focus { border-color: var(--brand); }
+.rm-food {
+  border: none; background: none; cursor: pointer; color: var(--faint);
+  font: 700 15px Poppins; line-height: 1; padding: 0 2px; border-radius: 999px;
+}
+.rm-food:hover { color: #D9603F; }
 
 /* ---------- dashboard (1c) ---------- */
 .search-box {

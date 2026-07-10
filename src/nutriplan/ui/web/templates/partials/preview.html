@@ -83,6 +83,8 @@
           {% for p in ml.portions %}
           <span class="portion-edit">{{ p.name }}
             <input type="number" name="grams_{{ p.food_id }}" value="{{ p.grams }}" min="0" step="5"> g
+            <button type="button" class="rm-food" title="Quitar del plan"
+                    onclick="var i=this.parentNode.querySelector('input');i.value=0;i.dispatchEvent(new Event('change',{bubbles:true}))">×</button>
           </span>
           {% endfor %}
           {% for e in ml.extras %}<span class="meal-chip extra">{{ e }}</span>{% endfor %}

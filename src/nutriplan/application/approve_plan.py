@@ -44,3 +44,29 @@ async def approve_plan(
     approved = await plan_repo.get(plan_id)
     assert approved is not None
     return approved
+
+
+async def reopen_plan(
+    *,
+    plan_id: UUID,
+    plan_repo: PlanRepository,
+    audit_repo: AuditLogRepository,
+) -> PlanCycle:
+    """Reabre un plan aprobado para corregirlo (APPROVED → DRAFT).
+
+    El entrenador puede ajustar/quitar comidas y volver a aprobar; el historial
+    de la aprobación anterior queda en audit_log.
+    """
+    plan = await plan_repo.get(plan_id)
+    if plan is None:
+        raise GenerationError(f"Plan {plan_id} no existe")
+    if plan.status == PlanStatus.DRAFT:
+        return plan
+    await plan_repo.set_status(plan_id, PlanStatus.DRAFT)
+    await audit_repo.record(
+        action="plan_reopened", entity_type="plan_cycle", entity_id=plan_id, details={}
+    )
+    logger.info("plan_reopened", plan_id=str(plan_id))
+    reopened = await plan_repo.get(plan_id)
+    assert reopened is not None
+    return reopened

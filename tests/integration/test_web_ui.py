@@ -290,6 +290,32 @@ def test_draft_cannot_be_exported_until_approved(offline) -> None:
     assert docx.content[:2] == b"PK"  # zip → docx
 
 
+def test_approved_plan_can_be_reopened_and_corrected(offline) -> None:
+    client, _ = offline
+    cid = _create_client(client)
+    _generate_and_wait(client, cid)
+    cycle = _cycle_id(client)
+
+    client.post(f"/planes/{cycle}/aprobar", follow_redirects=False)
+    assert "Reabrir para corregir" in client.get(f"/planes/{cycle}").text
+
+    # reabrir → vuelve a borrador y lleva al editor
+    reopened = client.post(f"/planes/{cycle}/reabrir", follow_redirects=False)
+    assert reopened.status_code == 303
+    assert "editar=1" in reopened.headers["location"]
+
+    # ahora sí se puede editar (estado draft) y volver a aprobar
+    page = client.get("/generador", params={"cliente": cid, "editar": 1}).text
+    field = re.search(r'name="(grams_[0-9a-f-]{36})" value="([\d.]+)"', page)
+    assert field is not None
+    edit = client.post(
+        f"/planes/{cycle}/dia/0/porciones",
+        data={"slot": "desayuno", "cliente": cid, field.group(1): float(field.group(2)) + 25},
+    )
+    assert edit.status_code == 200
+    assert client.post(f"/planes/{cycle}/aprobar", follow_redirects=False).status_code == 303
+
+
 def test_review_page_shows_the_week_grid(offline) -> None:
     client, _ = offline
     cid = _create_client(client)

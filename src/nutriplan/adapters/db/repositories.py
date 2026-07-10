@@ -481,8 +481,7 @@ class SqlPlanRepository:
         if row is None:
             raise TenantIsolationError("Plan inexistente para este tenant")
         row.status = status.value
-        if status == PlanStatus.APPROVED:
-            row.approved_at = datetime.now(UTC)
+        row.approved_at = datetime.now(UTC) if status == PlanStatus.APPROVED else None
         await self._s.flush()
 
 
