@@ -30,7 +30,6 @@ from nutriplan.domain.models import (
     Branding,
     Client,
     Goal,
-    PlanPhase,
     PlanStatus,
     Sex,
 )
@@ -122,11 +121,11 @@ async def test_word_to_pdf_full_flow(ctx) -> None:
     )
     assert job.status == JobStatus.DONE, job.error
     cycles = await repos.plans.list_for_client(client.id)
-    assert {c.phase for c in cycles} == {PlanPhase.FIRST_15, PlanPhase.NEXT_15}
-    assert all(len(c.days) == 7 for c in cycles)
+    assert len(cycles) == 1  # una sola semana, no 15+15
+    first = cycles[0]
+    assert len(first.days) == 7
 
-    # 5) Reproducibilidad: regenerar devuelve los mismos ciclos sin re-generar
-    first = next(c for c in cycles if c.phase == PlanPhase.FIRST_15)
+    # 5) Reproducibilidad: regenerar devuelve el MISMO plan sin re-generar
     again = await generate_plan_for_client(
         client=client,
         targets=targets,
@@ -137,7 +136,7 @@ async def test_word_to_pdf_full_flow(ctx) -> None:
         prompts_dir=PROMPTS,
         model="offline-heuristic",
     )
-    assert [c.id for c in again] == [c.id for c in sorted(cycles, key=lambda c: c.phase.value)]
+    assert again.id == first.id
 
     # 6) Sin aprobar no se exporta (compuerta humana)
     branding = Branding(tenant_name="Estudio Fit", primary_color="#F26D5B")

@@ -74,7 +74,7 @@ async def run_generation_job(
             raise GenerationError(
                 "El cliente no tiene macros calculados: calcula los objetivos primero"
             )
-        cycles = await generate_plan_for_client(
+        cycle = await generate_plan_for_client(
             client=client,
             targets=targets,
             food_repo=food_repo,
@@ -88,8 +88,8 @@ async def run_generation_job(
             job,
             job_repo,
             status=JobStatus.DONE,
-            result_id=cycles[0].id,
-            input_hash=cycles[0].input_hash,
+            result_id=cycle.id,
+            input_hash=cycle.input_hash,
         )
     except Exception as exc:
         logger.warning("generation_job_failed", job_id=str(job.id), error=str(exc))

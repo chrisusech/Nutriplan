@@ -1,5 +1,5 @@
-{% set cycle = ctx.pair[ctx.fase] %}
-{% set qs = "cliente=" ~ ctx.client.id ~ "&fase=" ~ ctx.fase %}
+{% set cycle = ctx.plan %}
+{% set qs = "cliente=" ~ ctx.client.id %}
 {% if ctx.celebrate %}
 <div class="card pop-in" style="display:flex;align-items:center;gap:14px;margin-bottom:14px;border-color:#CBE9D8;background:#F4FBF7">
   <div style="width:44px;height:44px;border-radius:999px;background:var(--ok-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -7,10 +7,10 @@
   </div>
   <div style="flex:1">
     <div style="font:800 15px Poppins;color:var(--ink)">¡Todo listo! ✨</div>
-    <div style="font:500 12.5px Poppins;color:var(--muted)">El plan de 30 días de {{ ctx.client.name.split(' ')[0] }} cuadra con su objetivo. Revísalo, ajústalo y expórtalo.</div>
+    <div style="font:500 12.5px Poppins;color:var(--muted)">El plan semanal de {{ ctx.client.name.split(' ')[0] }} cuadra con su objetivo. Revísalo, ajústalo y expórtalo.</div>
   </div>
   <a class="btn btn-outline" style="padding:10px 14px;font-size:13px" href="/planes/{{ cycle.id }}">
-    <span class="icon" style="font-size:18px">visibility</span>Ver 30 días
+    <span class="icon" style="font-size:18px">visibility</span>Ver la semana
   </a>
 </div>
 {% endif %}
@@ -20,13 +20,7 @@
     <div class="row">
       <div style="display:flex;align-items:center;gap:10px">
         <span class="preview-title">Vista previa del plan</span>
-        <span style="display:inline-flex;gap:4px">
-          {% for f in range(2) %}
-          <a class="pill" style="cursor:pointer;text-decoration:none;{% if ctx.fase == f %}color:var(--brand);background:var(--brand-soft);font-weight:700{% endif %}"
-             hx-get="/generador?cliente={{ ctx.client.id }}&fase={{ f }}&dia={{ ctx.dia }}{% if ctx.editar %}&editar=1{% endif %}"
-             hx-target="#gen-root" hx-swap="innerHTML">{{ "Días 1–15" if f == 0 else "Días 16–30" }}</a>
-          {% endfor %}
-        </span>
+        <span class="pill" style="color:var(--brand);background:var(--brand-soft);font-weight:700">Semana · 7 días</span>
         {% if ctx.stale %}
         <span class="badge badge-warn" title="Cambiaste datos del cliente después de generar">
           <span class="icon" style="font-size:15px">history</span>Desactualizado
@@ -84,7 +78,7 @@
         {% if ctx.editar %}
         <form class="meal-chips"
               hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/porciones"
-              hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}","fase":"{{ ctx.fase }}"}'
+              hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}"}'
               hx-trigger="change from:find input" hx-target="#gen-root" hx-swap="innerHTML">
           {% for p in ml.portions %}
           <span class="portion-edit">{{ p.name }}

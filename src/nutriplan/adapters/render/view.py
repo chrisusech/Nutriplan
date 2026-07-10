@@ -8,7 +8,6 @@ from nutriplan.domain.models import (
     FoodItem,
     MealSlot,
     PlanCycle,
-    PlanPhase,
     UnitGranularity,
 )
 
@@ -20,7 +19,7 @@ SLOT_LABELS: dict[MealSlot, str] = {
     MealSlot.DINNER: "Cena",
 }
 DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-PHASE_LABELS = {PlanPhase.FIRST_15: "Días 1 – 15", PlanPhase.NEXT_15: "Días 16 – 30"}
+WEEK_SUBTITLE = "Plan semanal · 7 días"
 
 # Sección fija del formato del negocio (sección 12.2).
 ANOTACIONES_IMPORTANTES = [

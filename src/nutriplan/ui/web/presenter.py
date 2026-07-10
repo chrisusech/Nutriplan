@@ -19,7 +19,6 @@ from nutriplan.domain.models import (
     MealSlot,
     NutritionTargets,
     PlanCycle,
-    PlanPhase,
     PlanStatus,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
@@ -265,44 +264,32 @@ def day_view(
                    bars=bars, fits=fits)
 
 
-def plan_pair(cycles: list[PlanCycle]) -> tuple[PlanCycle, PlanCycle] | None:
-    """El par (first_15, next_15) más reciente que comparte input_hash."""
-    for cycle in cycles:  # list_for_client ya viene DESC por created_at
-        if cycle.phase == PlanPhase.FIRST_15:
-            sibling = next(
-                (c for c in cycles
-                 if c.phase == PlanPhase.NEXT_15 and c.input_hash == cycle.input_hash),
-                None,
-            )
-            if sibling:
-                return cycle, sibling
-    return None
+def latest_plan(cycles: list[PlanCycle]) -> PlanCycle | None:
+    """El plan semanal más reciente del cliente (list_for_client viene DESC)."""
+    return cycles[0] if cycles else None
 
 
-def grid30(
-    pair: tuple[PlanCycle, PlanCycle],
+def week_grid(
+    cycle: PlanCycle,
     targets: NutritionTargets,
     config: NutritionConfig,
 ) -> list[dict[str, Any]]:
-    """Los 30 días del diseño: día n → ciclo (1–15 / 16–30), day_index (n-1)%7."""
+    """Los 7 días de la semana: cada celda marca si el día cuadra."""
     cells = []
-    for n in range(1, 31):
-        cycle = pair[0] if n <= 15 else pair[1]
-        day = next(d for d in cycle.days if d.day_index == (n - 1) % 7)
+    for day in sorted(cycle.days, key=lambda d: d.day_index):
         ok = not validate_day(list(day.meals), targets.daily, config)
         cells.append({
-            "n": n, "cycle_id": str(cycle.id), "day_index": day.day_index, "fit": ok,
+            "n": day.day_index + 1, "cycle_id": str(cycle.id), "day_index": day.day_index,
+            "label": DAY_SHORT[day.day_index], "fit": ok,
             "color": "#45B37E" if ok else "#E0982E",
             "soft": "#E7F5EE" if ok else "#FBF0DA",
         })
     return cells
 
 
-def adherence(
-    pair: tuple[PlanCycle, PlanCycle], targets: NutritionTargets
-) -> list[dict[str, Any]]:
-    """Cumplimiento promedio por macro (real/objetivo) sobre los 14 días patrón."""
-    days = [d for c in pair for d in c.days]
+def adherence(cycle: PlanCycle, targets: NutritionTargets) -> list[dict[str, Any]]:
+    """Cumplimiento promedio por macro (real/objetivo) sobre los 7 días."""
+    days = list(cycle.days)
     daily = targets.daily.model_dump()
     rows = []
     for m in MACRO_META:

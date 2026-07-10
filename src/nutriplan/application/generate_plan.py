@@ -46,13 +46,9 @@ logger = structlog.get_logger(__name__)
 
 _SLOT_ORDER = list(MealSlot)
 
-PHASE_HINT = {
-    PlanPhase.FIRST_15: "Primera quincena (días 1–15).",
-    PlanPhase.NEXT_15: (
-        "Segunda quincena (días 16–30): varía las combinaciones respecto a la "
-        "primera quincena donde sea posible."
-    ),
-}
+# El plan es UNA semana de 7 días variados (no 15+15). Internamente el ciclo
+# conserva phase=FIRST_15 por compatibilidad del schema; el producto ve 1 semana.
+WEEK_HINT = "Plan semanal: 7 días variados e intercambiables (cada día cuadra por sí solo)."
 
 
 def compute_input_hash(
@@ -90,7 +86,6 @@ def build_selection_prompt(
     targets: NutritionTargets,
     allowed: list[FoodItem],
     config: NutritionConfig,
-    phase: PlanPhase,
     feedback: str | None = None,
 ) -> str:
     structure_lines = [
@@ -104,7 +99,7 @@ def build_selection_prompt(
     ]
     gen = config.generation
     parts = [
-        PHASE_HINT[phase],
+        WEEK_HINT,
         "",
         "ESTRUCTURA DE CADA COMIDA:",
         *structure_lines,
@@ -135,7 +130,6 @@ async def generate_cycle(
     llm: LLMClient,
     prompts_dir: Path,
     model: str,
-    phase: PlanPhase,
 ) -> PlanCycle:
     prompt = load_prompt(prompts_dir, "plan_generation")
     schema = build_selection_schema(allowed)
@@ -147,7 +141,7 @@ async def generate_cycle(
     feedback: str | None = None
     failures: list[str] = []
     for attempt in range(1 + config.generation.max_retries):
-        user_prompt = build_selection_prompt(targets, allowed, config, phase, feedback)
+        user_prompt = build_selection_prompt(targets, allowed, config, feedback)
         raw = await llm.select_plan(
             system=prompt.text, prompt=user_prompt, schema=schema, model=model
         )
@@ -209,8 +203,7 @@ async def generate_cycle(
 
         if not problems and len(days) == 7:
             logger.info(
-                "plan_cycle_generated",
-                phase=phase.value,
+                "plan_generated",
                 attempts=attempt + 1,
                 input_hash=input_hash[:12],
             )
@@ -219,7 +212,7 @@ async def generate_cycle(
                 tenant_id=client.tenant_id,
                 client_id=client.id,
                 targets_id=targets.id,
-                phase=phase,
+                phase=PlanPhase.FIRST_15,  # vestigial: el plan es una semana
                 days=days,
                 status=PlanStatus.DRAFT,
                 config_version=config.version,
@@ -231,18 +224,13 @@ async def generate_cycle(
 
         failures = problems
         feedback = "\n".join(f"- {p}" for p in problems[:20])
-        logger.warning(
-            "plan_cycle_retry", phase=phase.value, attempt=attempt + 1, problems=len(problems)
-        )
+        logger.warning("plan_retry", attempt=attempt + 1, problems=len(problems))
 
     raise GenerationError(
-        f"No se logró cuadrar el ciclo {phase.value} tras "
+        f"No se logró cuadrar la semana tras "
         f"{1 + config.generation.max_retries} intentos. Detalle: "
         + "; ".join(failures[:10])
     )
-
-
-_PHASE_ORDER = {PlanPhase.FIRST_15: 0, PlanPhase.NEXT_15: 1}
 
 
 async def generate_plan_for_client(
@@ -255,12 +243,12 @@ async def generate_plan_for_client(
     llm: LLMClient | None,
     prompts_dir: Path,
     model: str,
-) -> list[PlanCycle]:
-    """Orquesta el plan de 30 días: dos ciclos (first_15, next_15).
+) -> PlanCycle:
+    """Orquesta el plan semanal: UN ciclo de 7 días variados.
 
-    Idempotente (11.6): si ya existen ciclos con el mismo input_hash se
-    devuelven sin regenerar (misma entrada → mismo plan, sin llamar a la IA).
-    Sin `llm` (modo offline) selecciona el HeuristicSelector determinista.
+    Idempotente (11.6): si ya existe un plan con el mismo input_hash se devuelve
+    sin regenerar (misma entrada → mismo plan, sin llamar a la IA). Sin `llm`
+    (modo offline) usa el HeuristicSelector determinista como motor principal.
     """
     liked = await food_repo.get_by_ids(client.liked_food_ids)
     allowed = allowed_foods(liked, client.restrictions)
@@ -273,9 +261,9 @@ async def generate_plan_for_client(
     prompt = load_prompt(prompts_dir, "plan_generation")
     input_hash = compute_input_hash(client, targets, config.version, prompt.version, allowed)
     existing = await plan_repo.find_by_input_hash(input_hash)
-    if len(existing) == 2:
+    if existing:
         logger.info("plan_reused_by_hash", input_hash=input_hash[:12])
-        return sorted(existing, key=lambda c: _PHASE_ORDER[c.phase])
+        return existing[0]
 
     if llm is None:
         from nutriplan.adapters.llm.heuristic import HeuristicSelector
@@ -284,18 +272,14 @@ async def generate_plan_for_client(
     else:
         selector = llm
 
-    cycles: list[PlanCycle] = []
-    for phase in (PlanPhase.FIRST_15, PlanPhase.NEXT_15):
-        cycle = await generate_cycle(
-            client=client,
-            targets=targets,
-            allowed=allowed,
-            config=config,
-            llm=selector,
-            prompts_dir=prompts_dir,
-            model=model,
-            phase=phase,
-        )
-        await plan_repo.add(cycle)
-        cycles.append(cycle)
-    return cycles
+    cycle = await generate_cycle(
+        client=client,
+        targets=targets,
+        allowed=allowed,
+        config=config,
+        llm=selector,
+        prompts_dir=prompts_dir,
+        model=model,
+    )
+    await plan_repo.add(cycle)
+    return cycle

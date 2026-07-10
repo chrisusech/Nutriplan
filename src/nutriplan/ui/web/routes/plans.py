@@ -13,8 +13,6 @@ from nutriplan.application.approve_plan import approve_plan
 from nutriplan.application.export_plan import export_plan
 from nutriplan.domain.models import (
     MealFoodPortion,
-    PlanCycle,
-    PlanPhase,
     PlanStatus,
 )
 from nutriplan.domain.validation import day_totals
@@ -42,15 +40,6 @@ def _attachment(filename: str) -> str:
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
-async def _pair_for(request: Request, session: AsyncSession,
-                    cycle: PlanCycle) -> tuple[PlanCycle, PlanCycle] | None:
-    repos = repos_of(request, session)
-    cycles = await repos.plans.find_by_input_hash(cycle.input_hash)
-    first = next((c for c in cycles if c.phase == PlanPhase.FIRST_15), None)
-    second = next((c for c in cycles if c.phase == PlanPhase.NEXT_15), None)
-    return (first, second) if first and second else None
-
-
 @router.get("/planes", response_class=HTMLResponse)
 async def plans_index(request: Request,
                       session: Annotated[AsyncSession, Depends(db_session)]) -> HTMLResponse:
@@ -58,13 +47,13 @@ async def plans_index(request: Request,
     rows = []
     for client in await repos.clients.list():
         cycles = await repos.plans.list_for_client(client.id)
-        pair = presenter.plan_pair(cycles)
-        if pair is None:
+        plan = presenter.latest_plan(cycles)
+        if plan is None:
             continue
-        targets = await repos.targets.get(pair[0].targets_id)
+        targets = await repos.targets.get(plan.targets_id)
         card = presenter.client_card(client, cycles, targets)
-        rows.append({**card, "cycle_id": str(pair[0].id),
-                     "created": presenter.time_ago(pair[0].created_at)})
+        rows.append({**card, "cycle_id": str(plan.id),
+                     "created": presenter.time_ago(plan.created_at)})
     return render(request, "plans.html", active_tab="planes", rows=rows)
 
 
@@ -78,8 +67,7 @@ async def review_plan(request: Request,
     if cycle is None:
         return RedirectResponse("/planes", status_code=303)
     client = await repos.clients.get(cycle.client_id)
-    pair = await _pair_for(request, session, cycle)
-    if client is None or pair is None:
+    if client is None:
         return RedirectResponse("/planes", status_code=303)
 
     targets = await repos.targets.get(cycle.targets_id)
@@ -88,16 +76,16 @@ async def review_plan(request: Request,
         assert targets is not None
     config = container.config_provider.get_nutrition_config()
 
-    grid = presenter.grid30(pair, targets, config)
+    grid = presenter.week_grid(cycle, targets, config)
     fit_days = sum(1 for cell in grid if cell["fit"])
-    approved = all(c.status == PlanStatus.APPROVED for c in pair)
+    approved = cycle.status == PlanStatus.APPROVED
     goal_meta = presenter.GOAL_META[client.goal]
     return render(
         request, "review.html", active_tab="planes",
-        client=client, pair=pair, cycle=pair[0], grid=grid, fit_days=fit_days,
-        adh=presenter.adherence(pair, targets), approved=approved,
+        client=client, cycle=cycle, grid=grid, fit_days=fit_days,
+        adh=presenter.adherence(cycle, targets), approved=approved,
         subtitle=(f"{goal_meta['label']} · {presenter.fmt_kcal(targets.daily.kcal)} kcal · "
-                  f"30 días · generado {presenter.time_ago(pair[0].created_at)}"),
+                  f"7 días · generado {presenter.time_ago(cycle.created_at)}"),
     )
 
 
@@ -108,9 +96,7 @@ async def approve(request: Request,
     repos = repos_of(request, session)
     cycle = await repos.plans.get(UUID(cycle_id))
     if cycle is not None:
-        pair = await _pair_for(request, session, cycle)
-        for c in pair or (cycle,):
-            await approve_plan(plan_id=c.id, plan_repo=repos.plans, audit_repo=repos.audit)
+        await approve_plan(plan_id=cycle.id, plan_repo=repos.plans, audit_repo=repos.audit)
     return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
 
 
@@ -134,10 +120,9 @@ async def export(request: Request,
         exports_dir=container.settings.exports_dir,
     )
     who = (client.name if client else "cliente").replace(" ", "_")
-    fase = "dias_1-15" if cycle.phase == PlanPhase.FIRST_15 else "dias_16-30"
     return Response(
         content=content, media_type=MEDIA_TYPES[fmt],
-        headers={"Content-Disposition": _attachment(f"plan_{who}_{fase}.{fmt}")},
+        headers={"Content-Disposition": _attachment(f"plan_semanal_{who}.{fmt}")},
     )
 
 
@@ -150,7 +135,6 @@ async def edit_portions(request: Request,
     form = await request.form()
     slot_value = str(form.get("slot", ""))
     cliente = str(form.get("cliente", ""))
-    fase = 1 if str(form.get("fase", "0")) == "1" else 0
 
     cycle = await repos.plans.get(UUID(cycle_id))
     if cycle is None or cycle.status != PlanStatus.DRAFT:
@@ -182,5 +166,5 @@ async def edit_portions(request: Request,
 
     client = await repos.clients.get(cycle.client_id)
     assert client is not None
-    ctx = await _generator_context(request, session, client, day_index, editar=True, fase=fase)
+    ctx = await _generator_context(request, session, client, day_index, editar=True)
     return render(request, "partials/generator_body.html", active_tab="generador", ctx=ctx)

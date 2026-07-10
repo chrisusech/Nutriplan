@@ -7,13 +7,13 @@
     <h2 style="font:800 24px Poppins;color:var(--ink);margin:0">Revisar plan · {{ client.name }}</h2>
     <p style="font:500 14px Poppins;color:var(--muted);margin:2px 0 0">{{ subtitle }}</p>
   </div>
-  {% if fit_days == 30 %}
+  {% if fit_days == 7 %}
   <span class="badge badge-ok" style="font-weight:700;font-size:13px;padding:9px 15px">
-    <span class="icon fill" style="font-size:18px">verified</span>Los 30 días cuadran
+    <span class="icon fill" style="font-size:18px">verified</span>Los 7 días cuadran
   </span>
   {% else %}
   <span class="badge badge-warn" style="font-weight:700;font-size:13px;padding:9px 15px">
-    <span class="icon fill" style="font-size:18px">verified</span>{{ fit_days }} de 30 días cuadran
+    <span class="icon fill" style="font-size:18px">verified</span>{{ fit_days }} de 7 días cuadran
   </span>
   {% endif %}
 </div>
@@ -21,22 +21,22 @@
 <div class="review-grid">
   <div class="review-main card" style="padding:22px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-      <span style="font:700 16px Poppins;color:var(--ink)">Plan de 30 días</span>
+      <span style="font:700 16px Poppins;color:var(--ink)">Plan de la semana</span>
       <span style="font:500 12px Poppins;color:var(--muted-2)">Toca un día para ajustarlo</span>
     </div>
-    <div class="grid30">
+    <div class="grid7">
       {% for cell in grid %}
       <a class="day-cell" style="background:{{ cell.soft }}"
-         href="/generador?cliente={{ client.id }}&fase={{ 0 if cell.n <= 15 else 1 }}&dia={{ cell.day_index }}&editar=1"
+         href="/generador?cliente={{ client.id }}&dia={{ cell.day_index }}&editar=1"
          onmouseover="this.style.borderColor='{{ cell.color }}'" onmouseout="this.style.borderColor='transparent'">
-        <span class="n">{{ cell.n }}</span>
+        <span class="n">{{ cell.label }}</span>
         <span class="dot" style="background:{{ cell.color }}"></span>
       </a>
       {% endfor %}
     </div>
     <div class="legend">
       <span><i style="background:#45B37E"></i>Cuadra ({{ fit_days }})</span>
-      {% if fit_days < 30 %}<span><i style="background:#E0982E"></i>Por revisar ({{ 30 - fit_days }})</span>{% endif %}
+      {% if fit_days < 7 %}<span><i style="background:#E0982E"></i>Por revisar ({{ 7 - fit_days }})</span>{% endif %}
     </div>
   </div>
 
@@ -72,17 +72,13 @@
       </div>
 
       {% if approved %}
-      <div style="display:flex;flex-direction:column;gap:8px">
-        {% for c in pair %}
-        <div style="display:flex;gap:8px">
-          <a class="btn btn-primary" style="flex:1;padding:12px;font-size:13.5px" href="/planes/{{ c.id }}/export.pdf">
-            <span class="icon" style="font-size:18px">picture_as_pdf</span>PDF {{ "días 1–15" if loop.index == 1 else "días 16–30" }}
-          </a>
-          <a class="btn btn-outline" style="padding:12px 14px;font-size:13.5px" href="/planes/{{ c.id }}/export.docx" title="Word editable">
-            <span class="icon" style="font-size:18px">description</span>DOCX
-          </a>
-        </div>
-        {% endfor %}
+      <div style="display:flex;gap:8px">
+        <a class="btn btn-primary" style="flex:1;padding:12px;font-size:13.5px" href="/planes/{{ cycle.id }}/export.pdf">
+          <span class="icon" style="font-size:18px">picture_as_pdf</span>Descargar PDF
+        </a>
+        <a class="btn btn-outline" style="padding:12px 14px;font-size:13.5px" href="/planes/{{ cycle.id }}/export.docx" title="Word editable">
+          <span class="icon" style="font-size:18px">description</span>DOCX
+        </a>
       </div>
       {% endif %}
     </div>

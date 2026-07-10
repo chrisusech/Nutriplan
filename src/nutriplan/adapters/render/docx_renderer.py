@@ -6,8 +6,8 @@ from uuid import UUID
 from nutriplan.adapters.render.view import (
     ANOTACIONES_IMPORTANTES,
     DAY_LABELS,
-    PHASE_LABELS,
     SLOT_LABELS,
+    WEEK_SUBTITLE,
     build_grid,
 )
 from nutriplan.domain.errors import RenderError
@@ -44,7 +44,7 @@ class DocxRenderer:
         section.page_width, section.page_height = section.page_height, section.page_width
 
         doc.add_heading(f"{branding.tenant_name} — Plan nutricional", level=1)
-        subtitle = PHASE_LABELS[plan.phase]
+        subtitle = WEEK_SUBTITLE
         if branding.handle:
             subtitle += f" · {branding.handle}"
         doc.add_paragraph(subtitle)

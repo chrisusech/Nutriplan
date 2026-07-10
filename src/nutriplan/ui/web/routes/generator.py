@@ -53,7 +53,7 @@ async def _fresh_targets(request: Request, session: AsyncSession, client: Client
 
 async def _generator_context(request: Request, session: AsyncSession,
                              client: Client, dia: int, editar: bool,
-                             fase: int = 0, job_id: str | None = None) -> dict[str, Any]:
+                             job_id: str | None = None) -> dict[str, Any]:
     container = container_of(request)
     repos = repos_of(request, session)
     config = container.config_provider.get_nutrition_config()
@@ -73,25 +73,22 @@ async def _generator_context(request: Request, session: AsyncSession,
         if items:
             groups.append({**meta, "items": items})
 
-    # plan más reciente + frescura frente a los insumos actuales
+    # plan semanal más reciente + frescura frente a los insumos actuales
     cycles = await repos.plans.list_for_client(client.id)
-    pair = presenter.plan_pair(cycles)
+    plan = presenter.latest_plan(cycles)
     stale = False
-    if pair is not None:
+    day_view = None
+    if plan is not None:
         allowed = allowed_foods(await repos.foods.get_by_ids(client.liked_food_ids),
                                 client.restrictions)
         prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
         current = compute_input_hash(client, targets, config.version, prompt.version, allowed)
-        stale = pair[0].input_hash != current
+        stale = plan.input_hash != current
 
-    dia = max(0, min(dia, 6))
-    fase = 1 if fase == 1 else 0
-    day_view = None
-    foods_by_id = {}
-    if pair is not None:
-        food_ids = {p.food_id for c in pair for d in c.days for m in d.meals for p in m.portions}
+        dia = max(0, min(dia, 6))
+        food_ids = {p.food_id for d in plan.days for m in d.meals for p in m.portions}
         foods_by_id = {f.id: f for f in await repos.foods.get_by_ids(sorted(food_ids, key=str))}
-        day = next(d for d in pair[fase].days if d.day_index == dia)
+        day = next(d for d in plan.days if d.day_index == dia)
         day_view = presenter.day_view(day, targets, config, foods_by_id)
 
     goal_meta = presenter.GOAL_META[client.goal]
@@ -107,12 +104,11 @@ async def _generator_context(request: Request, session: AsyncSession,
         "formula": presenter.formula_view(client, targets),
         "has_overrides": bool(targets.overrides),
         "groups": groups,
-        "pair": pair,
+        "plan": plan,
         "stale": stale,
-        "dia": dia,
-        "fase": fase,
+        "dia": max(0, min(dia, 6)),
         "dv": day_view,
-        "editar": editar and pair is not None and pair[fase].status.value == "draft",
+        "editar": editar and plan is not None and plan.status.value == "draft",
         "job_id": job_id,
         "loading_msg": None,
     }
@@ -122,7 +118,7 @@ async def _generator_context(request: Request, session: AsyncSession,
 async def generator_page(request: Request,
                          session: Annotated[AsyncSession, Depends(db_session)],
                          cliente: str = "", dia: int = 0,
-                         editar: int = 0, fase: int = 0) -> HTMLResponse:
+                         editar: int = 0) -> HTMLResponse:
     repos = repos_of(request, session)
     clients = await repos.clients.list()
     if not clients:
@@ -131,7 +127,7 @@ async def generator_page(request: Request,
     if cliente:
         client = await repos.clients.get(UUID(cliente))
     client = client or clients[0]
-    ctx = await _generator_context(request, session, client, dia, bool(editar), fase)
+    ctx = await _generator_context(request, session, client, dia, bool(editar))
     template = ("partials/generator_body.html"
                 if request.headers.get("HX-Request") else "generator.html")
     return render(request, template, active_tab="generador", ctx=ctx)

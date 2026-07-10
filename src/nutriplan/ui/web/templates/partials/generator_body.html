@@ -147,7 +147,7 @@
       <button class="btn btn-primary btn-big"
               hx-post="/generador/{{ ctx.client.id }}/generar"
               hx-target="#preview-col" hx-swap="innerHTML">
-        <span class="icon" style="font-size:24px">auto_awesome</span>Generar plan de 30 días
+        <span class="icon" style="font-size:24px">auto_awesome</span>Generar plan semanal
       </button>
       <div style="text-align:center;font:500 12.5px Poppins;color:#A88E84;margin-top:9px">
         {% if offline %}Modo offline: selección determinista sin IA{% else %}Tarda solo unos segundos ✨{% endif %}
@@ -157,7 +157,7 @@
 
   <!-- ============ vista previa ============ -->
   <div class="gen-preview" id="preview-col">
-    {% if ctx.pair %}
+    {% if ctx.plan %}
       {% include "partials/preview.html" %}
     {% else %}
       <div class="preview-card" style="padding:40px 20px">

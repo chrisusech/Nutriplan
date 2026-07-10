@@ -282,22 +282,22 @@ def test_draft_cannot_be_exported_until_approved(offline) -> None:
     assert pdf.content[:5] == b"%PDF-"
     # "Ana Pérez" no cabe cruda en un header HTTP: ASCII + parámetro RFC 6266
     disposition = pdf.headers["content-disposition"]
-    assert 'filename="plan_Ana_Perez_dias_1-15.pdf"' in disposition
-    assert "filename*=UTF-8''plan_Ana_P%C3%A9rez_dias_1-15.pdf" in disposition
+    assert 'filename="plan_semanal_Ana_Perez.pdf"' in disposition
+    assert "filename*=UTF-8''plan_semanal_Ana_P%C3%A9rez.pdf" in disposition
 
     docx = client.get(f"/planes/{cycle}/export.docx")
     assert docx.status_code == 200
     assert docx.content[:2] == b"PK"  # zip → docx
 
 
-def test_review_page_shows_the_30_day_grid(offline) -> None:
+def test_review_page_shows_the_week_grid(offline) -> None:
     client, _ = offline
     cid = _create_client(client)
     _generate_and_wait(client, cid)
 
     review = client.get(f"/planes/{_cycle_id(client)}").text
-    assert "Plan de 30 días" in review
-    assert review.count('class="day-cell"') == 30  # 2 ciclos × 15 días
+    assert "Plan de la semana" in review
+    assert review.count('class="day-cell"') == 7  # una semana
 
 
 # --- Edición de porciones (ejercita SqlPlanRepository.update_days) ----------

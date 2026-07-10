@@ -12,8 +12,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from nutriplan.adapters.render.view import (
     ANOTACIONES_IMPORTANTES,
     DAY_LABELS,
-    PHASE_LABELS,
     SLOT_LABELS,
+    WEEK_SUBTITLE,
     build_grid,
 )
 from nutriplan.domain.errors import RenderError
@@ -47,7 +47,7 @@ def render_plan_html(
         plan=plan,
         branding=branding,
         client_name=client_name,
-        phase_label=PHASE_LABELS[plan.phase],
+        phase_label=WEEK_SUBTITLE,
         day_labels=DAY_LABELS,
         slot_labels=SLOT_LABELS,
         grid=grid,
