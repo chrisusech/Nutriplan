@@ -11,10 +11,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from nutriplan.adapters.render.view import (
     ANOTACIONES_IMPORTANTES,
-    DAY_LABELS,
-    SLOT_LABELS,
     WEEK_SUBTITLE,
-    build_grid,
+    build_week,
 )
 from nutriplan.domain.errors import RenderError
 from nutriplan.domain.models import Branding, FoodItem, MacroTargets, PlanCycle
@@ -31,6 +29,16 @@ def _jinja_env() -> Environment:
     )
 
 
+def _soft_of(hex_color: str) -> str:
+    """Tinte claro del color de marca para los fondos (mezcla con blanco al 90%)."""
+    c = hex_color.lstrip("#")
+    if len(c) != 6:
+        return "#FBF7F4"
+    r, g, b = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+    m = tuple(round(x + (255 - x) * 0.9) for x in (r, g, b))
+    return "#{:02x}{:02x}{:02x}".format(*m)
+
+
 def render_plan_html(
     plan: PlanCycle,
     branding: Branding,
@@ -39,18 +47,19 @@ def render_plan_html(
     client_name: str | None = None,
     daily_totals: MacroTargets | None = None,
 ) -> str:
-    """HTML intermedio (también usado por los snapshot tests)."""
-    grid = build_grid(plan, foods)
+    """HTML intermedio del PDF semanal (portada + 7 días). También lo usan los
+    snapshot tests."""
+    week = build_week(plan, foods)
     daily = daily_totals or _average_daily(plan)
-    template = _jinja_env().get_template("plan.html.j2")
+    template = _jinja_env().get_template("plan_semanal.html.j2")
     return template.render(
         plan=plan,
         branding=branding,
-        client_name=client_name,
-        phase_label=WEEK_SUBTITLE,
-        day_labels=DAY_LABELS,
-        slot_labels=SLOT_LABELS,
-        grid=grid,
+        brand=branding.primary_color,
+        brand_soft=_soft_of(branding.primary_color),
+        client_name=client_name or "Cliente",
+        subtitle=WEEK_SUBTITLE,
+        week=week,
         daily=daily,
         anotaciones=ANOTACIONES_IMPORTANTES,
     )
@@ -75,10 +84,11 @@ class WeasyPrintRenderer:
         branding: Branding,
         foods: dict[UUID, FoodItem],
         fmt: str = "pdf",
+        client_name: str | None = None,
     ) -> bytes:
         if fmt != "pdf":
             raise RenderError(f"WeasyPrintRenderer solo produce pdf, no {fmt}")
-        html = render_plan_html(plan, branding, foods)
+        html = render_plan_html(plan, branding, foods, client_name=client_name)
         try:
             from weasyprint import HTML
 

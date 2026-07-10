@@ -36,10 +36,11 @@ def test_html_contains_business_format(fixed_plan) -> None:
         assert label in html
     for day in ("Lunes", "Domingo"):
         assert day in html
-    assert "Anotaciones Importantes" in html
+    assert "Anotaciones importantes" in html
     assert "Ensalada libre" in html
-    assert "Valeria Fit" in html
+    assert "Valeria Fit" in html  # la marca del entrenador en la portada
     assert "2 huevos (100 g)" in html
+    assert "Plan nutricional semanal" in html  # portada del diseño nuevo
 
 
 async def test_pdf_renders(fixed_plan) -> None:

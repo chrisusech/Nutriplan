@@ -131,6 +131,7 @@ async def export(request: Request,
         plan_repo=repos.plans, food_repo=repos.foods, artifact_repo=repos.artifacts,
         renderer=container.renderer_for(fmt), branding=container.branding(),
         exports_dir=container.settings.exports_dir,
+        client_name=client.name if client else None,
     )
     who = (client.name if client else "cliente").replace(" ", "_")
     return Response(

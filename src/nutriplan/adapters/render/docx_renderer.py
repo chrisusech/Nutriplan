@@ -23,6 +23,7 @@ class DocxRenderer:
         branding: Branding,
         foods: dict[UUID, FoodItem],
         fmt: str = "docx",
+        client_name: str | None = None,
     ) -> bytes:
         if fmt != "docx":
             raise RenderError(f"DocxRenderer solo produce docx, no {fmt}")

@@ -11,7 +11,7 @@ import yaml
 from nutriplan.domain.models import Branding
 
 DEFAULT_BRANDING = Branding(
-    tenant_name="Valeria Vega",
+    tenant_name="NutriPlan",  # neutral: el entrenador pone su marca (no un nombre falso)
     primary_color="#F26D5B",  # coral del diseño
     accent_color="#F0925E",
 )

@@ -20,6 +20,13 @@ SLOT_LABELS: dict[MealSlot, str] = {
 }
 DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 WEEK_SUBTITLE = "Plan semanal · 7 días"
+SLOT_TIMES: dict[MealSlot, str] = {
+    MealSlot.BREAKFAST: "7:00 am",
+    MealSlot.SNACK_AM: "10:30 am",
+    MealSlot.LUNCH: "1:00 pm",
+    MealSlot.SNACK_PM: "4:30 pm",
+    MealSlot.DINNER: "7:30 pm",
+}
 
 # Sección fija del formato del negocio (sección 12.2).
 ANOTACIONES_IMPORTANTES = [
@@ -43,6 +50,58 @@ class CellView:
     portions: list[PortionView]
     extras: list[str]  # "Ensalada libre", "Proteína libre"
     kcal: float
+
+
+@dataclass
+class MealCard:
+    slot_label: str
+    time: str
+    kcal: int
+    items: list[str]  # porciones con unidad natural + extras (ensalada libre)
+
+
+@dataclass
+class DayCard:
+    n: int
+    name: str
+    kcal: int
+    protein_g: int
+    carb_g: int
+    fat_g: int
+    meals: list[MealCard]
+
+
+def build_week(plan: PlanCycle, foods: dict[UUID, FoodItem]) -> list[DayCard]:
+    """View-model del PDF semanal: 7 tarjetas de día, cada una con sus comidas."""
+    cards: list[DayCard] = []
+    for day in sorted(plan.days, key=lambda d: d.day_index):
+        by_slot = {m.slot: m for m in day.meals}
+        meals: list[MealCard] = []
+        for slot in SLOT_LABELS:
+            meal = by_slot.get(slot)
+            if meal is None:
+                continue
+            items = []
+            for p in meal.portions:
+                food = foods.get(p.food_id)
+                if food is None:
+                    raise RenderError(f"Alimento {p.food_id} del plan no está en el catálogo")
+                items.append(portion_text(p.grams, food))
+            if meal.free_protein:
+                items.append("Proteína libre")
+            if meal.free_salad:
+                items.append("Ensalada libre")
+            meals.append(MealCard(
+                slot_label=SLOT_LABELS[slot], time=SLOT_TIMES[slot],
+                kcal=round(meal.computed.kcal), items=items,
+            ))
+        t = day.totals
+        cards.append(DayCard(
+            n=day.day_index + 1, name=DAY_LABELS[day.day_index],
+            kcal=round(t.kcal), protein_g=round(t.protein_g),
+            carb_g=round(t.carb_g), fat_g=round(t.fat_g), meals=meals,
+        ))
+    return cards
 
 
 def _fmt_count(n: float) -> str:

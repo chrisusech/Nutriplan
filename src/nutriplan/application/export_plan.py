@@ -31,6 +31,7 @@ async def export_plan(
     renderer: Renderer,
     branding: Branding,
     exports_dir: Path,
+    client_name: str | None = None,
 ) -> tuple[ExportArtifact, bytes]:
     plan = await plan_repo.get(plan_id)
     if plan is None:
@@ -43,10 +44,10 @@ async def export_plan(
     food_ids = {p.food_id for day in plan.days for meal in day.meals for p in meal.portions}
     foods = {f.id: f for f in await food_repo.get_by_ids(sorted(food_ids, key=str))}
 
-    content = await renderer.render(plan, branding, foods, fmt)
+    content = await renderer.render(plan, branding, foods, fmt, client_name)
 
     exports_dir.mkdir(parents=True, exist_ok=True)
-    path = exports_dir / f"plan_{plan.phase.value}_{plan_id}.{fmt}"
+    path = exports_dir / f"plan_semanal_{plan_id}.{fmt}"
     path.write_bytes(content)
 
     artifact = ExportArtifact(

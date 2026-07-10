@@ -18,4 +18,5 @@ class Renderer(Protocol):
         branding: Branding,
         foods: dict[UUID, FoodItem],
         fmt: Literal["pdf", "docx"],
+        client_name: str | None = None,
     ) -> bytes: ...
