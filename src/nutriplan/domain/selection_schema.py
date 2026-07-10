@@ -31,10 +31,10 @@ def build_selection_schema(allowed: list[FoodItem]) -> type[BaseModel]:
         "DaySelectionStrict",
         __config__=ConfigDict(extra="forbid"),
         day_index=(int, Field(ge=0, le=6)),
-        meals=(list[meal_model], Field(min_length=5, max_length=5)),
+        meals=(list[meal_model], Field(min_length=5, max_length=5)),  # type: ignore[valid-type]
     )
     return create_model(
         "PlanSelectionStrict",
         __config__=ConfigDict(extra="forbid"),
-        days=(list[day_model], Field(min_length=7, max_length=7)),
+        days=(list[day_model], Field(min_length=7, max_length=7)),  # type: ignore[valid-type]
     )

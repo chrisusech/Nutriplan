@@ -2,7 +2,7 @@
 
 Backend generador de planes nutricionales de 30 días (2 ciclos de 15 días, 5 comidas/día)
 a partir de un intake en Word, exportable a PDF/DOCX con la marca del entrenador.
-Arquitectura hexagonal: el dominio es puro; Streamlit/SQLite/Claude/WeasyPrint son adaptadores.
+Arquitectura hexagonal: el dominio es puro; FastAPI/SQLite/Claude/WeasyPrint son adaptadores.
 
 Especificación completa: `ESPECIFICACION_BACKEND_planes_nutricionales.md.pdf`.
 
@@ -18,8 +18,13 @@ uv sync                       # instala dependencias
 cp .env.example .env          # agrega tu ANTHROPIC_API_KEY
 uv run alembic upgrade head   # crea la base SQLite en data/app.db
 uv run pytest                 # todos los tests (sin llamadas reales a la IA)
-uv run streamlit run src/nutriplan/ui/app.py   # UI Nivel 1
+uv run nutriplan              # UI Nivel 1 en http://127.0.0.1:8000
 ```
+
+**Modo offline.** Sin `ANTHROPIC_API_KEY` la app arranca igual: la generación usa el
+`HeuristicSelector` determinista en vez de Claude. Lo único que queda deshabilitado es la
+ingesta del Word (entender un documento libre sí requiere el LLM); el alta de cliente manual
+sigue disponible.
 
 ## Principios (no negociables)
 
@@ -38,7 +43,7 @@ src/nutriplan/
 ├── ports/         interfaces (Repository, LLMClient, Renderer, ConfigProvider, ...)
 ├── application/   casos de uso: ParseIntake, ComputeTargets, GeneratePlan, ...
 ├── adapters/      db (SQLAlchemy), llm (Anthropic), food (importador), render (PDF/DOCX)
-├── ui/            Streamlit (Nivel 1)
+├── ui/web/        FastAPI + HTMX + Jinja2 (Nivel 1) — rutas, plantillas y view-models
 └── container.py   composition root — el único lugar que elige adaptadores
 ```
 

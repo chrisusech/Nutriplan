@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -56,5 +56,10 @@ class ArtifactRepository(Protocol):
 
 class AuditLogRepository(Protocol):
     async def record(
-        self, *, action: str, entity_type: str, entity_id: UUID, details: dict | None = None
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: UUID,
+        details: dict[str, Any] | None = None,
     ) -> None: ...

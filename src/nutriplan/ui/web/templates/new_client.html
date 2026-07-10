@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Nuevo cliente{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:22px">
+  <a class="back-btn" href="/"><span class="icon">arrow_back</span></a>
+  <div style="flex:1">
+    <h2 style="font:800 24px Poppins;color:var(--ink);margin:0">Nuevo cliente</h2>
+    <p style="font:500 14px Poppins;color:var(--muted);margin:2px 0 0">
+      Sube el Word de ingreso y la IA extrae los datos; tú confirmas lo dudoso.
+    </p>
+  </div>
+</div>
+
+<div style="max-width:760px">
+  {% if offline %}
+  <div class="warn-banner" style="margin-bottom:16px">
+    <span class="icon" style="font-size:20px">cloud_off</span>
+    <span>Sin <b>ANTHROPIC_API_KEY</b> la lectura automática del Word no está disponible.
+    Llena el formulario manualmente aquí abajo.</span>
+  </div>
+  {% else %}
+  <form id="upload-form" hx-post="/intake" hx-target="#intake-result" hx-swap="innerHTML"
+        hx-encoding="multipart/form-data" style="margin-bottom:18px">
+    <label class="upload-zone" style="display:block">
+      <input type="file" name="archivo" accept=".docx" style="display:none"
+             onchange="htmx.trigger('#upload-form','submit')">
+      <span class="icon">upload_file</span>
+      <div class="t1">Arrastra o toca para subir el .docx de ingreso</div>
+      <div class="t2">La IA extrae datos, alimentos favoritos y restricciones · tú confirmas</div>
+    </label>
+    <div class="show-loading" style="display:none;margin-top:14px">
+      <div class="card" style="display:flex;align-items:center;gap:14px">
+        <div class="loading-ring" style="width:44px;height:44px;margin:0">
+          <div class="halo"></div>
+          <div class="core" style="width:32px;height:32px">
+            <span class="icon" style="font-size:17px;color:#fff">description</span>
+          </div>
+        </div>
+        <span style="font:600 14px Poppins;color:var(--muted)">Leyendo el documento…</span>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+
+  <div id="intake-result">
+    {% include "partials/intake_review.html" %}
+  </div>
+</div>
+{% endblock %}

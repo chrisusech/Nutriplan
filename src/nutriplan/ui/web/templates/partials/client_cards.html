@@ -1,0 +1,26 @@
+{% if cards %}
+<div class="client-grid">
+  {% for c in cards %}
+  <a class="client-card" href="/generador?cliente={{ c.id }}">
+    <div class="top">
+      <div class="avatar-lg" style="background:{{ c.avatar_bg }};color:{{ c.avatar_fg }}">{{ c.initials }}</div>
+      <div style="flex:1">
+        <div class="nm">{{ c.name }}</div>
+        <div class="goal"><span class="icon" style="font-size:15px">{{ c.goal_icon }}</span>{{ c.goal }}</div>
+      </div>
+      <span class="icon" style="font-size:22px;color:#D6C0B6">more_horiz</span>
+    </div>
+    <div class="bottom">
+      <span class="badge" style="color:{{ c.status.color }};background:{{ c.status.soft }}">
+        <span class="icon fill" style="font-size:15px">{{ c.status.icon }}</span>{{ c.status.label }}
+      </span>
+      <span class="kcal">{{ c.kcal }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:34px;color:var(--muted-2);font:500 14px Poppins">
+  No hay clientes que coincidan con la búsqueda.
+</div>
+{% endif %}

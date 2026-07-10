@@ -6,6 +6,7 @@ los custom llevan su tenant_id.
 """
 
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -56,7 +57,7 @@ class ClientRow(Base):
     weight_kg: Mapped[float] = mapped_column(Float)
     goal: Mapped[str] = mapped_column(String(20))
     activity_level: Mapped[str] = mapped_column(String(20))
-    restrictions: Mapped[list] = mapped_column(JSON, default=list)
+    restrictions: Mapped[list[str]] = mapped_column(JSON, default=list)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     preferences: Mapped[list["ClientFoodPreferenceRow"]] = relationship(
@@ -89,7 +90,7 @@ class FoodRow(Base):
     protein_100g: Mapped[float] = mapped_column(Float)
     carb_100g: Mapped[float] = mapped_column(Float)
     fat_100g: Mapped[float] = mapped_column(Float)
-    tags: Mapped[list] = mapped_column(JSON, default=list)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     default_unit_g: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
@@ -101,8 +102,8 @@ class IntakeDocumentRow(Base):
     client_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     source_filename: Mapped[str] = mapped_column(String(300))
     raw_text: Mapped[str] = mapped_column(Text)
-    parsed: Mapped[dict] = mapped_column(JSON, default=dict)
-    ambiguities: Mapped[list] = mapped_column(JSON, default=list)
+    parsed: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    ambiguities: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(20), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -113,11 +114,11 @@ class NutritionTargetsRow(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
-    daily: Mapped[dict] = mapped_column(JSON)
-    per_meal: Mapped[dict] = mapped_column(JSON)
+    daily: Mapped[dict[str, float]] = mapped_column(JSON)
+    per_meal: Mapped[dict[str, Any]] = mapped_column(JSON)
     method: Mapped[str] = mapped_column(String(40), default="mifflin_st_jeor")
     config_version: Mapped[str] = mapped_column(String(40))
-    overrides: Mapped[dict] = mapped_column(JSON, default=dict)
+    overrides: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -152,7 +153,7 @@ class DayPlanRow(Base):
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     plan_cycle_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("plan_cycles.id"), index=True)
     day_index: Mapped[int] = mapped_column(Integer)
-    totals: Mapped[dict] = mapped_column(JSON)
+    totals: Mapped[dict[str, float]] = mapped_column(JSON)
 
     meals: Mapped[list["MealEntryRow"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin", order_by="MealEntryRow.position"
@@ -167,8 +168,8 @@ class MealEntryRow(Base):
     day_plan_id: Mapped[int] = mapped_column(Integer, ForeignKey("day_plans.id"), index=True)
     position: Mapped[int] = mapped_column(Integer)  # orden dentro del día
     slot: Mapped[str] = mapped_column(String(20))
-    portions: Mapped[list] = mapped_column(JSON)  # [{food_id, grams}]
-    computed: Mapped[dict] = mapped_column(JSON)
+    portions: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # [{food_id, grams}]
+    computed: Mapped[dict[str, float]] = mapped_column(JSON)
     free_salad: Mapped[bool] = mapped_column(Boolean, default=False)
     free_protein: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -208,5 +209,5 @@ class AuditLogRow(Base):
     action: Mapped[str] = mapped_column(String(60))
     entity_type: Mapped[str] = mapped_column(String(40))
     entity_id: Mapped[UUID] = mapped_column(Uuid)
-    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -6,7 +6,7 @@ fixture inválido debe fallar como fallaría en producción.
 """
 
 from collections import deque
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -17,10 +17,10 @@ T = TypeVar("T", bound=BaseModel)
 
 class MockLLMClient:
     def __init__(self) -> None:
-        self._responses: deque[dict] = deque()
-        self.calls: list[dict] = []  # inspección en tests (system/prompt/model/schema)
+        self._responses: deque[dict[str, Any]] = deque()
+        self.calls: list[dict[str, Any]] = []  # inspección en tests (system/prompt/model/schema)
 
-    def enqueue(self, payload: dict) -> None:
+    def enqueue(self, payload: dict[str, Any]) -> None:
         """Agrega una respuesta grabada (dict JSON) a la cola FIFO."""
         self._responses.append(payload)
 
@@ -30,10 +30,10 @@ class MockLLMClient:
     async def select_plan(self, *, system: str, prompt: str, schema: type[T], model: str) -> T:
         return self._next(schema, kind="select_plan", system=system, user=prompt, model=model)
 
-    def pop_usage(self) -> dict:
+    def pop_usage(self) -> dict[str, int]:
         return {"input_tokens": 0, "output_tokens": 0, "calls": len(self.calls)}
 
-    def _next(self, schema: type[T], **call_info) -> T:
+    def _next(self, schema: type[T], **call_info: str) -> T:
         self.calls.append({**call_info, "schema": schema.__name__})
         if not self._responses:
             raise LLMError("MockLLMClient sin respuestas encoladas")

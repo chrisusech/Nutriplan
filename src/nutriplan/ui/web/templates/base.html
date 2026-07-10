@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NutriPlan{% endblock %} · Generador Nutricional</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,0&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <style>:root { --brand: {{ brand }}; --brand-soft: {{ brand_soft }}; }</style>
+</head>
+<body hx-headers='{"X-Requested-With":"htmx"}'>
+  <header class="topbar">
+    <a class="logo" href="/">
+      <div class="logo-badge"><span class="icon" style="font-size:22px">restaurant</span></div>
+      <span class="logo-word">Nutri<b>Plan</b></span>
+    </a>
+    <nav class="tabs">
+      <a class="tab {% if active_tab == 'clientes' %}active{% endif %}" href="/">Clientes</a>
+      <a class="tab {% if active_tab == 'generador' %}active{% endif %}" href="/generador">Generador</a>
+      <a class="tab {% if active_tab == 'planes' %}active{% endif %}" href="/planes">Planes</a>
+    </nav>
+    <div class="topbar-right">
+      <details class="brand-picker">
+        <summary title="Color de marca">
+          <span class="icon" style="font-size:22px;color:#B0968C">palette</span>
+        </summary>
+        <div class="brand-pop">
+          <div class="title">Color de marca</div>
+          <div class="hint">Se aplica a toda la app y a los PDF exportados</div>
+          <form class="swatches" method="post" action="/marca">
+            {% for name, hex in BRAND_SWATCHES %}
+            <button class="swatch {% if hex == brand %}on{% endif %}" name="color" value="{{ hex }}"
+                    style="background:{{ hex }};--sw:{{ hex }}" title="{{ name }}"></button>
+            {% endfor %}
+          </form>
+        </div>
+      </details>
+      <div class="avatar" title="{{ branding.tenant_name }}">{{ trainer_initials }}</div>
+    </div>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

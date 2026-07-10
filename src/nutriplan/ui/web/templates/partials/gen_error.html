@@ -1,0 +1,19 @@
+<div class="preview-card" style="padding:24px 20px">
+  <div class="error-banner" style="margin-bottom:16px">
+    <span class="icon" style="font-size:20px">error</span>
+    <div>
+      <b>No se pudo generar el plan.</b>
+      <div style="margin-top:4px">{{ error }}</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px">
+    <button class="btn btn-primary" style="flex:1"
+            hx-post="/generador/{{ client.id }}/generar"
+            hx-target="#preview-col" hx-swap="innerHTML">
+      <span class="icon" style="font-size:20px">refresh</span>Reintentar
+    </button>
+    <a class="btn btn-outline" style="flex:1" href="/generador?cliente={{ client.id }}">
+      <span class="icon" style="font-size:20px">tune</span>Ajustar controles
+    </a>
+  </div>
+</div>

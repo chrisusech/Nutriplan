@@ -20,6 +20,6 @@ class LLMClient(Protocol):
         """Selección de alimentos para el plan (sin cantidades)."""
         ...
 
-    def pop_usage(self) -> dict:
+    def pop_usage(self) -> dict[str, int]:
         """Tokens acumulados desde la última lectura (observabilidad de costo)."""
         ...

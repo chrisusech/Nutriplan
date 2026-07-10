@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Planes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>Planes</h2>
+    <p>Los planes de 30 días generados, listos para revisar, aprobar y exportar.</p>
+  </div>
+</div>
+
+{% if rows %}
+<div class="client-grid">
+  {% for r in rows %}
+  <a class="client-card" href="/planes/{{ r.cycle_id }}">
+    <div class="top">
+      <div class="avatar-lg" style="background:{{ r.avatar_bg }};color:{{ r.avatar_fg }}">{{ r.initials }}</div>
+      <div style="flex:1">
+        <div class="nm">{{ r.name }}</div>
+        <div class="goal"><span class="icon" style="font-size:15px">{{ r.goal_icon }}</span>{{ r.goal }} · {{ r.created }}</div>
+      </div>
+      <span class="icon" style="font-size:22px;color:#D6C0B6">chevron_right</span>
+    </div>
+    <div class="bottom">
+      <span class="badge" style="color:{{ r.status.color }};background:{{ r.status.soft }}">
+        <span class="icon fill" style="font-size:15px">{{ r.status.icon }}</span>{{ r.status.label }}
+      </span>
+      <span class="kcal">{{ r.kcal }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div style="padding-top:40px">
+  <div class="state-card">
+    <div class="state-ico" style="background:var(--brand-soft)">
+      <span class="icon" style="font-size:46px;color:var(--brand)">restaurant_menu</span>
+    </div>
+    <h3>Aún no hay planes por aquí</h3>
+    <p>Cuando generes el primer plan, aparecerá aquí listo para revisar y exportar. ¡Es rapidísimo!</p>
+    <a class="btn btn-primary" href="/generador">
+      <span class="icon" style="font-size:21px">auto_awesome</span>Generar primer plan
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

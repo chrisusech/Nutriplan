@@ -6,6 +6,7 @@ tenant_id. Ningún modelo de este módulo conoce I/O, frameworks ni la IA.
 
 from datetime import date, datetime
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -95,7 +96,7 @@ class NutritionTargets(BaseModel):
     per_meal: dict[MealSlot, MacroTargets]
     method: str = "mifflin_st_jeor"
     config_version: str  # procedencia
-    overrides: dict = {}  # ajustes manuales del entrenador
+    overrides: dict[str, float] = {}  # ajustes manuales del entrenador
     computed_at: datetime
 
 
@@ -159,7 +160,7 @@ class IntakeDocument(BaseModel):
     client_id: UUID | None = None
     source_filename: str
     raw_text: str
-    parsed: dict  # datos extraídos por la IA
+    parsed: dict[str, Any]  # datos extraídos por la IA
     ambiguities: list[str] = []  # campos dudosos para revisión humana
     status: IntakeStatus
     created_at: datetime

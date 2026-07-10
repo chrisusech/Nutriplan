@@ -4,7 +4,7 @@ Toda implementación inyecta el filtro tenant_id desde el contexto de la
 petición: nunca se consulta sin ese filtro (regla de oro, sección 7).
 """
 
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from nutriplan.domain.models import (
@@ -28,7 +28,7 @@ class IntakeRepository(Protocol):
     async def add(self, intake: IntakeDocument) -> None: ...
     async def get(self, intake_id: UUID) -> IntakeDocument | None: ...
     async def update_status(
-        self, intake_id: UUID, status: IntakeStatus, *, parsed: dict | None = None
+        self, intake_id: UUID, status: IntakeStatus, *, parsed: dict[str, Any] | None = None
     ) -> None: ...
     async def list(self) -> list[IntakeDocument]: ...
 

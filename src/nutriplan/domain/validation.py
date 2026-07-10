@@ -5,15 +5,31 @@ de la config. Por slot se validan proteína y carbohidrato contra el reparto
 (la grasa se distribuye donde hay fuente real — ver portioning.py).
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from nutriplan.domain.models import MacroTargets, MealSlot
 from nutriplan.domain.nutrition_config import NutritionConfig
-from nutriplan.domain.portioning import SolvedMeal
 
 # Por debajo de este valor absoluto (g) una desviación relativa no es señal:
 # 12% de 8 g son 0.96 g — ruido de redondeo, no un plan descuadrado.
 MIN_RELEVANT_G = 10.0
+
+
+class MealLike(Protocol):
+    """Lo único que la validación mira de una comida.
+
+    Lo cumplen SolvedMeal (recién porcionada, dataclass) y MealEntry (leída de
+    la base, pydantic): validar un plan persistido es tan válido como validar
+    uno recién generado.
+    """
+
+    @property
+    def slot(self) -> MealSlot: ...
+
+    @property
+    def computed(self) -> MacroTargets: ...
 
 
 @dataclass
@@ -36,7 +52,7 @@ def _off(actual: float, target: float, tolerance: float, *, floor: float = 0.0) 
 
 
 def validate_day(
-    solved: list[SolvedMeal], daily: MacroTargets, config: NutritionConfig
+    solved: Sequence[MealLike], daily: MacroTargets, config: NutritionConfig
 ) -> list[Deviation]:
     tol = config.tolerances
     deviations: list[Deviation] = []
@@ -69,7 +85,7 @@ def validate_day(
     return deviations
 
 
-def day_totals(solved: list[SolvedMeal]) -> MacroTargets:
+def day_totals(solved: Sequence[MealLike]) -> MacroTargets:
     return MacroTargets(
         kcal=round(sum(m.computed.kcal for m in solved), 1),
         protein_g=round(sum(m.computed.protein_g for m in solved), 1),

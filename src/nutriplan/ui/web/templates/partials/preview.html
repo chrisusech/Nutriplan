@@ -1,0 +1,125 @@
+{% set cycle = ctx.pair[ctx.fase] %}
+{% set qs = "cliente=" ~ ctx.client.id ~ "&fase=" ~ ctx.fase %}
+{% if ctx.celebrate %}
+<div class="card pop-in" style="display:flex;align-items:center;gap:14px;margin-bottom:14px;border-color:#CBE9D8;background:#F4FBF7">
+  <div style="width:44px;height:44px;border-radius:999px;background:var(--ok-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <span class="icon fill" style="font-size:24px;color:var(--ok)">celebration</span>
+  </div>
+  <div style="flex:1">
+    <div style="font:800 15px Poppins;color:var(--ink)">¡Todo listo! ✨</div>
+    <div style="font:500 12.5px Poppins;color:var(--muted)">El plan de 30 días de {{ ctx.client.name.split(' ')[0] }} cuadra con su objetivo. Revísalo, ajústalo y expórtalo.</div>
+  </div>
+  <a class="btn btn-outline" style="padding:10px 14px;font-size:13px" href="/planes/{{ cycle.id }}">
+    <span class="icon" style="font-size:18px">visibility</span>Ver 30 días
+  </a>
+</div>
+{% endif %}
+
+<div class="preview-card">
+  <div class="preview-head">
+    <div class="row">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="preview-title">Vista previa del plan</span>
+        <span style="display:inline-flex;gap:4px">
+          {% for f in range(2) %}
+          <a class="pill" style="cursor:pointer;text-decoration:none;{% if ctx.fase == f %}color:var(--brand);background:var(--brand-soft);font-weight:700{% endif %}"
+             hx-get="/generador?cliente={{ ctx.client.id }}&fase={{ f }}&dia={{ ctx.dia }}{% if ctx.editar %}&editar=1{% endif %}"
+             hx-target="#gen-root" hx-swap="innerHTML">{{ "Días 1–15" if f == 0 else "Días 16–30" }}</a>
+          {% endfor %}
+        </span>
+        {% if ctx.stale %}
+        <span class="badge badge-warn" title="Cambiaste datos del cliente después de generar">
+          <span class="icon" style="font-size:15px">history</span>Desactualizado
+        </span>
+        {% endif %}
+      </div>
+      <span style="display:inline-flex;align-items:center;gap:5px;font:600 12px Poppins;color:var(--muted-3)">
+        <span class="icon" style="font-size:16px">edit_note</span>Editable en línea
+      </span>
+    </div>
+    <div class="day-tabs">
+      {% for n in range(7) %}
+      <a class="day-pill {% if n == ctx.dia %}on{% endif %}"
+         href="/generador?{{ qs }}&dia={{ n }}{% if ctx.editar %}&editar=1{% endif %}"
+         hx-get="/generador?{{ qs }}&dia={{ n }}{% if ctx.editar %}&editar=1{% endif %}"
+         hx-target="#gen-root" hx-swap="innerHTML" hx-push-url="true">
+        <span class="n">{{ n + 1 }}</span><span class="d">{{ DAY_SHORT[n] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="day-macros">
+    <div class="row">
+      <span>Macros del día</span>
+      {% if ctx.dv.fits %}
+      <span class="badge badge-ok" style="font-weight:700;padding:7px 13px">
+        <span class="icon fill" style="font-size:17px">check_circle</span>Cuadra con el objetivo
+      </span>
+      {% else %}
+      <span class="badge badge-warn" style="font-weight:700;padding:7px 13px">
+        <span class="icon fill" style="font-size:17px">error</span>Fuera de tolerancia
+      </span>
+      {% endif %}
+    </div>
+    <div class="bars">
+      {% for b in ctx.dv.bars %}
+      <div class="bar">
+        <div class="top"><span class="lbl">{{ b.label }}</span><span class="val">{{ b.val }}</span></div>
+        <div class="rail"><div class="fill" style="width:{{ b.pct }}%;background:{{ b.color }}"></div></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="meals">
+    {% for ml in ctx.dv.meals %}
+    <div class="meal-row">
+      <div class="meal-ico"><span class="icon" style="font-size:20px">{{ ml.icon }}</span></div>
+      <div style="flex:1;min-width:0">
+        <div class="head">
+          <div><span class="nm">{{ ml.name }}</span> <span class="tm">· {{ ml.time }}</span></div>
+          <span class="kc">{{ ml.kcal }} kcal</span>
+        </div>
+        {% if ctx.editar %}
+        <form class="meal-chips"
+              hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/porciones"
+              hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}","fase":"{{ ctx.fase }}"}'
+              hx-trigger="change from:find input" hx-target="#gen-root" hx-swap="innerHTML">
+          {% for p in ml.portions %}
+          <span class="portion-edit">{{ p.name }}
+            <input type="number" name="grams_{{ p.food_id }}" value="{{ p.grams }}" min="0" step="5"> g
+          </span>
+          {% endfor %}
+          {% for e in ml.extras %}<span class="meal-chip extra">{{ e }}</span>{% endfor %}
+        </form>
+        {% else %}
+        <div class="meal-chips">
+          {% for chip in ml.chips %}<span class="meal-chip">{{ chip }}</span>{% endfor %}
+          {% for e in ml.extras %}<span class="meal-chip extra">{{ e }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="preview-actions">
+    {% if cycle.status.value == 'draft' %}
+    <a class="btn btn-outline"
+       href="/generador?{{ qs }}&dia={{ ctx.dia }}{% if not ctx.editar %}&editar=1{% endif %}"
+       hx-get="/generador?{{ qs }}&dia={{ ctx.dia }}{% if not ctx.editar %}&editar=1{% endif %}"
+       hx-target="#gen-root" hx-swap="innerHTML">
+      <span class="icon" style="font-size:20px">{% if ctx.editar %}done{% else %}tune{% endif %}</span>
+      {% if ctx.editar %}Listo{% else %}Editar plan{% endif %}
+    </a>
+    {% else %}
+    <span class="btn btn-outline" style="pointer-events:none;opacity:.8">
+      <span class="icon fill" style="font-size:20px;color:var(--ok)">verified</span>Aprobado
+    </span>
+    {% endif %}
+    <a class="btn btn-primary" href="/planes/{{ cycle.id }}">
+      <span class="icon" style="font-size:20px">picture_as_pdf</span>Exportar PDF
+    </a>
+  </div>
+</div>

@@ -68,7 +68,7 @@ def compute_daily_macros(client: Client, config: NutritionConfig) -> MacroTarget
     )
 
 
-def apply_overrides(daily: MacroTargets, overrides: dict) -> MacroTargets:
+def apply_overrides(daily: MacroTargets, overrides: dict[str, float]) -> MacroTargets:
     """Aplica overrides manuales del entrenador campo a campo.
 
     Si se fijan los tres macros pero no las kcal, las kcal se recomputan para
@@ -111,7 +111,7 @@ def compute_targets(
     client: Client,
     config: NutritionConfig,
     *,
-    overrides: dict | None = None,
+    overrides: dict[str, float] | None = None,
     targets_id: UUID | None = None,
     now: datetime | None = None,
 ) -> NutritionTargets:

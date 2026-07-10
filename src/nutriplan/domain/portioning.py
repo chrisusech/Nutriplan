@@ -24,6 +24,7 @@ from nutriplan.domain.generation_rules import (
     SLOT_STRUCTURE,
 )
 from nutriplan.domain.models import (
+    FoodCategory,
     FoodItem,
     MacroTargets,
     MealFoodPortion,
@@ -42,17 +43,23 @@ class SolvedMeal:
     computed: MacroTargets
 
 
-def _round_portion(grams: float, cfg: NutritionConfig) -> float:
+def _round_portion(grams: float, cfg: NutritionConfig, *, is_fat: bool = False) -> float:
     step = cfg.portioning.grams_rounding
     rounded = round(grams / step) * step
     if rounded <= 0:
         return 0.0
-    return float(min(max(rounded, cfg.portioning.min_portion_g), MAX_PORTION_G))
+    # Las grasas puras (aceites, aguacate) admiten porciones pequeñas (una
+    # cucharada ≈ 15 g): forzarlas al mínimo general de 20 g deja días en una
+    # zona muerta donde ni con ni sin el ítem cuadra la grasa.
+    floor = step if is_fat else cfg.portioning.min_portion_g
+    return float(min(max(rounded, floor), MAX_PORTION_G))
 
 
-def _macros_of(portions: list[tuple[FoodItem, float]]) -> MacroTargets:
+def macros_of(portions: list[tuple[FoodItem, float]]) -> MacroTargets:
+    """Macros de una comida a partir de (alimento, gramos). El código es dueño
+    de los números: la UI la reusa al editar porciones en línea."""
     def total(attr: str) -> float:
-        return round(sum(getattr(f, attr) * g / 100.0 for f, g in portions), 1)
+        return round(sum(float(getattr(f, attr)) * g / 100.0 for f, g in portions), 1)
 
     return MacroTargets(
         kcal=total("kcal_100g"),
@@ -78,7 +85,7 @@ def solve_day_portions(
         for f in foods:
             grams[(slot, str(f.id))] = 0.0
 
-    def slot_sources(slot: MealSlot, group: set) -> list[FoodItem]:
+    def slot_sources(slot: MealSlot, group: set[FoodCategory]) -> list[FoodItem]:
         return [f for f in foods_of[slot] if f.category in group]
 
     # Un slot sin fuente real de su macro obligatorio no se puede resolver:
@@ -156,7 +163,8 @@ def solve_day_portions(
     for slot, foods in meals:
         final: list[tuple[FoodItem, float]] = []
         for f in foods:
-            g = _round_portion(grams[(slot, str(f.id))], config)
+            g = _round_portion(grams[(slot, str(f.id))], config,
+                               is_fat=f.category in FAT_GROUP)
             if g > 0:
                 final.append((f, g))
         if not final:
@@ -165,7 +173,7 @@ def solve_day_portions(
             SolvedMeal(
                 slot=slot,
                 portions=[MealFoodPortion(food_id=f.id, grams=g) for f, g in final],
-                computed=_macros_of(final),
+                computed=macros_of(final),
             )
         )
     return solved

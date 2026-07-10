@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Generador{% endblock %}
+{% block content %}
+{% if ctx is none %}
+<div style="padding-top:60px">
+  <div class="state-card">
+    <div class="state-ico" style="background:var(--brand-soft)">
+      <span class="icon" style="font-size:46px;color:var(--brand)">restaurant_menu</span>
+    </div>
+    <h3>Primero necesitas un cliente</h3>
+    <p>Crea tu primer cliente (con su Word de ingreso o a mano) y vuelve aquí para generar su plan de 30 días.</p>
+    <a class="btn btn-primary" href="/clientes/nuevo">
+      <span class="icon" style="font-size:21px">person_add</span>Crear cliente
+    </a>
+  </div>
+</div>
+{% else %}
+<div id="gen-root">
+  {% include "partials/generator_body.html" %}
+</div>
+{% endif %}
+{% endblock %}

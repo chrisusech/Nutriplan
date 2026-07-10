@@ -1,0 +1,147 @@
+<div class="gen-grid">
+  <!-- ============ columna de controles ============ -->
+  <div class="gen-controls">
+
+    <div class="card">
+      <div class="card-title" style="margin-bottom:11px">Cliente</div>
+      <label class="client-select">
+        <div class="client-avatar" style="background:{{ ctx.client_avatar[0] }};color:{{ ctx.client_avatar[1] }}">
+          {{ initials(ctx.client.name) }}
+        </div>
+        <div style="flex:1;min-width:0">
+          <select class="plain" name="cliente"
+                  onchange="window.location='/generador?cliente='+this.value">
+            {% for c in ctx.clients %}
+            <option value="{{ c.id }}" {% if c.id == ctx.client.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="meta">{{ ctx.client_meta }}</div>
+        </div>
+        <span class="icon" style="font-size:24px;color:var(--faint-2)">expand_more</span>
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">Objetivo</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        {% for goal, meta in GOAL_META.items() %}
+        <button class="chip {% if ctx.client.goal == goal %}on{% endif %}" style="padding:11px 18px;font-size:15px"
+                hx-post="/generador/{{ ctx.client.id }}/objetivo" hx-vals='{"goal":"{{ goal.value }}"}'
+                hx-target="#gen-root" hx-swap="innerHTML">
+          <span class="icon" style="font-size:18px">{{ meta.icon }}</span>{{ meta.label }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="card-title">Macros diarios</div>
+        {% if ctx.has_overrides %}
+        <button class="badge badge-warn" style="border:none;cursor:pointer"
+                hx-post="/generador/{{ ctx.client.id }}/objetivo"
+                hx-vals='{"goal":"{{ ctx.client.goal.value }}"}'
+                hx-target="#gen-root" hx-swap="innerHTML"
+                title="Quitar ajustes manuales y volver al cálculo">
+          <span class="icon" style="font-size:15px">restart_alt</span>Ajustado a mano · restablecer
+        </button>
+        {% else %}
+        <span class="badge badge-ok">
+          <span class="icon" style="font-size:15px">auto_awesome</span>Calculado, editable
+        </span>
+        {% endif %}
+      </div>
+      <form class="macro-grid"
+            hx-post="/generador/{{ ctx.client.id }}/macros"
+            hx-trigger="change from:find input" hx-target="#gen-root" hx-swap="innerHTML">
+        {% for m in ctx.tiles %}
+        <div class="macro-tile">
+          <div class="macro-ico" style="background:{{ m.soft }};color:{{ m.color }}">
+            <span class="icon" style="font-size:20px">{{ m.icon }}</span>
+          </div>
+          <div style="flex:1">
+            <div class="lbl">{{ m.label }}</div>
+            <div style="display:flex;align-items:baseline;gap:4px">
+              <input name="{{ m.key }}" type="number" step="1" min="0"
+                     value="{{ m.raw }}">
+              <span class="unit">{{ m.unit }}</span>
+            </div>
+          </div>
+          <span class="icon" style="font-size:18px;color:var(--faint-2)">edit</span>
+        </div>
+        {% endfor %}
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:3px">Alimentos que le gustan</div>
+        <div class="card-sub">Toca para incluir o quitar</div>
+      </div>
+      {% for g in ctx.groups %}
+      <div class="food-group">
+        <div class="head"><span class="icon">{{ g.icon }}</span><span>{{ g.label }}</span></div>
+        <div class="chips">
+          {% for item in g["items"] %}
+          <button class="chip {% if item.on %}on{% endif %}"
+                  hx-post="/generador/{{ ctx.client.id }}/alimento"
+                  hx-vals='{"food_id":"{{ item.id }}"}'
+                  hx-target="#gen-root" hx-swap="innerHTML">
+            {% if item.on %}<span class="icon" style="font-size:15px">check</span>{% endif %}{{ item.name }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Restricciones</div>
+      <div class="restr-grid">
+        {% for r in RESTRICTION_TOGGLES %}
+        {% set active = r.key in ctx.client.restrictions %}
+        <button class="toggle-row" style="background:none;font-family:inherit;text-align:left"
+                hx-post="/generador/{{ ctx.client.id }}/restriccion"
+                hx-vals='{"key":"{{ r.key }}"}' hx-target="#gen-root" hx-swap="innerHTML">
+          <span class="icon">{{ r.icon }}</span>
+          <span class="lbl">{{ r.label }}</span>
+          <div class="track {% if (active and not r.inverted) or (not active and r.inverted) %}on{% endif %}"><div class="knob"></div></div>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <button class="btn btn-primary btn-big"
+              hx-post="/generador/{{ ctx.client.id }}/generar"
+              hx-target="#preview-col" hx-swap="innerHTML">
+        <span class="icon" style="font-size:24px">auto_awesome</span>Generar plan de 30 días
+      </button>
+      <div style="text-align:center;font:500 12.5px Poppins;color:#A88E84;margin-top:9px">
+        {% if offline %}Modo offline: selección determinista sin IA{% else %}Tarda solo unos segundos ✨{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ vista previa ============ -->
+  <div class="gen-preview" id="preview-col">
+    {% if ctx.pair %}
+      {% include "partials/preview.html" %}
+    {% else %}
+      <div class="preview-card" style="padding:40px 20px">
+        <div class="state-card" style="box-shadow:none;border:none;padding:14px">
+          <div class="state-ico" style="background:var(--brand-soft)">
+            <span class="icon" style="font-size:46px;color:var(--brand)">restaurant_menu</span>
+          </div>
+          <h3>Aún no hay planes por aquí</h3>
+          <p>Cuando generes el primer plan de {{ ctx.client.name.split(' ')[0] }}, aparecerá aquí listo para revisar y exportar. ¡Es rapidísimo!</p>
+          <button class="btn btn-primary"
+                  hx-post="/generador/{{ ctx.client.id }}/generar"
+                  hx-target="#preview-col" hx-swap="innerHTML">
+            <span class="icon" style="font-size:21px">auto_awesome</span>Generar primer plan
+          </button>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>

@@ -17,7 +17,7 @@ from nutriplan.adapters.render.view import (
     build_grid,
 )
 from nutriplan.domain.errors import RenderError
-from nutriplan.domain.models import Branding, FoodItem, PlanCycle
+from nutriplan.domain.models import Branding, FoodItem, MacroTargets, PlanCycle
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -37,7 +37,7 @@ def render_plan_html(
     foods: dict[UUID, FoodItem],
     *,
     client_name: str | None = None,
-    daily_totals: dict | None = None,
+    daily_totals: MacroTargets | None = None,
 ) -> str:
     """HTML intermedio (también usado por los snapshot tests)."""
     grid = build_grid(plan, foods)
@@ -56,9 +56,7 @@ def render_plan_html(
     )
 
 
-def _average_daily(plan: PlanCycle):
-    from nutriplan.domain.models import MacroTargets
-
+def _average_daily(plan: PlanCycle) -> MacroTargets:
     n = max(len(plan.days), 1)
     return MacroTargets(
         kcal=sum(d.totals.kcal for d in plan.days) / n,
@@ -84,7 +82,8 @@ class WeasyPrintRenderer:
         try:
             from weasyprint import HTML
 
-            return HTML(string=html, base_url=str(_TEMPLATES_DIR)).write_pdf()
+            pdf: bytes = HTML(string=html, base_url=str(_TEMPLATES_DIR)).write_pdf()
+            return pdf
         except RenderError:
             raise
         except Exception as exc:  # errores de librería → error tipado del dominio

@@ -280,7 +280,9 @@ async def generate_plan_for_client(
     if llm is None:
         from nutriplan.adapters.llm.heuristic import HeuristicSelector
 
-        llm = HeuristicSelector(allowed)
+        selector: LLMClient = HeuristicSelector(allowed)
+    else:
+        selector = llm
 
     cycles: list[PlanCycle] = []
     for phase in (PlanPhase.FIRST_15, PlanPhase.NEXT_15):
@@ -289,7 +291,7 @@ async def generate_plan_for_client(
             targets=targets,
             allowed=allowed,
             config=config,
-            llm=llm,
+            llm=selector,
             prompts_dir=prompts_dir,
             model=model,
             phase=phase,

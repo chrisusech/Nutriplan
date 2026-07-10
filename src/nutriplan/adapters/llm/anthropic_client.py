@@ -45,7 +45,7 @@ class AnthropicClient:
             max_tokens=self._max_tokens_select,
         )
 
-    def pop_usage(self) -> dict:
+    def pop_usage(self) -> dict[str, int]:
         usage, self._usage = self._usage, {"input_tokens": 0, "output_tokens": 0, "calls": 0}
         return usage
 
@@ -88,9 +88,14 @@ class AnthropicClient:
                 attempt=attempt,
             )
 
+            parsed = response.parsed_output
+            if parsed is None:  # la API respondió sin structured output utilizable
+                last_error = LLMError("La respuesta no trae parsed_output")
+                logger.warning("llm_no_parsed_output", attempt=attempt)
+                continue
             try:
                 # segunda barrera: re-validar aunque parse() ya validó
-                return schema.model_validate(response.parsed_output.model_dump())
+                return schema.model_validate(parsed.model_dump())
             except ValidationError as exc:
                 last_error = exc
                 logger.warning("llm_schema_invalid", attempt=attempt, error=str(exc))

@@ -1,7 +1,7 @@
 [project]
 name = "nutriplan"
 version = "0.1.0"
-description = "Generador de planes nutricionales — backend hexagonal (Nivel 1: local, Streamlit + SQLite)"
+description = "Generador de planes nutricionales — backend hexagonal (Nivel 1: local, FastAPI + SQLite)"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.7",
@@ -17,8 +17,10 @@ dependencies = [
     "mammoth>=1.7",
     "numpy>=1.26",
     "structlog>=24.1",
-    "streamlit>=1.35",
     "pyyaml>=6.0",
+    "fastapi>=0.139.0",
+    "uvicorn[standard]>=0.50.0",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]
@@ -30,7 +32,11 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "types-pyyaml",
+    "httpx>=0.28.1",
 ]
+
+[project.scripts]
+nutriplan = "nutriplan.ui.web.app:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -57,3 +63,9 @@ python_version = "3.12"
 strict = true
 packages = ["nutriplan"]
 mypy_path = "src"
+
+# Ninguna de las dos publica py.typed; se usan tras un borde tipado
+# (Renderer, read_docx_text), así que el Any no se filtra al dominio.
+[[tool.mypy.overrides]]
+module = ["weasyprint.*", "mammoth.*"]
+ignore_missing_imports = true

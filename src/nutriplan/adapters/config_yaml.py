@@ -5,6 +5,7 @@ default) según la sección 16 de la spec; en Nivel 1 solo se usa el default.
 """
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -27,7 +28,7 @@ class YamlConfigProvider:
         return self._cached
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):

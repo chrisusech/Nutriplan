@@ -20,7 +20,7 @@ async def compute_and_store_targets(
     client: Client,
     config_provider: ConfigProvider,
     targets_repo: TargetsRepository,
-    overrides: dict | None = None,
+    overrides: dict[str, float] | None = None,
 ) -> NutritionTargets:
     config = config_provider.get_nutrition_config()
     targets = compute_targets(client, config, overrides=overrides)

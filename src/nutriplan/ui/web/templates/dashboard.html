@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>Hola, {{ branding.tenant_name.split(' ')[0] }} 👋</h2>
+    {% if por_revisar %}
+    <p>Tienes <b>{{ por_revisar }} {{ 'plan' if por_revisar == 1 else 'planes' }}</b> por revisar hoy.</p>
+    {% else %}
+    <p>Todo al día. ¡Buen trabajo! ✨</p>
+    {% endif %}
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="search-box">
+      <span class="icon">search</span>
+      <input type="search" name="q" value="{{ q }}" placeholder="Buscar cliente…"
+             hx-get="/" hx-trigger="input changed delay:300ms, search" hx-target="#client-cards"
+             hx-include="[name='estado']">
+      <input type="hidden" name="estado" value="{{ estado }}">
+    </div>
+    <a class="btn btn-primary" href="/clientes/nuevo" style="padding:12px 18px;font-size:14px">
+      <span class="icon" style="font-size:20px">add</span>Nuevo cliente
+    </a>
+  </div>
+</div>
+
+{% if has_clients %}
+<div class="stats">
+  {% for s in stats %}
+  <div class="stat">
+    <div class="stat-ico" style="background:{{ s.soft }};color:{{ s.color }}">
+      <span class="icon" style="font-size:26px">{{ s.icon }}</span>
+    </div>
+    <div><div class="val">{{ s.val }}</div><div class="lbl">{{ s.label }}</div></div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="filters">
+  {% for key, label in filters %}
+  <a class="filter {% if estado == key %}on{% endif %}"
+     href="/?estado={{ key }}{% if q %}&q={{ q }}{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div id="client-cards">
+  {% include "partials/client_cards.html" %}
+</div>
+{% else %}
+<div style="padding-top:40px">
+  <div class="state-card">
+    <div class="state-ico" style="background:var(--brand-soft)">
+      <span class="icon" style="font-size:46px;color:var(--brand)">restaurant_menu</span>
+    </div>
+    <h3>Aún no hay clientes por aquí</h3>
+    <p>Sube el documento de ingreso de tu primer cliente y genera su plan en segundos. ¡Es rapidísimo!</p>
+    <a class="btn btn-primary" href="/clientes/nuevo">
+      <span class="icon" style="font-size:21px">auto_awesome</span>Crear primer cliente
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -6,9 +6,10 @@ datos de otro (sección 7.2).
 """
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import (
@@ -27,27 +28,30 @@ from nutriplan.adapters.db.models import (
 from nutriplan.domain.errors import TenantIsolationError
 from nutriplan.domain.food_matching import normalize
 from nutriplan.domain.models import (
+    ActivityLevel,
     Client,
     DayPlan,
     FoodCategory,
     FoodItem,
+    Goal,
     IntakeDocument,
     IntakeStatus,
     MacroTargets,
     MealEntry,
     MealFoodPortion,
+    MealSlot,
     NutritionTargets,
     PlanCycle,
+    PlanPhase,
     PlanStatus,
+    Sex,
 )
-from nutriplan.ports.job_repository import ExportArtifact, Job
+from nutriplan.ports.job_repository import ExportArtifact, Job, JobKind, JobStatus
 
 
-def _aware(dt: datetime | None) -> datetime | None:
+def _aware(dt: datetime) -> datetime:
     """SQLite devuelve datetimes naive; se asumen UTC para round-trips estables."""
-    if dt is not None and dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
-    return dt
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
 class SqlClientRepository:
@@ -81,13 +85,13 @@ class SqlClientRepository:
             id=row.id,
             tenant_id=row.tenant_id,
             name=row.name,
-            sex=row.sex,
+            sex=Sex(row.sex),
             birthdate=row.birthdate,
             age_years=row.age_years,
             height_cm=row.height_cm,
             weight_kg=row.weight_kg,
-            goal=row.goal,
-            activity_level=row.activity_level,
+            goal=Goal(row.goal),
+            activity_level=ActivityLevel(row.activity_level),
             liked_food_ids=[p.food_id for p in row.preferences],
             restrictions=list(row.restrictions or []),
             notes=row.notes,
@@ -154,7 +158,7 @@ class SqlFoodRepository:
             source_ref=row.source_ref,
             name_es=row.name_es,
             name_en=row.name_en,
-            category=row.category,
+            category=FoodCategory(row.category),
             kcal_100g=row.kcal_100g,
             protein_100g=row.protein_100g,
             carb_100g=row.carb_100g,
@@ -193,7 +197,7 @@ class SqlFoodRepository:
         self._s.add(row)
         await self._s.flush()
 
-    def _universe_filter(self):
+    def _universe_filter(self) -> ColumnElement[bool]:
         return or_(FoodRow.tenant_id.is_(None), FoodRow.tenant_id == self._tenant)
 
     async def get_by_ids(self, food_ids: list[UUID]) -> list[FoodItem]:
@@ -233,7 +237,7 @@ class SqlIntakeRepository:
             raw_text=row.raw_text,
             parsed=dict(row.parsed or {}),
             ambiguities=list(row.ambiguities or []),
-            status=row.status,
+            status=IntakeStatus(row.status),
             created_at=_aware(row.created_at),
         )
 
@@ -261,7 +265,7 @@ class SqlIntakeRepository:
         return self._to_domain(row) if row else None
 
     async def update_status(
-        self, intake_id: UUID, status: IntakeStatus, *, parsed: dict | None = None
+        self, intake_id: UUID, status: IntakeStatus, *, parsed: dict[str, Any] | None = None
     ) -> None:
         stmt = select(IntakeDocumentRow).where(
             IntakeDocumentRow.id == intake_id, IntakeDocumentRow.tenant_id == self._tenant
@@ -296,7 +300,7 @@ class SqlTargetsRepository:
             tenant_id=row.tenant_id,
             client_id=row.client_id,
             daily=MacroTargets(**row.daily),
-            per_meal={slot: MacroTargets(**m) for slot, m in row.per_meal.items()},
+            per_meal={MealSlot(slot): MacroTargets(**m) for slot, m in row.per_meal.items()},
             method=row.method,
             config_version=row.config_version,
             overrides=dict(row.overrides or {}),
@@ -376,14 +380,14 @@ class SqlPlanRepository:
             tenant_id=row.tenant_id,
             client_id=row.client_id,
             targets_id=row.targets_id,
-            phase=row.phase,
+            phase=PlanPhase(row.phase),
             days=[
                 DayPlan(
                     day_index=d.day_index,
                     totals=MacroTargets(**d.totals),
                     meals=[
                         MealEntry(
-                            slot=m.slot,
+                            slot=MealSlot(m.slot),
                             portions=[
                                 MealFoodPortion(food_id=UUID(p["food_id"]), grams=p["grams"])
                                 for p in m.portions
@@ -397,14 +401,14 @@ class SqlPlanRepository:
                 )
                 for d in row.days
             ],
-            status=row.status,
+            status=PlanStatus(row.status),
             config_version=row.config_version,
             prompt_version=row.prompt_version,
             model=row.model,
             input_hash=row.input_hash,
             created_by=row.created_by,
             created_at=_aware(row.created_at),
-            approved_at=_aware(row.approved_at),
+            approved_at=_aware(row.approved_at) if row.approved_at else None,
         )
 
     async def add(self, plan: PlanCycle) -> None:
@@ -458,6 +462,9 @@ class SqlPlanRepository:
         row = await self._row(plan.id)
         if row is None:
             raise TenantIsolationError("Plan inexistente para este tenant")
+        # borrar los días viejos antes de insertar (unique plan_cycle_id+day_index)
+        row.days.clear()
+        await self._s.flush()
         row.days = self._day_rows(plan)
         await self._s.flush()
 
@@ -481,8 +488,8 @@ class SqlJobRepository:
         return Job(
             id=row.id,
             tenant_id=row.tenant_id,
-            kind=row.kind,
-            status=row.status,
+            kind=JobKind(row.kind),
+            status=JobStatus(row.status),
             idempotency_key=row.idempotency_key,
             input_hash=row.input_hash,
             result_id=row.result_id,
@@ -580,7 +587,12 @@ class SqlAuditLogRepository:
         self._tenant = tenant_id
 
     async def record(
-        self, *, action: str, entity_type: str, entity_id: UUID, details: dict | None = None
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: UUID,
+        details: dict[str, Any] | None = None,
     ) -> None:
         self._s.add(
             AuditLogRow(
