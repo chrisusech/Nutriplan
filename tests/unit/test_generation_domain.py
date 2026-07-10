@@ -66,8 +66,8 @@ def test_solver_respects_rounding_and_minimums(foods, nutrition_config) -> None:
 
 
 def test_unit_foods_quantize_to_whole_or_half(foods, nutrition_config) -> None:
-    """Nunca '5.5 huevos': los gramos de un alimento contable son múltiplo
-    exacto de su unidad (entero para huevo, medio para aguacate)."""
+    """Nunca '5.5 huevos': un alimento contable (huevo entero) rinde gramos
+    múltiplo exacto de su unidad. El aguacate ahora va por gramos libres."""
     solved = solve_day_portions(day_meals(foods), DAILY, nutrition_config)
     catalog = {f.id: f for _slot, fs in day_meals(foods) for f in fs}
     for meal in solved:
@@ -75,8 +75,8 @@ def test_unit_foods_quantize_to_whole_or_half(foods, nutrition_config) -> None:
             food = catalog[portion.food_id]
             if food.name_es == "huevo entero":  # whole, 50 g
                 assert portion.grams % 50 == 0, portion.grams
-            if food.name_es == "aguacate":  # half, 50 g → múltiplos de 25
-                assert portion.grams % 25 == 0, portion.grams
+            if food.name_es == "aguacate":  # grams → múltiplos de 5 g
+                assert portion.grams % 5 == 0, portion.grams
 
 
 def test_solver_computed_is_recalculated_from_grams(foods, nutrition_config) -> None:

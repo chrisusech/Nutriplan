@@ -80,9 +80,10 @@ def test_natural_units() -> None:
     huevo = foods["huevo entero"]  # 50 g/und, whole
     assert natural_units(100, huevo) == "2 huevos"
     assert natural_units(50, huevo) == "1 huevo"
-    aguacate = foods["aguacate"]  # 50 g/und, half
-    assert natural_units(25, aguacate) == "½ unidad"
-    # gramos libres (aceite/pollo) no llevan etiqueta de unidad
+    banano = foods["banano"]  # 120 g/und, half
+    assert natural_units(60, banano) == "½ unidad"
+    # gramos libres (grasas, incl. aguacate ahora, y proteínas) no llevan unidad
+    assert natural_units(60, foods["aguacate"]) is None
     assert natural_units(10, foods["aceite de oliva"]) is None
     assert natural_units(120, foods["pechuga de pollo"]) is None
 
