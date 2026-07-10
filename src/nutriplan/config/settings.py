@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     redis_url: str = ""
     object_storage_url: str = ""
     log_level: str = "INFO"
+    session_secret: str = "dev-insecure-change-me"  # firma la cookie de sesión
 
     # Rutas del proyecto (relativas a la raíz del repo)
     project_root: Path = Path(__file__).resolve().parents[3]

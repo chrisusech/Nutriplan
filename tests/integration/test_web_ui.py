@@ -30,10 +30,13 @@ GENERATION_TIMEOUT_S = 60.0
 
 @pytest.fixture
 def container(tmp_path, monkeypatch) -> Container:
-    """Container de prueba: base efímera, exports en tmp, modo offline."""
+    """Container de prueba: base efímera, branding/exports en tmp, modo offline."""
     monkeypatch.setattr(
         Settings, "exports_dir", property(lambda _self: tmp_path / "exports")
     )  # sin esto los tests dejan PDFs en data/exports del repo
+    monkeypatch.setattr(
+        Settings, "branding_dir", property(lambda _self: tmp_path / "branding")
+    )
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path}/web.db",
         anthropic_api_key="",  # explícito: gana sobre un .env local del desarrollador
@@ -41,10 +44,20 @@ def container(tmp_path, monkeypatch) -> Container:
     return Container(settings=settings, tenant_id=DEFAULT_TENANT_ID)
 
 
+def _signup(client: TestClient) -> None:
+    """Registra e inicia sesión como entrenador (el guard exige login)."""
+    resp = client.post("/signup", data={
+        "name": "Valeria Vega", "business_name": "Valeria Fit",
+        "email": "valeria@fit.com", "password": "supersecreta",
+    }, follow_redirects=False)
+    assert resp.status_code == 303, resp.text
+
+
 @pytest.fixture
 def offline(container):
     """App en modo offline: la generación cae en el HeuristicSelector."""
     with TestClient(create_app(container)) as client:
+        _signup(client)
         yield client, container
 
 
@@ -55,6 +68,7 @@ def with_llm(container):
     # cached_property: sembrar el __dict__ evita construir el AnthropicClient real
     container.__dict__["llm_client"] = mock
     with TestClient(create_app(container)) as client:
+        _signup(client)
         yield client, mock
 
 
@@ -324,6 +338,67 @@ def test_review_page_shows_the_week_grid(offline) -> None:
     review = client.get(f"/planes/{_cycle_id(client)}").text
     assert "Plan de la semana" in review
     assert review.count('class="day-cell"') == 7  # una semana
+
+
+# --- Multi-entrenador: login y aislamiento por tenant (Workstream G) --------
+
+
+def test_guard_redirects_anonymous_to_login(container) -> None:
+    """Sin sesión, cualquier ruta protegida redirige a /login."""
+    app = create_app(container)
+    with TestClient(app) as anon:
+        resp = anon.get("/", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+        # el login sí es público
+        assert anon.get("/login").status_code == 200
+
+
+def test_two_trainers_do_not_see_each_others_clients(container) -> None:
+    """Dos entrenadores registrados quedan aislados por tenant, y cada uno
+    conserva su propia marca."""
+    app = create_app(container)
+    with TestClient(app) as a:
+        b = TestClient(app)  # segunda sesión (cookie jar propio), misma app
+
+        assert a.post("/signup", data={
+            "name": "Ana Coach", "business_name": "Estudio Ana",
+            "email": "ana@fit.com", "password": "clave-ana-1",
+        }, follow_redirects=False).status_code == 303
+        assert b.post("/signup", data={
+            "name": "Beto Coach", "business_name": "Estudio Beto",
+            "email": "beto@fit.com", "password": "clave-beto-1",
+        }, follow_redirects=False).status_code == 303
+
+        _create_client(a, name="Cliente De Ana")
+
+        # B no ve al cliente de A; A sí lo ve
+        assert "Cliente De Ana" not in b.get("/").text
+        assert "Cliente De Ana" in a.get("/").text
+
+        # cada entrenador lleva su propia marca
+        assert "Estudio Ana" in a.get("/").text
+        assert "Estudio Beto" in b.get("/").text
+        assert "Estudio Beto" not in a.get("/").text
+
+
+def test_login_rejects_bad_password_and_accepts_good_one(container) -> None:
+    app = create_app(container)
+    with TestClient(app) as client:
+        client.post("/signup", data={
+            "name": "Carla", "business_name": "Estudio Carla",
+            "email": "carla@fit.com", "password": "clave-carla-1",
+        }, follow_redirects=False)
+        client.post("/logout", follow_redirects=False)
+
+        bad = client.post("/login", data={"email": "carla@fit.com", "password": "no-es"},
+                          follow_redirects=False)
+        assert bad.status_code == 200 and "incorrect" in bad.text.lower()
+
+        good = client.post("/login", data={"email": "carla@fit.com", "password": "clave-carla-1"},
+                           follow_redirects=False)
+        assert good.status_code == 303
+        assert good.headers["location"] == "/"
 
 
 # --- Edición de porciones (ejercita SqlPlanRepository.update_days) ----------

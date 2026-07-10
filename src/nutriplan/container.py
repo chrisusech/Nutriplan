@@ -20,6 +20,7 @@ from nutriplan.adapters.config_yaml import YamlConfigProvider
 from nutriplan.adapters.db.repositories import (
     SqlArtifactRepository,
     SqlAuditLogRepository,
+    SqlAuthRepository,
     SqlClientRepository,
     SqlFoodRepository,
     SqlIntakeRepository,
@@ -68,8 +69,8 @@ class Container:
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
         return create_session_factory(self.engine)
 
-    def repos(self, session: AsyncSession) -> Repos:
-        t = self.tenant_id
+    def repos(self, session: AsyncSession, tenant_id: UUID | None = None) -> Repos:
+        t = tenant_id or self.tenant_id
         return Repos(
             clients=SqlClientRepository(session, t),
             foods=SqlFoodRepository(session, t),
@@ -80,6 +81,9 @@ class Container:
             artifacts=SqlArtifactRepository(session, t),
             audit=SqlAuditLogRepository(session, t),
         )
+
+    def auth_repo(self, session: AsyncSession) -> SqlAuthRepository:
+        return SqlAuthRepository(session)
 
     @cached_property
     def config_provider(self) -> YamlConfigProvider:
@@ -105,9 +109,11 @@ class Container:
     def renderer_for(self, fmt: str) -> Renderer:
         return self.pdf_renderer if fmt == "pdf" else self.docx_renderer
 
-    def branding(self) -> Branding:
-        """Sin caché: el selector de color de la UI lo puede cambiar en vivo."""
-        return load_branding(self.settings.branding_dir)
+    def branding(self, tenant_id: UUID | None = None) -> Branding:
+        """Marca del entrenador (por tenant). Sin caché: el selector de color de
+        la UI la puede cambiar en vivo."""
+        tenant = str(tenant_id) if tenant_id else "default"
+        return load_branding(self.settings.branding_dir, tenant)
 
 
 def build_container() -> Container:

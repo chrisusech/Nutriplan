@@ -21,7 +21,7 @@ from nutriplan.domain.food_filter import allowed_foods, forbidden_tags
 from nutriplan.domain.models import Client, Goal, MacroFormula, NutritionTargets
 from nutriplan.ports.job_repository import JobKind, JobStatus
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of
+from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
 
 logger = structlog.get_logger(__name__)
 
@@ -233,11 +233,11 @@ async def toggle_restriction(request: Request,
 
 
 async def _run_generation(
-    container: Container, job_id: UUID, client_id: UUID, variant: int
+    container: Container, job_id: UUID, client_id: UUID, variant: int, tenant_id: UUID
 ) -> None:
     """Tarea de fondo: sesión propia, job persistido, commit al final."""
     async with container.session_factory() as session:
-        repos = container.repos(session)
+        repos = container.repos(session, tenant_id)
         job = await repos.jobs.get(job_id)
         if job is None:  # pragma: no cover — el job se creó en el request
             return
@@ -281,20 +281,20 @@ async def _launch_generation(request: Request, session: AsyncSession,
         client, targets, config.version, prompt.version, allowed, variant
     )
     key = f"gen:{client.id}:{input_hash[:16]}"
+    tenant_id = tenant_of(request)
 
     job = await repos.jobs.get_by_idempotency_key(key)
     if job is None:
-        job = new_job(tenant_id=container.tenant_id, kind=JobKind.GENERATE,
-                      idempotency_key=key)
+        job = new_job(tenant_id=tenant_id, kind=JobKind.GENERATE, idempotency_key=key)
         await repos.jobs.add(job)
         await session.commit()
-        _spawn(request, _run_generation(container, job.id, client.id, variant))
+        _spawn(request, _run_generation(container, job.id, client.id, variant, tenant_id))
     elif job.status == JobStatus.FAILED:
         job = job.model_copy(update={"status": JobStatus.QUEUED, "error": None,
                                      "updated_at": datetime.now(UTC)})
         await repos.jobs.update(job)
         await session.commit()
-        _spawn(request, _run_generation(container, job.id, client.id, variant))
+        _spawn(request, _run_generation(container, job.id, client.id, variant, tenant_id))
 
     return render(request, "partials/gen_loading.html", client=client,
                   job_id=str(job.id), msg_index=0,

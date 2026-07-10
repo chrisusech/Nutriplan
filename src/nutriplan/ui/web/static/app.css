@@ -349,6 +349,13 @@ select.plain {
 
 .grid30 { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px; }
 .grid7 { display: grid; grid-template-columns: repeat(7,1fr); gap: 10px; }
+.auth-field { display: flex; flex-direction: column; gap: 5px; }
+.auth-field span { font: 500 12px Poppins; color: var(--muted-2); }
+.auth-field input {
+  font: 500 14px Poppins; color: var(--ink); border: 1.5px solid var(--line);
+  border-radius: 12px; padding: 11px 13px; outline: none; background: #fff;
+}
+.auth-field input:focus { border-color: var(--brand); }
 .day-cell {
   aspect-ratio: 1; border-radius: 14px; border: 1.5px solid transparent;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;

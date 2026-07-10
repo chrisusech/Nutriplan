@@ -41,7 +41,10 @@ class UserRow(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
-    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True, unique=True, index=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(20), default="trainer")
+    client_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)  # cuentas de cliente
 
 
 class ClientRow(Base):

@@ -17,7 +17,7 @@ from nutriplan.domain.models import (
 )
 from nutriplan.domain.validation import day_totals
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of
+from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
 from nutriplan.ui.web.routes.generator import _generator_context
 
 router = APIRouter()
@@ -129,7 +129,7 @@ async def export(request: Request,
     _, content = await export_plan(
         plan_id=cycle.id, fmt=fmt,  # type: ignore[arg-type]
         plan_repo=repos.plans, food_repo=repos.foods, artifact_repo=repos.artifacts,
-        renderer=container.renderer_for(fmt), branding=container.branding(),
+        renderer=container.renderer_for(fmt), branding=container.branding(tenant_of(request)),
         exports_dir=container.settings.exports_dir,
         client_name=client.name if client else None,
     )

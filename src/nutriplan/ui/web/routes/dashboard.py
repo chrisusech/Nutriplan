@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from nutriplan.adapters.branding_store import save_branding
 from nutriplan.domain.models import PlanStatus
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of
+from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
 
 router = APIRouter()
 
@@ -71,7 +71,8 @@ async def dashboard(request: Request,
 @router.post("/marca")
 async def set_brand_color(request: Request, color: Annotated[str, Form()]) -> RedirectResponse:
     container = container_of(request)
-    branding = container.branding()
+    tenant = tenant_of(request)
+    branding = container.branding(tenant)
     save_branding(container.settings.branding_dir,
-                  branding.model_copy(update={"primary_color": color}))
+                  branding.model_copy(update={"primary_color": color}), tenant=str(tenant))
     return RedirectResponse(request.headers.get("referer", "/"), status_code=303)

@@ -248,3 +248,15 @@ class Branding(BaseModel):
     primary_color: str = "#2E7D32"
     accent_color: str = "#F9A825"
     handle: str | None = None  # @instagram u otro
+
+
+class Trainer(BaseModel):
+    """Cuenta de acceso. Un entrenador es dueño de su tenant; un cliente ve solo
+    su propio plan (client_id); un admin verifica recetas de todos."""
+
+    id: UUID
+    tenant_id: UUID
+    name: str
+    email: str
+    role: str = "trainer"  # "trainer" | "client" | "admin"
+    client_id: UUID | None = None  # solo para cuentas de cliente

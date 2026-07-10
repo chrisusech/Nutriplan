@@ -18,7 +18,7 @@ from nutriplan.domain.models import (
     Sex,
 )
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of
+from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
 
 router = APIRouter()
 
@@ -92,7 +92,7 @@ async def upload_intake(request: Request,
             doc = await parse_intake(
                 file_bytes=await archivo.read(),
                 filename=archivo.filename or "intake.docx",
-                tenant_id=container.tenant_id,
+                tenant_id=tenant_of(request),
                 llm=container.llm_client,
                 intake_repo=repos.intakes,
                 food_repo=repos.foods,
@@ -145,7 +145,7 @@ async def create_client(
     repos = repos_of(request, session)
     client = Client(
         id=uuid4(),
-        tenant_id=container.tenant_id,
+        tenant_id=tenant_of(request),
         name=name.strip(),
         sex=Sex(sex),
         age_years=age_years,

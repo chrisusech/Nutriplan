@@ -39,7 +39,20 @@
           </form>
         </div>
       </details>
-      <div class="avatar" title="{{ branding.tenant_name }}">{{ trainer_initials }}</div>
+      <details class="brand-picker">
+        <summary title="{{ trainer.name if trainer else branding.tenant_name }}">
+          <div class="avatar">{{ trainer_initials }}</div>
+        </summary>
+        <div class="brand-pop" style="right:0;left:auto">
+          <div class="title">{{ branding.tenant_name }}</div>
+          {% if trainer %}<div class="hint">{{ trainer.email }}</div>{% endif %}
+          <form method="post" action="/logout" style="margin-top:10px">
+            <button class="btn btn-outline" style="width:100%;justify-content:center;padding:9px" type="submit">
+              <span class="icon" style="font-size:18px">logout</span>Cerrar sesión
+            </button>
+          </form>
+        </div>
+      </details>
     </div>
   </header>
   <main class="page">

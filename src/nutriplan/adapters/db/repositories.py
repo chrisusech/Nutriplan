@@ -7,7 +7,7 @@ datos de otro (sección 7.2).
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,8 @@ from nutriplan.adapters.db.models import (
     MealEntryRow,
     NutritionTargetsRow,
     PlanCycleRow,
+    TenantRow,
+    UserRow,
 )
 from nutriplan.domain.errors import TenantIsolationError
 from nutriplan.domain.food_matching import normalize
@@ -46,6 +48,7 @@ from nutriplan.domain.models import (
     PlanPhase,
     PlanStatus,
     Sex,
+    Trainer,
     UnitGranularity,
 )
 from nutriplan.ports.job_repository import ExportArtifact, Job, JobKind, JobStatus
@@ -586,6 +589,55 @@ class SqlArtifactRepository:
             )
             for r in rows
         ]
+
+
+class SqlAuthRepository:
+    """Cuentas de entrenador/cliente. NO filtra por tenant: el login es previo
+    a la sesión y resuelve a qué tenant pertenece el usuario."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    @staticmethod
+    def _to_domain(row: UserRow) -> Trainer:
+        return Trainer(
+            id=row.id, tenant_id=row.tenant_id, name=row.name,
+            email=row.email or "", role=row.role, client_id=row.client_id,
+        )
+
+    async def get_by_email(self, email: str) -> tuple[Trainer, str] | None:
+        """Devuelve (cuenta, password_hash) o None. El hash no sale del adaptador."""
+        stmt = select(UserRow).where(UserRow.email == email.strip().lower())
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        if row is None or row.password_hash is None:
+            return None
+        return self._to_domain(row), row.password_hash
+
+    async def create_account(
+        self, *, tenant_id: UUID, tenant_name: str, name: str,
+        email: str, password_hash: str, role: str = "trainer",
+    ) -> Trainer:
+        self._s.add(TenantRow(id=tenant_id, name=tenant_name, created_at=datetime.now(UTC)))
+        user = UserRow(
+            id=uuid4(), tenant_id=tenant_id, name=name,
+            email=email.strip().lower(), password_hash=password_hash, role=role,
+        )
+        self._s.add(user)
+        await self._s.flush()
+        return self._to_domain(user)
+
+    async def create_client_login(
+        self, *, tenant_id: UUID, client_id: UUID, name: str,
+        email: str, password_hash: str,
+    ) -> Trainer:
+        """Cuenta de cliente en el tenant del entrenador (no crea tenant)."""
+        user = UserRow(
+            id=uuid4(), tenant_id=tenant_id, name=name, email=email.strip().lower(),
+            password_hash=password_hash, role="client", client_id=client_id,
+        )
+        self._s.add(user)
+        await self._s.flush()
+        return self._to_domain(user)
 
 
 class SqlAuditLogRepository:
