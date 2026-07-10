@@ -5,7 +5,9 @@ Grupos de macro dominante:
   P (proteína): PROTEIN + DAIRY · C (carbo): CARB + FRUIT · F (grasa): FAT
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
+from math import ceil
 
 from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot, PlanSelection
 
@@ -141,9 +143,15 @@ def validate_selection_structure(
     return violations
 
 
-# La variedad se exige en las comidas principales; el formato del negocio
-# repite desayuno y snacks a lo largo de la semana (es su plantilla).
-VARIETY_SLOTS = (MealSlot.LUNCH, MealSlot.DINNER)
+# La variedad se exige en TODOS los slots (el yogur no puede salir los 7 días en
+# el snack) y para las categorías que definen la comida: proteína/lácteo, carbo,
+# fruta. El límite es adaptativo — ver check_variety.
+_VARIETY_CATEGORIES = {
+    FoodCategory.PROTEIN,
+    FoodCategory.DAIRY,
+    FoodCategory.CARB,
+    FoodCategory.FRUIT,
+}
 
 
 def check_variety(
@@ -153,26 +161,41 @@ def check_variety(
     max_protein_repeats: int,
     max_carb_repeats: int,
 ) -> list[VarietyViolation]:
-    """Variedad determinista (11.5): en almuerzo y cena, la misma proteína o
-    el mismo carbo no se repite en ese slot más de N veces por semana."""
+    """Variedad determinista y ADAPTATIVA a la diversidad disponible.
+
+    Un alimento no debe repetirse en un slot más que el mínimo inevitable dado
+    cuántas opciones distintas de su categoría entraron en ese slot: con 5
+    proteínas distintas en el almuerzo, ninguna pasa de ⌈7/5⌉ = 2; con una sola
+    opción (lista pobre del cliente), el límite se relaja a 7 en vez de fallar
+    la generación. El tope de config actúa como cota superior deseada.
+    """
+    distinct: dict[tuple[MealSlot, FoodCategory], set[str]] = defaultdict(set)
     usage: dict[tuple[str, MealSlot], VarietyViolation] = {}
     for day in selection.days:
         for meal in day.meals:
-            if meal.slot not in VARIETY_SLOTS:
-                continue
             for fid in meal.food_ids:
                 food = foods_by_id.get(fid)
-                if food is None:
+                if food is None or food.category not in _VARIETY_CATEGORIES:
                     continue
-                if food.category == FoodCategory.PROTEIN:
-                    limit = max_protein_repeats
-                elif food.category == FoodCategory.CARB:
-                    limit = max_carb_repeats
-                else:
-                    continue
+                distinct[(meal.slot, food.category)].add(fid)
                 entry = usage.setdefault(
-                    (fid, meal.slot), VarietyViolation(food.name_es, 0, limit)
+                    (fid, meal.slot), VarietyViolation(food.name_es, 0, 0, [])
                 )
                 entry.times_used += 1
                 entry.slots.append((day.day_index, meal.slot))
-    return [v for v in usage.values() if v.times_used > v.limit]
+
+    ndays = len(selection.days) or 7
+    violations: list[VarietyViolation] = []
+    for (fid, slot), entry in usage.items():
+        food = foods_by_id[fid]
+        config_cap = max_protein_repeats if food.category in (
+            FoodCategory.PROTEIN, FoodCategory.DAIRY
+        ) else max_carb_repeats
+        n_distinct = len(distinct[(slot, food.category)]) or 1
+        # mínimo inevitable dado el pool; si es menor que el tope de config, se
+        # exige el tope; si el pool es tan pobre que obliga a repetir, se relaja.
+        limit = max(config_cap, ceil(ndays / n_distinct))
+        entry.limit = limit
+        if entry.times_used > limit:
+            violations.append(entry)
+    return violations

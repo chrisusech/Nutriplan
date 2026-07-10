@@ -9,7 +9,7 @@ import csv
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from nutriplan.domain.models import FoodCategory, FoodItem
+from nutriplan.domain.models import FoodCategory, FoodItem, UnitGranularity
 
 _NAMESPACE = uuid5(NAMESPACE_URL, "nutriplan/foods")
 
@@ -38,6 +38,10 @@ def load_curated_foods(csv_path: Path) -> list[FoodItem]:
                     fat_100g=float(row["fat_100g"]),
                     tags=[t for t in row["tags"].split(";") if t.strip()],
                     default_unit_g=float(row["default_unit_g"]) if row["default_unit_g"] else None,
+                    unit_granularity=UnitGranularity(
+                        (row.get("unit_granularity") or "grams").strip() or "grams"
+                    ),
+                    unit_name=(row.get("unit_name") or "").strip() or None,
                 )
             )
     return foods

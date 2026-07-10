@@ -92,6 +92,8 @@ class FoodRow(Base):
     fat_100g: Mapped[float] = mapped_column(Float)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     default_unit_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit_granularity: Mapped[str] = mapped_column(String(10), default="grams")
+    unit_name: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
 
 class IntakeDocumentRow(Base):

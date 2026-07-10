@@ -49,6 +49,14 @@ class FoodCategory(StrEnum):
     OTHER = "other"
 
 
+class UnitGranularity(StrEnum):
+    """Cómo se porciona un alimento. Evita '5.5 huevos'."""
+
+    GRAMS = "grams"   # arroz, pollo, yogur → gramos libres (múltiplos de 5 g)
+    WHOLE = "whole"   # huevo, lata de atún → solo unidades enteras
+    HALF = "half"     # aguacate, pan, banano → medias unidades permitidas
+
+
 class Client(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -78,7 +86,9 @@ class FoodItem(BaseModel):
     carb_100g: float = Field(ge=0)
     fat_100g: float = Field(ge=0)
     tags: list[str] = []  # "mariscos","gluten","lacteo","vegano",...
-    default_unit_g: float | None = None  # gramos de una porción típica (1 huevo≈50g)
+    default_unit_g: float | None = None  # gramos de una unidad/porción típica (1 huevo≈50g)
+    unit_granularity: UnitGranularity = UnitGranularity.GRAMS
+    unit_name: str | None = None  # "huevo", "lata", "rebanada", "unidad" (para contar)
 
 
 class MacroTargets(BaseModel):

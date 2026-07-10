@@ -65,6 +65,20 @@ def test_solver_respects_rounding_and_minimums(foods, nutrition_config) -> None:
             assert portion.grams >= nutrition_config.portioning.min_portion_g
 
 
+def test_unit_foods_quantize_to_whole_or_half(foods, nutrition_config) -> None:
+    """Nunca '5.5 huevos': los gramos de un alimento contable son múltiplo
+    exacto de su unidad (entero para huevo, medio para aguacate)."""
+    solved = solve_day_portions(day_meals(foods), DAILY, nutrition_config)
+    catalog = {f.id: f for _slot, fs in day_meals(foods) for f in fs}
+    for meal in solved:
+        for portion in meal.portions:
+            food = catalog[portion.food_id]
+            if food.name_es == "huevo entero":  # whole, 50 g
+                assert portion.grams % 50 == 0, portion.grams
+            if food.name_es == "aguacate":  # half, 50 g → múltiplos de 25
+                assert portion.grams % 25 == 0, portion.grams
+
+
 def test_solver_computed_is_recalculated_from_grams(foods, nutrition_config) -> None:
     solved = solve_day_portions(day_meals(foods), DAILY, nutrition_config)
     lookup = {f.id: f for f in foods.values()}
@@ -185,30 +199,41 @@ def test_structure_flags_missing_slot(foods) -> None:
     )
 
 
-def test_variety_flags_repeated_lunch_protein(foods) -> None:
-    lookup = {str(f.id): f for f in foods.values()}
-    selection = _selection([_full_day(foods, i) for i in range(7)])  # pollo 7 almuerzos
-    violations = check_variety(selection, lookup, max_protein_repeats=3, max_carb_repeats=4)
-    assert any(v.food_name == "pechuga de pollo" and v.times_used == 7 for v in violations)
-
-
-def test_variety_ignores_breakfast_repeats(foods) -> None:
+def test_variety_flags_overuse_when_alternatives_exist(foods) -> None:
+    """Con opciones disponibles, repetir de más se marca (yogur 14× era esto)."""
     lookup = {str(f.id): f for f in foods.values()}
     days = []
     for i in range(7):
         d = _full_day(foods, i)
-        # rotar proteína y carbo de almuerzo/cena para no violar variedad
+        # el almuerzo usa pollo 6 días y tilapia 1 → 2 opciones distintas
+        protein = "tilapia" if i == 6 else "pechuga de pollo"
+        d["meals"][2]["food_ids"] = [str(foods[protein].id), str(foods["arroz blanco cocido"].id)]
+        days.append(d)
+    violations = check_variety(_selection(days), lookup, max_protein_repeats=3, max_carb_repeats=4)
+    # 2 proteínas → límite ⌈7/2⌉=4 (o el tope 3, el mayor); pollo 6× lo supera
+    assert any(v.food_name == "pechuga de pollo" and v.times_used == 6 for v in violations)
+
+
+def test_variety_relaxes_when_only_one_option(foods) -> None:
+    """Lista pobre: una sola proteína viable no debe fallar la generación."""
+    lookup = {str(f.id): f for f in foods.values()}
+    # pollo en los 7 almuerzos, pero es la única opción usada en ese slot
+    selection = _selection([_full_day(foods, i) for i in range(7)])
+    violations = check_variety(selection, lookup, max_protein_repeats=3, max_carb_repeats=4)
+    # límite adaptativo ⌈7/1⌉=7 → pollo 7× no se marca (nada mejor era posible)
+    assert not any(v.food_name == "pechuga de pollo" for v in violations)
+
+
+def test_variety_rotated_week_is_clean(foods) -> None:
+    lookup = {str(f.id): f for f in foods.values()}
+    days = []
+    for i in range(7):
+        d = _full_day(foods, i)
         proteins = ["pechuga de pollo", "tilapia", "carne de res magra"]
         carbs = ["arroz blanco cocido", "papa cocida", "quinoa cocida", "batata cocida"]
-        d["meals"][2]["food_ids"] = [
-            str(foods[proteins[i % 3]].id),
-            str(foods[carbs[i % 4]].id),
-        ]
+        d["meals"][2]["food_ids"] = [str(foods[proteins[i % 3]].id), str(foods[carbs[i % 4]].id)]
         d["meals"][4]["food_ids"] = [
-            str(foods[proteins[(i + 1) % 3]].id),
-            str(foods[carbs[(i + 1) % 4]].id),
+            str(foods[proteins[(i + 1) % 3]].id), str(foods[carbs[(i + 1) % 4]].id)
         ]
         days.append(d)
-    selection = _selection(days)
-    # huevo se repite 7 desayunos y no cuenta como violación
-    assert check_variety(selection, lookup, max_protein_repeats=3, max_carb_repeats=4) == []
+    assert check_variety(_selection(days), lookup, max_protein_repeats=3, max_carb_repeats=4) == []

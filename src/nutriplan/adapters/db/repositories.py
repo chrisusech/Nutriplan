@@ -46,6 +46,7 @@ from nutriplan.domain.models import (
     PlanPhase,
     PlanStatus,
     Sex,
+    UnitGranularity,
 )
 from nutriplan.ports.job_repository import ExportArtifact, Job, JobKind, JobStatus
 
@@ -166,6 +167,8 @@ class SqlFoodRepository:
             fat_100g=row.fat_100g,
             tags=list(row.tags or []),
             default_unit_g=row.default_unit_g,
+            unit_granularity=UnitGranularity(row.unit_granularity or "grams"),
+            unit_name=row.unit_name,
         )
 
     @staticmethod
@@ -182,6 +185,8 @@ class SqlFoodRepository:
         row.fat_100g = food.fat_100g
         row.tags = list(food.tags)
         row.default_unit_g = food.default_unit_g
+        row.unit_granularity = food.unit_granularity.value
+        row.unit_name = food.unit_name
         return row
 
     async def upsert_globals(self, foods: list[FoodItem]) -> None:

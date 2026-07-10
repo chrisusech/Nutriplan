@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from nutriplan.adapters.render.view import DAY_LABELS, natural_units
+from nutriplan.adapters.render.view import DAY_LABELS, portion_text
 from nutriplan.domain.models import (
     Client,
     DayPlan,
@@ -196,11 +196,7 @@ def formula_view(client: Client, targets: NutritionTargets) -> dict[str, Any]:
 
 
 def portion_chip(grams: float, food: FoodItem) -> str:
-    g = int(grams) if float(grams).is_integer() else grams
-    text = f"{food.name_es.capitalize()} · {g} g"
-    if units := natural_units(grams, food):
-        text += f" ({units})"
-    return text
+    return portion_text(grams, food)
 
 
 # El cálculo vive en el dominio; el presenter solo lo reexporta para las rutas.

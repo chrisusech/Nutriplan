@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from nutriplan.domain.errors import RenderError
-from nutriplan.domain.models import FoodItem, MealSlot, PlanCycle, PlanPhase
+from nutriplan.domain.models import (
+    FoodItem,
+    MealSlot,
+    PlanCycle,
+    PlanPhase,
+    UnitGranularity,
+)
 
 SLOT_LABELS: dict[MealSlot, str] = {
     MealSlot.BREAKFAST: "Desayuno",
@@ -40,15 +46,45 @@ class CellView:
     kcal: float
 
 
+def _fmt_count(n: float) -> str:
+    """1 → '1', 0.5 → '½', 1.5 → '1½', 3 → '3'."""
+    whole, frac = divmod(round(n * 2), 2)
+    half = "½" if frac else ""
+    if whole == 0:
+        return half or "0"
+    return f"{whole}{half}"
+
+
+def _plural(name: str, n: float) -> str:
+    if n <= 1:
+        return name
+    return name + ("s" if name[-1:] in "aeiou" else "es")  # lata→latas, unidad→unidades
+
+
 def natural_units(grams: float, food: FoodItem) -> str | None:
-    if not food.default_unit_g:
+    """Etiqueta de unidades para alimentos contables ('3 huevos', '1 lata').
+
+    Solo para `whole`/`half`; sus gramos ya vienen cuantizados por el solver, así
+    que el conteo es exacto — nada de '≈ 5.5 und'. Devuelve None en gramos libres.
+    """
+    if food.unit_granularity is UnitGranularity.GRAMS or not food.default_unit_g:
         return None
-    units = grams / food.default_unit_g
-    rounded = round(units * 2) / 2  # a medias unidades
-    if 0.5 <= rounded <= 6 and abs(units - rounded) / max(units, 0.01) < 0.25:
-        n = int(rounded) if float(rounded).is_integer() else rounded
-        return f"≈ {n} und"
-    return None
+    n = grams / food.default_unit_g
+    name = food.unit_name or "unidad"
+    return f"{_fmt_count(n)} {_plural(name, n)}"
+
+
+def portion_text(grams: float, food: FoodItem) -> str:
+    """Texto de una porción, con la unidad natural al frente si aplica."""
+    g = int(grams) if float(grams).is_integer() else round(grams, 1)
+    label = natural_units(grams, food)
+    if label is None:
+        return f"{food.name_es.capitalize()} — {g} g"
+    if food.unit_name and food.unit_name in food.name_es.lower():
+        head = label  # "3 huevos" — la unidad ya nombra el alimento
+    else:
+        head = f"{label} de {food.name_es}"  # "1 lata de atún en agua"
+    return f"{head[:1].upper()}{head[1:]} ({g} g)"
 
 
 def build_grid(
@@ -68,11 +104,7 @@ def build_grid(
                 food = foods.get(p.food_id)
                 if food is None:
                     raise RenderError(f"Alimento {p.food_id} del plan no está en el catálogo")
-                grams = int(p.grams) if float(p.grams).is_integer() else p.grams
-                text = f"{food.name_es.capitalize()} — {grams} g"
-                if units := natural_units(p.grams, food):
-                    text += f" ({units})"
-                portions.append(PortionView(text=text))
+                portions.append(PortionView(text=portion_text(p.grams, food)))
             extras = []
             if meal.free_protein:
                 extras.append("Proteína libre")

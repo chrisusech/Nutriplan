@@ -29,6 +29,7 @@ from nutriplan.domain.models import (
     MacroTargets,
     MealFoodPortion,
     MealSlot,
+    UnitGranularity,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
 
@@ -43,14 +44,30 @@ class SolvedMeal:
     computed: MacroTargets
 
 
-def _round_portion(grams: float, cfg: NutritionConfig, *, is_fat: bool = False) -> float:
+def _round_portion(
+    grams: float, cfg: NutritionConfig, food: FoodItem, *, is_fat: bool = False
+) -> float:
+    """Redondea la porción a algo que un humano sirve de verdad.
+
+    Alimentos contables (huevo, lata de atún, aguacate, pan) se cuantizan a la
+    unidad — enteros o medios según su `unit_granularity` — así el plan nunca
+    pide '5.5 huevos'. El resto sigue en gramos libres (múltiplos de 5 g).
+    """
+    if food.unit_granularity is not UnitGranularity.GRAMS and food.default_unit_g:
+        unit = food.default_unit_g
+        step_g = unit if food.unit_granularity is UnitGranularity.WHOLE else unit / 2.0
+        n = round(grams / step_g)
+        if n <= 0:
+            return 0.0  # el llamador la descarta; una comida no lleva 0.4 huevos
+        return float(min(n * step_g, MAX_PORTION_G))
+
     step = cfg.portioning.grams_rounding
     rounded = round(grams / step) * step
     if rounded <= 0:
         return 0.0
-    # Las grasas puras (aceites, aguacate) admiten porciones pequeñas (una
-    # cucharada ≈ 15 g): forzarlas al mínimo general de 20 g deja días en una
-    # zona muerta donde ni con ni sin el ítem cuadra la grasa.
+    # Las grasas puras (aceites) admiten porciones pequeñas (una cucharada ≈ 15 g):
+    # forzarlas al mínimo general de 20 g deja días en una zona muerta donde ni
+    # con ni sin el ítem cuadra la grasa.
     floor = step if is_fat else cfg.portioning.min_portion_g
     return float(min(max(rounded, floor), MAX_PORTION_G))
 
@@ -163,7 +180,7 @@ def solve_day_portions(
     for slot, foods in meals:
         final: list[tuple[FoodItem, float]] = []
         for f in foods:
-            g = _round_portion(grams[(slot, str(f.id))], config,
+            g = _round_portion(grams[(slot, str(f.id))], config, f,
                                is_fat=f.category in FAT_GROUP)
             if g > 0:
                 final.append((f, g))

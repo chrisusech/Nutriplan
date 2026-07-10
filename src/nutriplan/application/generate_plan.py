@@ -280,7 +280,7 @@ async def generate_plan_for_client(
     if llm is None:
         from nutriplan.adapters.llm.heuristic import HeuristicSelector
 
-        selector: LLMClient = HeuristicSelector(allowed)
+        selector: LLMClient = HeuristicSelector(allowed, targets.daily.protein_g)
     else:
         selector = llm
 

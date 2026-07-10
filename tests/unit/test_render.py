@@ -7,7 +7,7 @@ from tests.fixtures.plan_builder import build_fixed_plan, catalog_by_name
 
 from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer, render_plan_html
-from nutriplan.adapters.render.view import natural_units
+from nutriplan.adapters.render.view import natural_units, portion_text
 from nutriplan.domain.errors import RenderError
 
 
@@ -39,7 +39,7 @@ def test_html_contains_business_format(fixed_plan) -> None:
     assert "Anotaciones Importantes" in html
     assert "Ensalada libre" in html
     assert "Valeria Fit" in html
-    assert "Huevo entero — 100 g (≈ 2 und)" in html
+    assert "2 huevos (100 g)" in html
 
 
 async def test_pdf_renders(fixed_plan) -> None:
@@ -76,9 +76,18 @@ async def test_missing_food_raises_render_error(fixed_plan) -> None:
 
 def test_natural_units() -> None:
     foods = catalog_by_name()
-    huevo = foods["huevo entero"]  # 50 g/und
-    assert natural_units(100, huevo) == "≈ 2 und"
-    assert natural_units(75, huevo) == "≈ 1.5 und"
-    assert natural_units(1000, huevo) is None  # fuera de rango razonable
-    aceite = foods["aceite de oliva"]
-    assert natural_units(10, aceite) == "≈ 1 und"
+    huevo = foods["huevo entero"]  # 50 g/und, whole
+    assert natural_units(100, huevo) == "2 huevos"
+    assert natural_units(50, huevo) == "1 huevo"
+    aguacate = foods["aguacate"]  # 50 g/und, half
+    assert natural_units(25, aguacate) == "½ unidad"
+    # gramos libres (aceite/pollo) no llevan etiqueta de unidad
+    assert natural_units(10, foods["aceite de oliva"]) is None
+    assert natural_units(120, foods["pechuga de pollo"]) is None
+
+
+def test_portion_text_units_first() -> None:
+    foods = catalog_by_name()
+    assert portion_text(150, foods["huevo entero"]) == "3 huevos (150 g)"
+    assert portion_text(100, foods["atún en agua"]) == "1 lata de atún en agua (100 g)"
+    assert portion_text(120, foods["pechuga de pollo"]) == "Pechuga de pollo — 120 g"
