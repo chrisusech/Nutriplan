@@ -40,6 +40,11 @@ _FALLBACK_SHARE = {
 _PROTEIN_FLOOR_G = 10.0
 
 
+def _unit_protein(food: FoodItem) -> float:
+    """Proteína por unidad servible (huevo, loncha, lata). En gramos si no hay unidad."""
+    return food.protein_100g * (food.default_unit_g or 100.0) / 100.0
+
+
 def _fits_protein(food: FoodItem, target_g: float) -> bool:
     """¿Este alimento puede cubrir la proteína del slot sin ser absurdo?
 
@@ -97,11 +102,18 @@ class HeuristicSelector:
 
         # Platos principales (almuerzo/cena): carnes, pescado, mariscos, tofu,
         # legumbres — lo salado. Magras de preferencia (la grasa del día vive en
-        # los ítems de grasa) y que cuadren el objetivo del almuerzo.
-        lunch_pt = daily_protein_g * share[MealSlot.LUNCH]
+        # los ítems de grasa).
         savory = [f for f in proteins if meal_affinity.main_protein(f)] or proteins
         lean = [f for f in savory if f.fat_100g <= 0.4 * f.protein_100g] or savory
-        self.main_proteins = [f for f in lean if _fits_protein(f, lunch_pt)] or lean
+        # El pool se filtra CONTRA EL OBJETIVO DE CADA SLOT, no solo contra el del
+        # almuerzo. La cena pide menos proteína (0.25 del día frente a 0.30), y una
+        # lata entera de atún —que no se porciona: su rejilla es de 100 g— cabe en
+        # el almuerzo pero se pasa 10 g en la cena, y el solver no puede bajarla.
+        self.main_proteins_by_slot = {
+            slot: [f for f in lean if _fits_protein(f, daily_protein_g * share[slot])] or lean
+            for slot in (MealSlot.LUNCH, MealSlot.DINNER)
+        }
+        self.main_proteins = self.main_proteins_by_slot[MealSlot.LUNCH]  # alias legado
 
         # Snacks: ligeros y variados. Lácteos, huevos/claras, lonchas y batido;
         # nunca carne de plato principal. Se intercalan categorías para no repetir
@@ -111,8 +123,16 @@ class HeuristicSelector:
             f for f in allowed
             if meal_affinity.snack_protein(f) and _fits_protein(f, snack_pt)
         ]
+        # El lácteo del snack va MAGRO, igual que el del desayuno. Un cheddar
+        # (34 g de grasa/100 g) mete 10 g de grasa escondida en un snack que solo
+        # vale el 10% del día: el presupuesto de grasa se agota antes de llegar a
+        # los ítems de grasa, que ya no pueden bajar de su porción mínima, y el
+        # reparador acaba recortando el HUEVO DEL DESAYUNO para compensar —
+        # dejándolo sin proteína. La grasa del día vive en los ítems de grasa,
+        # no escondida en el queso del media mañana.
+        snack_dairy_all = [f for f in snack_eligible if f.category is FoodCategory.DAIRY]
         snack_dairy = sorted(
-            (f for f in snack_eligible if f.category is FoodCategory.DAIRY),
+            [f for f in snack_dairy_all if f.fat_100g <= 5.0] or snack_dairy_all,
             key=lambda f: f.name_es,
         )
         snack_eggs = sorted(
@@ -151,7 +171,13 @@ class HeuristicSelector:
         # Desayuno: los HUEVOS son el ancla (aparecen la mayoría de días); lácteos
         # y batido rotan como variación. Nunca carne/pescado al desayuno.
         bfast_pt = daily_protein_g * share[MealSlot.BREAKFAST]
-        self.egg_anchor = max(eggs, key=lambda f: f.fat_100g) if eggs else None  # huevo entero
+        # El ancla es el huevo que más proteína aporta POR UNIDAD, para que una
+        # ración normal (2-3 unidades) cubra el slot. Antes se elegía el huevo con
+        # más GRASA — un atajo para preferir el entero sobre la clara que, al
+        # crecer el catálogo, coronó al huevo de codorniz (11.1 g de grasa pero
+        # 1.3 g de proteína por unidad de 10 g): el solver pedía 14 huevos de
+        # codorniz al desayuno.
+        self.egg_anchor = max(eggs, key=_unit_protein) if eggs else None
         bfast_alts = light_dairy + shakes
         self.breakfast_alts = [f for f in bfast_alts if _fits_protein(f, bfast_pt)] or bfast_alts
         # Último recurso si el cliente no tiene huevos ni lácteos: algo que cuadre.
@@ -197,10 +223,12 @@ class HeuristicSelector:
         offset = self._seed + self.calls  # seed = versión; calls = reintento
         self.calls += 1
 
-        Pm, Ps = self.main_proteins, self.snack_pool
+        Pl = self.main_proteins_by_slot[MealSlot.LUNCH]
+        Pd = self.main_proteins_by_slot[MealSlot.DINNER]
+        Ps = self.snack_pool
         Cb, Cm, F = self.breakfast_carbs, self.main_carbs, self.fruits
         breakfast_ok = self.egg_anchor is not None or self.breakfast_alts
-        if not Pm or not Cb or not Cm or not F or not Ps or not breakfast_ok:
+        if not Pl or not Pd or not Cb or not Cm or not F or not Ps or not breakfast_ok:
             raise LLMError(
                 "El conjunto permitido no tiene fuentes suficientes por slot "
                 "(se requieren proteínas magras, carbohidratos y frutas)."
@@ -260,14 +288,14 @@ class HeuristicSelector:
                  "food_ids": [str(snack_protein_for(i, MealSlot.SNACK_AM).id),
                               str(pick(F, i).id)]},
                 {"slot": MealSlot.LUNCH.value,
-                 "food_ids": [str(pick(Pm, i).id), str(pick(Cm, i, shift=1).id)]
+                 "food_ids": [str(pick(Pl, i).id), str(pick(Cm, i, shift=1).id)]
                  + fat_for(MealSlot.LUNCH, i),
                  "free_salad": True},
                 {"slot": MealSlot.SNACK_PM.value,
                  "food_ids": [str(snack_protein_for(i, MealSlot.SNACK_PM).id),
                               str(pick(F, i, shift=1).id)]},
                 {"slot": MealSlot.DINNER.value,
-                 "food_ids": [str(pick(Pm, i, shift=1).id), str(pick(Cm, i, shift=2).id)]
+                 "food_ids": [str(pick(Pd, i, shift=1).id), str(pick(Cm, i, shift=2).id)]
                  + fat_for(MealSlot.DINNER, i, shift=1),
                  "free_salad": True},
             ]

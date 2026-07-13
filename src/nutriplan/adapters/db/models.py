@@ -110,6 +110,8 @@ class FoodRow(Base):
     fat_100g: Mapped[float] = mapped_column(Float)
     fiber_100g: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Términos del intake que resuelven a este alimento ("pollo" → pechuga de pollo).
+    aliases: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     default_unit_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit_granularity: Mapped[str] = mapped_column(String(10), default="grams")
     unit_name: Mapped[str | None] = mapped_column(String(30), nullable=True)

@@ -47,10 +47,18 @@ def test_names_are_unique(catalog) -> None:
 # --- Filtro de restricciones (conjunto permitido) ---
 
 
-def test_no_seafood_removes_shrimp_only(catalog) -> None:
+def test_no_seafood_removes_exactly_the_shellfish(catalog) -> None:
+    """La aserción es por TAG, no por lista de nombres.
+
+    Con una lista literal ("removed == {'camarones'}"), cada marisco que se
+    añada al catálogo rompe el test sin que haya ningún bug: sería un test que
+    castiga ampliar la base de alimentos.
+    """
     allowed = allowed_foods(catalog, ["no_seafood"])
     removed = {f.name_es for f in catalog} - {f.name_es for f in allowed}
-    assert removed == {"camarones"}
+    tagged = {f.name_es for f in catalog if "mariscos" in f.tags}
+    assert removed == tagged
+    assert "camarones" in removed
 
 
 def test_no_dairy_removes_whey_and_dairy(catalog) -> None:
@@ -64,6 +72,10 @@ def test_no_dairy_removes_whey_and_dairy(catalog) -> None:
 def test_combined_restrictions(catalog) -> None:
     allowed = allowed_foods(catalog, ["no_fish", "no_gluten", "no_nuts"])
     names = {f.name_es for f in allowed}
+    banned_tags = {"pescado", "mariscos", "gluten", "frutos_secos"}
+    for food in catalog:
+        if set(food.tags) & banned_tags:
+            assert food.name_es not in names, f"{food.name_es} debería estar vetado"
     for banned in ("salmón", "atún en agua", "camarones", "pasta cocida", "almendras"):
         assert banned not in names
     assert "arroz blanco cocido" in names

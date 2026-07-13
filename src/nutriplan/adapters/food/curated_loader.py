@@ -68,6 +68,7 @@ def load_curated_foods(csv_path: Path) -> list[FoodItem]:
                     fat_100g=float(row["fat_100g"]),
                     fiber_100g=_number(row, "fiber_100g") or 0.0,
                     tags=_semicolons(row, "tags"),
+                    aliases=_semicolons(row, "aliases"),
                     default_unit_g=_number(row, "default_unit_g"),
                     unit_granularity=UnitGranularity(
                         _text(row, "unit_granularity") or "grams"

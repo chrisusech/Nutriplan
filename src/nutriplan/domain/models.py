@@ -106,6 +106,12 @@ class FoodItem(BaseModel):
     fat_100g: float = Field(ge=0)
     fiber_100g: float = Field(default=0.0, ge=0)
     tags: list[str] = []  # "mariscos","gluten","lacteo","vegano",...
+
+    # Cómo llama la gente a este alimento en el intake ("pollo" → pechuga de pollo).
+    # Un alias GANA al fuzzy: sin él, "pollo" empata entre pechuga y muslo y el
+    # ganador lo decidía el orden de iteración. El alias es la elección explícita
+    # del entrenador sobre cuál es el alimento canónico de un término común.
+    aliases: list[str] = []
     default_unit_g: float | None = None  # gramos de una unidad/porción típica (1 huevo≈50g)
     unit_granularity: UnitGranularity = UnitGranularity.GRAMS
     unit_name: str | None = None  # "huevo", "lata", "rebanada", "unidad" (para contar)

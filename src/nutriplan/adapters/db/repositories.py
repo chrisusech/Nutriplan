@@ -200,6 +200,7 @@ class SqlFoodRepository:
             fat_100g=row.fat_100g,
             fiber_100g=row.fiber_100g or 0.0,
             tags=list(row.tags or []),
+            aliases=list(row.aliases or []),
             default_unit_g=row.default_unit_g,
             unit_granularity=UnitGranularity(row.unit_granularity or "grams"),
             unit_name=row.unit_name,
@@ -225,6 +226,7 @@ class SqlFoodRepository:
         row.fat_100g = food.fat_100g
         row.fiber_100g = food.fiber_100g
         row.tags = list(food.tags)
+        row.aliases = list(food.aliases)
         row.default_unit_g = food.default_unit_g
         row.unit_granularity = food.unit_granularity.value
         row.unit_name = food.unit_name

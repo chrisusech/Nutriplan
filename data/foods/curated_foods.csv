@@ -1,92 +1,173 @@
-name_es,name_en,category,kcal_100g,protein_100g,carb_100g,fat_100g,fiber_100g,tags,default_unit_g,unit_granularity,unit_name,portion_step_g,portion_min_g,portion_max_g,meal_slots,is_free,free_text,source,source_ref
-pechuga de pollo,chicken breast cooked,protein,165,31,0,3.6,0,,120,grams,,10,50,,almuerzo;cena,,,USDA,171477
-pechuga de pavo,turkey breast cooked,protein,136,29.5,0,2,0,,120,grams,,10,50,,almuerzo;cena,,,USDA,174516
-huevo entero,whole egg,protein,143,12.6,0.7,9.5,0,huevo,50,whole,huevo,50,50,,desayuno;snack_am;snack_pm;cena,,,USDA,171287
-clara de huevo,egg white,protein,52,10.9,0.7,0.2,0,huevo,33,whole,clara,33,33,,desayuno;snack_am;snack_pm;cena,,,USDA,172183
-carne de res magra,lean beef cooked,protein,187,29.5,0,6.7,0,res,120,grams,,10,50,,almuerzo;cena,,,USDA,173118
-carne molida de res,lean ground beef cooked,protein,214,26.6,0,11.1,0,res,120,grams,,10,50,,almuerzo;cena,,,USDA,171795
-lomo de cerdo,pork loin cooked,protein,143,26.2,0,3.5,0,cerdo,120,grams,,10,50,,almuerzo;cena,,,USDA,168250
-tilapia,tilapia cooked,protein,128,26.1,0,2.6,0,pescado,120,grams,,10,50,,almuerzo;cena,,,USDA,175177
-salmón,salmon cooked,protein,206,22.1,0,12.3,0,pescado,120,grams,,10,50,,almuerzo;cena,,,USDA,175168
-robalo,sea bass cooked,protein,124,23.6,0,2.6,0,pescado,120,grams,,10,50,,almuerzo;cena,,,USDA,173694
-atún en agua,tuna canned in water,protein,116,25.5,0,0.8,0,pescado,100,whole,lata,100,100,,almuerzo;cena,,,USDA,171986
-camarones,shrimp cooked,protein,99,24,0.2,0.3,0,mariscos,100,grams,,10,50,,almuerzo;cena,,,USDA,175180
-jamón de pavo,turkey ham slice,protein,104,16.5,2.6,3.2,0,,30,whole,loncha,30,30,,desayuno;snack_am,,,USDA,
-proteína en polvo whey,whey protein powder,protein,352,78.1,6.2,1.6,3.1,lacteo;batido,30,grams,,10,20,,desayuno;snack_am;snack_pm,,,USDA,173180
-tofu firme,tofu firm,protein,144,17.3,2.8,8.7,2.3,soya;vegano,100,grams,,10,50,,almuerzo;cena,,,USDA,172475
-lentejas cocidas,lentils cooked,protein,116,9,20.1,0.4,7.9,vegano,100,grams,,10,40,,almuerzo;cena,,,USDA,172421
-arroz blanco cocido,white rice cooked,carb,130,2.7,28.2,0.3,0.4,,120,grams,,10,40,,almuerzo;cena,,,USDA,168878
-arroz integral cocido,brown rice cooked,carb,123,2.7,25.6,1,1.6,,120,grams,,10,40,,almuerzo;cena,,,USDA,169704
-avena en hojuelas,rolled oats dry,carb,379,13.2,67.7,6.5,10.1,,40,grams,,10,20,,desayuno,,,USDA,173904
-granola,granola,carb,420,9.8,67.3,13,7.4,frutos_secos,30,grams,,10,15,,desayuno;snack_am;snack_pm,,,USDA,2708461
-papa cocida,potato boiled,carb,86,1.7,20,0.1,1.8,,150,grams,,10,40,,almuerzo;cena,,,USDA,170440
-batata cocida,sweet potato baked,carb,90,2,20.7,0.1,3.3,,150,grams,,10,40,,almuerzo;cena,,,USDA,168483
-yuca cocida,cassava boiled,carb,191,1.4,39.6,3,1.9,,100,grams,,10,40,,almuerzo;cena,,,USDA,2709564
-plátano maduro cocido,plantain cooked,carb,122.8,1.2,31,0.9,2.1,,100,grams,,10,40,,almuerzo;cena,,,USDA,2710817
-pasta cocida,pasta cooked,carb,157,5.8,30.7,0.9,1.8,gluten,120,grams,,10,40,,almuerzo;cena,,,USDA,2708357
-cuscús cocido,couscous cooked,carb,112,3.8,23.2,0.2,1.4,gluten,100,grams,,10,40,,almuerzo;cena,,,USDA,169700
-pan integral,whole wheat bread,carb,252,12.4,42.7,3.5,6,gluten,30,half,rebanada,15,15,,desayuno;cena,,,USDA,172688
-pan de masa madre,sourdough bread,carb,272,10.8,51.9,2.4,2.2,gluten,40,half,rebanada,20,20,,desayuno;cena,,,USDA,172675
-pan de arroz,rice bread,carb,248,4.3,45.8,5.2,4.3,,40,half,rebanada,20,20,,desayuno;cena,,,USDA,2707794
-arepa de maíz,corn arepa,carb,219,4.7,46,1.8,2.8,,70,half,arepa,35,35,,desayuno;almuerzo;cena,,,USDA,
-tortilla de maíz,corn tortilla,carb,218,5.7,44.6,2.9,6.3,,30,whole,tortilla,30,30,,desayuno;almuerzo;cena,,,USDA,2707823
-quinoa cocida,quinoa cooked,carb,120,4.4,21.3,1.9,2.8,vegano,100,grams,,10,40,,almuerzo;cena,,,USDA,168917
-maíz dulce,sweet corn,carb,86,3.3,18.7,1.4,2,,100,grams,,10,40,,almuerzo;cena,,,USDA,169998
-maíz pira,air-popped popcorn,carb,387,12.9,77.8,4.5,14.5,,25,grams,,5,10,,snack_pm,,,USDA,167959
-frijoles negros cocidos,black beans cooked,carb,132,8.9,23.7,0.5,8.7,vegano,100,grams,,10,40,,almuerzo;cena,,,USDA,173735
-garbanzos cocidos,chickpeas cooked,carb,163,8.8,27.3,2.6,7.6,vegano,100,grams,,10,40,,almuerzo;cena,,,USDA,2707416
-miel,honey,carb,304,0.3,82.4,0,0.2,,21,grams,,5,5,,desayuno,,,USDA,169640
-aguacate,avocado,fat,160,2,8.5,14.7,6.7,vegano,50,grams,,25,50,,desayuno;almuerzo;cena,,,USDA,2709223
-aceite de oliva,olive oil,fat,884,0,0,100,0,vegano,10,grams,,5,10,,almuerzo;cena,,,USDA,171413
-aceite de coco,coconut oil,fat,892,0,0,99.1,0,vegano,10,grams,,5,10,,almuerzo;cena,,,USDA,171412
-aceite de aguacate,avocado oil,fat,884,0,0,100,0,vegano,10,grams,,5,10,,almuerzo;cena,,,USDA,173573
-almendras,almonds,fat,579,21.1,21.6,49.9,12.5,frutos_secos;vegano,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170567
-maní,peanuts,fat,567,25.8,16.1,49.2,8.5,frutos_secos;vegano,15,grams,,5,10,,snack_am;snack_pm,,,USDA,172430
-nueces,walnuts,fat,654,15.2,13.7,65.2,6.7,frutos_secos;vegano,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170187
-mantequilla de maní,peanut butter,fat,598,22.2,22.3,51.4,5,frutos_secos,15,grams,,15,15,,desayuno;snack_am;snack_pm,,,USDA,172470
-mantequilla de almendras,almond butter,fat,614,21,18.8,55.5,10.3,frutos_secos;vegano,15,grams,,15,15,,desayuno;snack_am;snack_pm,,,USDA,168588
-semillas de chía,chia seeds,fat,486,16.5,42.1,30.7,34.4,vegano,10,grams,,5,5,,desayuno;snack_am;snack_pm,,,USDA,170554
-semillas de girasol,sunflower seeds,fat,584,20.8,20,51.5,8.6,frutos_secos;vegano,15,grams,,5,10,,snack_am;snack_pm,,,USDA,170562
-semillas de calabaza,pumpkin seeds,fat,559,30.2,10.7,49,6,frutos_secos;vegano,15,grams,,5,10,,snack_am;snack_pm,,,USDA,170556
-tahini,tahini,fat,595,17,21.2,53.8,9.3,vegano,15,grams,,15,15,,almuerzo;cena,,,USDA,170189
-hummus,hummus,fat,237,7.8,15,17.8,5.5,vegano,30,grams,,10,20,,snack_pm;almuerzo,,,USDA,174289
-aceitunas,olives,fat,116,0.8,6,10.9,1.6,vegano,15,grams,,10,15,30,almuerzo;cena,,,USDA,169094
-queso crema,cream cheese,fat,350,6.2,5.5,34.4,0,lacteo,15,grams,,15,15,,desayuno,,,USDA,173418
-banano,banana,fruit,89,1.1,22.8,0.3,2.6,,120,half,unidad,60,60,,desayuno;snack_am;snack_pm,,,USDA,173944
-manzana,apple,fruit,52,0.3,13.8,0.2,2.4,,180,half,unidad,90,90,,desayuno;snack_am;snack_pm,,,USDA,171688
-pera,pear,fruit,57,0.4,15.2,0.1,3.1,,160,half,unidad,80,80,,desayuno;snack_am;snack_pm,,,USDA,169118
-fresa,strawberry,fruit,32,0.7,7.7,0.3,2,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,167762
-arándanos,blueberries,fruit,57,0.7,14.5,0.3,2.4,,100,grams,,10,30,,desayuno;snack_am;snack_pm,,,USDA,171711
-papaya,papaya,fruit,43,0.5,10.8,0.3,1.7,,140,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169926
-piña,pineapple,fruit,50,0.5,13.1,0.1,1.4,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169124
-mango,mango,fruit,60,0.8,15,0.4,1.6,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169910
-sandía,watermelon,fruit,30,0.6,7.5,0.1,0.4,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,167765
-melón,cantaloupe,fruit,34,0.8,8.2,0.2,0.9,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169092
-uvas,grapes,fruit,69,0.7,18.1,0.2,0.9,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,174683
-naranja,orange,fruit,47,0.9,11.8,0.1,2.4,,130,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169097
-kiwi,kiwi,fruit,61,1.1,14.7,0.5,3,,75,whole,unidad,75,75,,desayuno;snack_am;snack_pm,,,USDA,168153
-durazno,peach,fruit,39,0.9,9.5,0.2,1.5,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169928
-brócoli,broccoli,vegetable,34,2.8,6.6,0.4,2.6,,90,grams,,10,50,,almuerzo;cena,,,USDA,170379
-espinaca,spinach,vegetable,23,2.9,3.6,0.4,2.2,,30,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,168462
-lechuga,lettuce,vegetable,15,1.4,2.9,0.1,1.3,,50,grams,,10,30,,almuerzo;cena,,,USDA,169249
-tomate,tomato,vegetable,18,0.9,3.9,0.2,1.2,,120,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,170457
-zanahoria,carrot,vegetable,41,0.9,9.6,0.2,2.8,,60,grams,,10,30,,almuerzo;snack_pm;cena,,,USDA,170393
-pepino,cucumber,vegetable,15,0.7,3.6,0.1,0.5,,100,grams,,10,30,,almuerzo;snack_pm;cena,,,USDA,168409
-calabacín,zucchini,vegetable,17,1.2,3.1,0.3,1,,100,grams,,10,30,,almuerzo;cena,,,USDA,169291
-champiñones,mushrooms,vegetable,22,3.1,3.3,0.3,1,,70,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,169251
-pimentón,bell pepper,vegetable,26,1,6,0.3,2.1,,100,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,170108
-cebolla,onion,vegetable,40,1.1,9.3,0.1,1.7,,60,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,170000
-coliflor,cauliflower,vegetable,25,1.9,5,0.3,2,,100,grams,,10,30,,almuerzo;cena,,,USDA,169986
-habichuelas,green beans,vegetable,31,1.8,7,0.2,2.7,,100,grams,,10,30,,almuerzo;cena,,,USDA,169961
-yogur griego natural,greek yogurt plain,dairy,59,10.2,3.6,0.4,0,lacteo,170,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,170894
-yogur natural,yogurt plain,dairy,61,3.5,4.7,3.2,0,lacteo,170,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171284
-requesón,cottage cheese,dairy,98,11.1,3.4,4.3,0,lacteo,100,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,172179
-queso fresco,fresh white cheese,dairy,299,18.1,3,23.8,0,lacteo,30,whole,loncha,30,30,,desayuno;snack_am,,,USDA,172223
-queso mozzarella,mozzarella cheese,dairy,280,27.5,3.1,17.1,0,lacteo,30,whole,loncha,30,30,,desayuno;snack_am;cena,,,USDA,167735
-leche descremada,skim milk,dairy,34,3.4,5,0.1,0,lacteo,240,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171269
-leche entera,whole milk,dairy,61,3.1,4.8,3.2,0,lacteo,240,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171265
-ensalada libre,free salad,other,0,0,0,0,0,,,grams,,10,,,almuerzo;cena,true,Ensalada libre,curated,
-vegetales libres,free vegetables,other,0,0,0,0,0,,,grams,,10,,,desayuno;almuerzo;cena,true,Vegetales libres,curated,
-gelatina sin azúcar,sugar-free gelatin,other,0,0,0,0,0,,,grams,,10,,,snack_am;snack_pm,true,Gelatina sin azúcar,curated,
-café sin azúcar,black coffee,other,0,0,0,0,0,,,grams,,10,,,desayuno;snack_am;snack_pm,true,Café sin azúcar,curated,
-aromática,herbal tea,other,0,0,0,0,0,,,grams,,10,,,desayuno;snack_am;snack_pm;almuerzo;cena,true,Aromática sin azúcar,curated,
+name_es,name_en,category,kcal_100g,protein_100g,carb_100g,fat_100g,fiber_100g,tags,aliases,default_unit_g,unit_granularity,unit_name,portion_step_g,portion_min_g,portion_max_g,meal_slots,is_free,free_text,source,source_ref
+pechuga de pollo,chicken breast cooked,protein,165,31,0,3.6,0,,pollo,120,grams,,10,50,,almuerzo;cena,,,USDA,171477
+pechuga de pavo,turkey breast cooked,protein,136,29.5,0,2,0,,pavo,120,grams,,10,50,,almuerzo;cena,,,USDA,174516
+huevo entero,whole egg,protein,143,12.6,0.7,9.5,0,huevo,huevo;huevos,50,whole,huevo,50,50,,desayuno;snack_am;snack_pm;cena,,,USDA,171287
+clara de huevo,egg white,protein,52,10.9,0.7,0.2,0,huevo,,33,whole,clara,33,33,,desayuno;snack_am;snack_pm;cena,,,USDA,172183
+carne de res magra,lean beef cooked,protein,187,29.5,0,6.7,0,res,carne de res;res;carne,120,grams,,10,50,,almuerzo;cena,,,USDA,173118
+carne molida de res,lean ground beef cooked,protein,214,26.6,0,11.1,0,res,,120,grams,,10,50,,almuerzo;cena,,,USDA,171795
+lomo de cerdo,pork loin cooked,protein,143,26.2,0,3.5,0,cerdo,cerdo,120,grams,,10,50,,almuerzo;cena,,,USDA,168250
+tilapia,tilapia cooked,protein,128,26.1,0,2.6,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,175177
+salmón,salmon cooked,protein,206,22.1,0,12.3,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,175168
+robalo,sea bass cooked,protein,124,23.6,0,2.6,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,173694
+atún en agua,tuna canned in water,protein,116,25.5,0,0.8,0,pescado,atún;atun,100,whole,lata,100,100,,almuerzo;cena,,,USDA,171986
+camarones,shrimp cooked,protein,99,24,0.2,0.3,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,175180
+jamón de pavo,turkey ham slice,protein,106,14.8,2.2,3.8,0,,,30,whole,loncha,30,30,,desayuno;snack_am,,,USDA,2706217
+proteína en polvo whey,whey protein powder,protein,352,78.1,6.2,1.6,3.1,lacteo;batido,whey;proteína en polvo;batido de proteína,30,grams,,10,20,,desayuno;snack_am;snack_pm,,,USDA,173180
+tofu firme,tofu firm,protein,144,17.3,2.8,8.7,2.3,soya;vegano,,100,grams,,10,50,,almuerzo;cena,,,USDA,172475
+lentejas cocidas,lentils cooked,protein,116,9,20.1,0.4,7.9,vegano,lentejas,100,grams,,10,40,,almuerzo;cena,,,USDA,172421
+arroz blanco cocido,white rice cooked,carb,130,2.7,28.2,0.3,0.4,,arroz,120,grams,,10,40,,almuerzo;cena,,,USDA,168878
+arroz integral cocido,brown rice cooked,carb,123,2.7,25.6,1,1.6,,,120,grams,,10,40,,almuerzo;cena,,,USDA,169704
+avena en hojuelas,rolled oats dry,carb,379,13.2,67.7,6.5,10.1,,avena,40,grams,,10,20,,desayuno,,,USDA,173904
+granola,granola,carb,420,9.8,67.3,13,7.4,frutos_secos,,30,grams,,10,15,,desayuno;snack_am;snack_pm,,,USDA,2708461
+papa cocida,potato boiled,carb,86,1.7,20,0.1,1.8,,papa;papas,150,grams,,10,40,,almuerzo;cena,,,USDA,170440
+batata cocida,sweet potato baked,carb,90,2,20.7,0.1,3.3,,batata;camote,150,grams,,10,40,,almuerzo;cena,,,USDA,168483
+yuca cocida,cassava boiled,carb,191,1.4,39.6,3,1.9,,yuca,100,grams,,10,40,,almuerzo;cena,,,USDA,2709564
+plátano maduro cocido,plantain cooked,carb,122.8,1.2,31,0.9,2.1,,plátano;platano;plátano maduro,100,grams,,10,40,,almuerzo;cena,,,USDA,2710817
+pasta cocida,pasta cooked,carb,157,5.8,30.7,0.9,1.8,gluten,pasta,120,grams,,10,40,,almuerzo;cena,,,USDA,2708357
+cuscús cocido,couscous cooked,carb,112,3.8,23.2,0.2,1.4,gluten,,100,grams,,10,40,,almuerzo;cena,,,USDA,169700
+pan integral,whole wheat bread,carb,252,12.4,42.7,3.5,6,gluten,pan,30,half,rebanada,15,15,,desayuno;cena,,,USDA,172688
+pan de masa madre,sourdough bread,carb,272,10.8,51.9,2.4,2.2,gluten,,40,half,rebanada,20,20,,desayuno;cena,,,USDA,172675
+pan de arroz,rice bread,carb,248,4.3,45.8,5.2,4.3,,,40,half,rebanada,20,20,,desayuno;cena,,,USDA,2707794
+arepa de maíz,corn arepa,carb,219,4.7,46,1.8,2.8,,arepa,70,half,arepa,35,35,,desayuno;almuerzo;cena,,,USDA,
+tortilla de maíz,corn tortilla,carb,218,5.7,44.6,2.9,6.3,,tortilla,30,whole,tortilla,30,30,,desayuno;almuerzo;cena,,,USDA,2707823
+quinoa cocida,quinoa cooked,carb,120,4.4,21.3,1.9,2.8,vegano,quinoa;quinua,100,grams,,10,40,,almuerzo;cena,,,USDA,168917
+maíz dulce,sweet corn,carb,86,3.3,18.7,1.4,2,,,100,grams,,10,40,,almuerzo;cena,,,USDA,169998
+maíz pira,air-popped popcorn,carb,387,12.9,77.8,4.5,14.5,,palomitas;crispetas,25,grams,,5,10,,snack_pm,,,USDA,167959
+frijoles negros cocidos,black beans cooked,carb,132,8.9,23.7,0.5,8.7,vegano,frijoles;fríjoles;frijol,100,grams,,10,40,,almuerzo;cena,,,USDA,173735
+garbanzos cocidos,chickpeas cooked,carb,163,8.8,27.3,2.6,7.6,vegano,garbanzos,100,grams,,10,40,,almuerzo;cena,,,USDA,2707416
+miel,honey,carb,304,0.3,82.4,0,0.2,,,21,grams,,5,5,,desayuno,,,USDA,169640
+aguacate,avocado,fat,160,2,8.5,14.7,6.7,vegano,,50,grams,,25,50,,desayuno;almuerzo;cena,,,USDA,2709223
+aceite de oliva,olive oil,fat,884,0,0,100,0,vegano,aceite,10,grams,,5,10,,almuerzo;cena,,,USDA,171413
+aceite de coco,coconut oil,fat,892,0,0,99.1,0,vegano,,10,grams,,5,10,,almuerzo;cena,,,USDA,171412
+aceite de aguacate,avocado oil,fat,884,0,0,100,0,vegano,,10,grams,,5,10,,almuerzo;cena,,,USDA,173573
+almendras,almonds,fat,579,21.1,21.6,49.9,12.5,frutos_secos;vegano,,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170567
+maní,peanuts,fat,567,25.8,16.1,49.2,8.5,frutos_secos;vegano,cacahuate;cacahuete,15,grams,,5,10,,snack_am;snack_pm,,,USDA,172430
+nueces,walnuts,fat,654,15.2,13.7,65.2,6.7,frutos_secos;vegano,,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170187
+mantequilla de maní,peanut butter,fat,598,22.2,22.3,51.4,5,frutos_secos,crema de maní,15,grams,,15,15,,desayuno;snack_am;snack_pm,,,USDA,172470
+mantequilla de almendras,almond butter,fat,614,21,18.8,55.5,10.3,frutos_secos;vegano,,15,grams,,15,15,,desayuno;snack_am;snack_pm,,,USDA,168588
+semillas de chía,chia seeds,fat,486,16.5,42.1,30.7,34.4,vegano,,10,grams,,5,5,,desayuno;snack_am;snack_pm,,,USDA,170554
+semillas de girasol,sunflower seeds,fat,584,20.8,20,51.5,8.6,frutos_secos;vegano,,15,grams,,5,10,,snack_am;snack_pm,,,USDA,170562
+semillas de calabaza,pumpkin seeds,fat,559,30.2,10.7,49,6,frutos_secos;vegano,,15,grams,,5,10,,snack_am;snack_pm,,,USDA,170556
+tahini,tahini,fat,595,17,21.2,53.8,9.3,vegano,,15,grams,,15,15,,almuerzo;cena,,,USDA,170189
+hummus,hummus,fat,237,7.8,15,17.8,5.5,vegano,,30,grams,,10,20,,snack_pm;almuerzo,,,USDA,174289
+aceitunas,olives,fat,116,0.8,6,10.9,1.6,vegano,,15,grams,,10,15,30,almuerzo;cena,,,USDA,169094
+queso crema,cream cheese,fat,350,6.2,5.5,34.4,0,lacteo,,15,grams,,15,15,,desayuno,,,USDA,173418
+banano,banana,fruit,89,1.1,22.8,0.3,2.6,,,120,half,unidad,60,60,,desayuno;snack_am;snack_pm,,,USDA,173944
+manzana,apple,fruit,52,0.3,13.8,0.2,2.4,,,180,half,unidad,90,90,,desayuno;snack_am;snack_pm,,,USDA,171688
+pera,pear,fruit,57,0.4,15.2,0.1,3.1,,,160,half,unidad,80,80,,desayuno;snack_am;snack_pm,,,USDA,169118
+fresa,strawberry,fruit,32,0.7,7.7,0.3,2,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,167762
+arándanos,blueberries,fruit,57,0.7,14.5,0.3,2.4,,,100,grams,,10,30,,desayuno;snack_am;snack_pm,,,USDA,171711
+papaya,papaya,fruit,43,0.5,10.8,0.3,1.7,,,140,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169926
+piña,pineapple,fruit,50,0.5,13.1,0.1,1.4,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169124
+mango,mango,fruit,60,0.8,15,0.4,1.6,,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169910
+sandía,watermelon,fruit,30,0.6,7.5,0.1,0.4,,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,167765
+melón,cantaloupe,fruit,34,0.8,8.2,0.2,0.9,,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169092
+uvas,grapes,fruit,69,0.7,18.1,0.2,0.9,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,174683
+naranja,orange,fruit,47,0.9,11.8,0.1,2.4,,,130,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169097
+kiwi,kiwi,fruit,61,1.1,14.7,0.5,3,,,75,whole,unidad,75,75,,desayuno;snack_am;snack_pm,,,USDA,168153
+durazno,peach,fruit,39,0.9,9.5,0.2,1.5,,,150,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169928
+brócoli,broccoli,vegetable,34,2.8,6.6,0.4,2.6,,,90,grams,,10,50,,almuerzo;cena,,,USDA,170379
+espinaca,spinach,vegetable,23,2.9,3.6,0.4,2.2,,,30,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,168462
+lechuga,lettuce,vegetable,15,1.4,2.9,0.1,1.3,,,50,grams,,10,30,,almuerzo;cena,,,USDA,169249
+tomate,tomato,vegetable,18,0.9,3.9,0.2,1.2,,,120,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,170457
+zanahoria,carrot,vegetable,41,0.9,9.6,0.2,2.8,,,60,grams,,10,30,,almuerzo;snack_pm;cena,,,USDA,170393
+pepino,cucumber,vegetable,15,0.7,3.6,0.1,0.5,,,100,grams,,10,30,,almuerzo;snack_pm;cena,,,USDA,168409
+calabacín,zucchini,vegetable,17,1.2,3.1,0.3,1,,,100,grams,,10,30,,almuerzo;cena,,,USDA,169291
+champiñones,mushrooms,vegetable,22,3.1,3.3,0.3,1,,,70,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,169251
+pimentón,bell pepper,vegetable,26,1,6,0.3,2.1,,,100,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,170108
+cebolla,onion,vegetable,40,1.1,9.3,0.1,1.7,,,60,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,170000
+coliflor,cauliflower,vegetable,25,1.9,5,0.3,2,,,100,grams,,10,30,,almuerzo;cena,,,USDA,169986
+habichuelas,green beans,vegetable,31,1.8,7,0.2,2.7,,,100,grams,,10,30,,almuerzo;cena,,,USDA,169961
+yogur griego natural,greek yogurt plain,dairy,59,10.2,3.6,0.4,0,lacteo,yogur;yogurt,170,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,170894
+yogur natural,yogurt plain,dairy,61,3.5,4.7,3.2,0,lacteo,,170,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171284
+requesón,cottage cheese,dairy,98,11.1,3.4,4.3,0,lacteo,,100,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,172179
+queso fresco,fresh white cheese,dairy,299,18.1,3,23.8,0,lacteo,queso,30,whole,loncha,30,30,,desayuno;snack_am,,,USDA,172223
+queso mozzarella,mozzarella cheese,dairy,280,27.5,3.1,17.1,0,lacteo,mozzarella,30,whole,loncha,30,30,,desayuno;snack_am;cena,,,USDA,167735
+leche descremada,skim milk,dairy,34,3.4,5,0.1,0,lacteo,leche,240,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171269
+leche entera,whole milk,dairy,61,3.1,4.8,3.2,0,lacteo,,240,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171265
+ensalada libre,free salad,other,0,0,0,0,0,,,,grams,,10,,,almuerzo;cena,true,Ensalada libre,curated,
+vegetales libres,free vegetables,other,0,0,0,0,0,,,,grams,,10,,,desayuno;almuerzo;cena,true,Vegetales libres,curated,
+gelatina sin azúcar,sugar-free gelatin,other,0,0,0,0,0,,,,grams,,10,,,snack_am;snack_pm,true,Gelatina sin azúcar,curated,
+café sin azúcar,black coffee,other,0,0,0,0,0,,,,grams,,10,,,desayuno;snack_am;snack_pm,true,Café sin azúcar,curated,
+aromática,herbal tea,other,0,0,0,0,0,,,,grams,,10,,,desayuno;snack_am;snack_pm;almuerzo;cena,true,Aromática sin azúcar,curated,
+pechuga de pollo desmechada,"Chicken, broilers or fryers, breast, meat only, cooked, stewed",protein,151,29,0,3,0,,,120,grams,,10,50,,almuerzo;cena,,,USDA,171478
+muslo de pollo,"Chicken, broilers or fryers, thigh, meat only, cooked, roasted",protein,179,24.8,0,8.2,0,,,120,grams,,10,50,,almuerzo;cena,,,USDA,172388
+pavo molido,"Turkey, Ground, cooked",protein,203,27.4,0,10.4,0,,,120,grams,,10,50,,almuerzo;cena,,,USDA,171506
+chuleta de cerdo,"Pork, fresh, loin, center rib (chops), boneless, separable lean only, cooked, broiled",protein,216,29.5,0,10.1,0,cerdo,,120,grams,,10,50,,almuerzo;cena,,,USDA,168304
+lomo de res,"Beef, tenderloin, steak, separable lean only, trimmed to 1/8"" fat, select, raw",protein,148,22.1,0,5.9,0,res,,120,grams,,10,50,,almuerzo;cena,,,USDA,171803
+hígado de res,"Beef, variety meats and by-products, liver, cooked, braised",protein,191,29.1,5.1,5.3,0,res,,100,grams,,10,40,,almuerzo;cena,,,USDA,168626
+trucha,"Fish, trout, rainbow, farmed, cooked, dry heat",protein,168,23.8,0,7.4,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,173718
+bacalao,"Fish, cod, Atlantic, cooked, dry heat",protein,105,22.8,0,0.9,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,171956
+merluza,"Fish, haddock, cooked, dry heat",protein,90,20,0,0.6,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,174198
+sardinas en lata,"Fish, sardine, Atlantic, canned in oil, drained solids with bone",protein,208,24.6,0,11.4,0,pescado,,30,whole,lata,30,30,,desayuno;snack_am;snack_pm;almuerzo;cena,,,USDA,175139
+atún en aceite,"Fish, tuna, light, canned in oil, drained solids",protein,198,29.1,0,8.2,0,pescado,,100,whole,lata,100,100,,almuerzo;cena,,,USDA,173708
+mejillones,"Mollusks, mussel, blue, cooked, moist heat",protein,172,23.8,7.4,4.5,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,174217
+calamar,"Mollusks, squid, mixed species, cooked, fried",protein,175,17.9,7.8,7.5,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,171982
+cangrejo,"Crustaceans, crab, blue, cooked, moist heat",protein,83,17.9,0,0.7,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,174205
+huevo de codorniz,"Egg, quail, whole, fresh, raw",protein,158,13.1,0.4,11.1,0,huevo,,10,whole,huevo,10,10,,desayuno;snack_am;snack_pm;cena,,,USDA,172191
+jamón de cerdo magro,"Pork, cured, ham, boneless, extra lean (approximately 5% fat), roasted",protein,145,20.9,1.5,5.5,0,cerdo,,30,whole,loncha,30,30,,desayuno;snack_am;snack_pm,,,USDA,167871
+edamame,"Edamame, frozen, prepared",protein,121,11.9,8.9,5.2,5.2,soya;vegano,,100,grams,,10,40,,snack_am;snack_pm;almuerzo;cena,,,USDA,168411
+tempeh,Tempeh,protein,192,20.3,7.6,10.8,0,soya;vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,174272
+frijol cargamanto,"Beans, pinto, mature seeds, cooked, boiled, without salt",protein,143,9,26.2,0.7,9,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,175200
+arvejas cocidas,"Peas, green, cooked, boiled, drained, without salt",protein,84,5.4,15.6,0.2,5.5,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,170420
+kéfir,"Milk, buttermilk, fluid, cultured, lowfat",dairy,40,3.3,4.8,1.1,0,lacteo,,200,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,170874
+queso cottage bajo en grasa,"Cheese, cottage, lowfat, 1% milkfat",dairy,72,12.4,2.7,1,0,lacteo,,100,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,173417
+queso ricotta,"Cheese, ricotta, part skim milk",dairy,138,11.4,5.1,7.9,0,lacteo,,60,grams,,20,30,,desayuno;snack_am;snack_pm,,,USDA,171248
+queso parmesano,"Cheese, parmesan, hard",dairy,392,35.8,3.2,25,0,lacteo,,15,grams,,5,10,,almuerzo;cena,,,USDA,170848
+queso cheddar,"Cheese, cheddar",dairy,408,23.3,2.4,34,0,lacteo,,30,whole,loncha,30,30,,desayuno;snack_am;cena,,,USDA,328637
+queso gouda,"Cheese, gouda",dairy,356,24.9,2.2,27.4,0,lacteo,,30,whole,loncha,30,30,,desayuno;snack_am;cena,,,USDA,171241
+leche semidescremada,"Milk, reduced fat, fluid, 2% milkfat, with added vitamin A and vitamin D",dairy,50,3.3,4.8,2,0,lacteo,,240,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,171267
+yogur griego bajo en grasa,"Yogurt, Greek, plain, lowfat",dairy,73,9.9,3.9,1.9,0,lacteo,,170,grams,,50,100,,desayuno;snack_am;snack_pm,,,USDA,170903
+galletas de arroz,"Snacks, rice cakes, brown rice, plain, unsalted",carb,387,8.2,81.5,2.8,4.2,,,9,whole,galleta,9,9,,snack_am;snack_pm,,,USDA,170250
+pan blanco,"Bread, white, commercially prepared",carb,270,9.4,49.2,3.6,2.3,gluten,,30,half,rebanada,15,15,,desayuno;cena,,,USDA,325871
+pan de centeno,"Bread, rye",carb,259,8.5,48.3,3.3,5.8,gluten,,32,half,rebanada,16,16,,desayuno;cena,,,USDA,172684
+pan pita integral,"Bread, pita, whole-wheat",carb,262,9.8,55.9,1.7,6.1,gluten,,60,half,pita,30,30,,desayuno;almuerzo;cena,,,USDA,174916
+cebada perlada cocida,"Barley, pearled, cooked",carb,123,2.3,28.2,0.4,3.8,gluten,,100,grams,,10,40,,almuerzo;cena,,,USDA,170285
+bulgur cocido,"Bulgur, cooked",carb,83,3.1,18.6,0.2,4.5,gluten,,100,grams,,10,40,,almuerzo;cena,,,USDA,170287
+trigo sarraceno cocido,"Buckwheat groats, roasted, cooked",carb,92,3.4,19.9,0.6,2.7,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,170686
+amaranto cocido,"Amaranth grain, cooked",carb,102,3.8,18.7,1.6,2.1,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,170683
+mijo cocido,"Millet, cooked",carb,119,3.5,23.7,1,1.3,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,168871
+ñame cocido,"Yam, cooked, boiled, drained, or baked, without salt",carb,116,1.5,27.5,0.1,3.9,,,100,grams,,10,40,,almuerzo;cena,,,USDA,170072
+plátano verde cocido,"Plantains, green, boiled",carb,121,1.1,29.1,0.1,2.6,,,100,grams,,10,40,,almuerzo;cena,,,USDA,168216
+papa criolla,"Potatoes, red, flesh and skin, baked",carb,87,2.3,19.6,0.1,1.8,,,100,grams,,10,40,,almuerzo;cena,,,USDA,170435
+frijoles rojos cocidos,"Beans, kidney, red, mature seeds, cooked, boiled, without salt",carb,127,8.7,22.8,0.5,7.4,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,175194
+habas cocidas,"Broadbeans (fava beans), mature seeds, cooked, boiled, without salt",carb,110,7.6,19.6,0.4,5.4,vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,173753
+avena instantánea,"Cereals, oats, instant, fortified, plain, prepared with water (boiling water added or microwaved)",carb,68,2.4,11.7,1.4,1.7,gluten,,150,grams,,20,50,,desayuno,,,USDA,171662
+crackers integrales,"Crackers, whole-wheat",carb,427,10.6,69.5,14.1,10.3,gluten,,16,grams,,8,8,,snack_am;snack_pm,,,USDA,172749
+pistachos,"Nuts, pistachio nuts, raw",fat,560,20.2,27.2,45.3,10.6,frutos_secos;vegano,,15,grams,,5,10,,snack_am;snack_pm,,,USDA,170184
+macadamias,"Nuts, macadamia nuts, raw",fat,718,7.9,13.8,75.8,8.6,frutos_secos;vegano,,15,grams,,5,10,,snack_am;snack_pm,,,USDA,170178
+marañón,"Nuts, cashew nuts, raw",fat,553,18.2,30.2,43.9,3.3,frutos_secos;vegano,,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170162
+avellanas,"Nuts, hazelnuts or filberts",fat,628,14.9,16.7,60.8,9.7,frutos_secos;vegano,,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170581
+mantequilla de marañón,"Nuts, cashew butter, plain, without salt added",fat,587,17.6,27.6,49.4,2,frutos_secos;vegano,,15,grams,,15,15,,desayuno;snack_am;snack_pm,,,USDA,170163
+semillas de linaza,"Seeds, flaxseed",fat,534,18.3,28.9,42.2,27.3,vegano,,10,grams,,5,5,,desayuno;snack_am;snack_pm,,,USDA,169414
+semillas de sésamo,"Seeds, sesame seeds, whole, dried",fat,573,17.7,23.4,49.7,11.8,vegano,,10,grams,,5,5,,almuerzo;cena,,,USDA,170150
+coco rallado,"Nuts, coconut meat, dried (desiccated), not sweetened",fat,660,6.9,23.6,64.5,16.3,vegano,,15,grams,,5,10,,desayuno;snack_am;snack_pm,,,USDA,170170
+mantequilla,"Butter, salted",fat,717,0.8,0.1,81.1,0,lacteo,,10,grams,,5,5,,desayuno,,,USDA,173410
+aceite de canola,"Oil, canola",fat,884,0,0,100,0,vegano,,10,grams,,5,10,,almuerzo;cena,,,USDA,172336
+aceite de girasol,"Oil, sunflower, high oleic (70% and over)",fat,884,0,0,100,0,vegano,,10,grams,,5,10,,almuerzo;cena,,,USDA,172338
+guayaba,"Guavas, common, raw",fruit,68,2.5,14.3,0.9,5.4,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,173044
+maracuyá,"Passion-fruit, (granadilla), purple, raw",fruit,97,2.2,23.4,0.7,10.4,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169108
+mora,"Blackberries, raw",fruit,43,1.4,9.6,0.5,5.3,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,173946
+frambuesa,"Raspberries, raw",fruit,52,1.2,11.9,0.7,6.5,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,167755
+cereza,"Cherries, sweet, raw",fruit,63,1.1,16,0.2,2.1,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,171719
+ciruela,"Plums, raw",fruit,46,0.7,11.4,0.3,1.4,,,70,whole,unidad,70,70,,desayuno;snack_am;snack_pm,,,USDA,169949
+mandarina,"Tangerines, (mandarin oranges), raw",fruit,53,0.8,13.3,0.3,1.8,,,90,whole,unidad,90,90,,desayuno;snack_am;snack_pm,,,USDA,169105
+toronja,"Grapefruit, raw, pink and red, all areas",fruit,42,0.8,10.7,0.1,1.6,,,120,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,174673
+higo,"Figs, raw",fruit,74,0.8,19.2,0.3,2.9,,,50,whole,unidad,50,50,,snack_am;snack_pm,,,USDA,173021
+dátiles,"Dates, medjool",fruit,277,1.8,75,0.1,6.7,,,24,whole,unidad,24,24,,snack_am;snack_pm,,,USDA,168191
+granada,"Pomegranates, raw",fruit,83,1.7,18.7,1.2,4,,,100,grams,,10,50,,desayuno;snack_am;snack_pm,,,USDA,169134
+albaricoque,"Apricots, raw",fruit,48,1.4,11.1,0.4,2,,,35,whole,unidad,35,35,,desayuno;snack_am;snack_pm,,,USDA,171697
+berenjena,"Eggplant, raw",vegetable,25,1,5.9,0.2,3,,,100,grams,,10,30,,almuerzo;cena,,,USDA,169228
+apio,"Celery, raw",vegetable,14,0.7,3,0.2,1.6,,,60,grams,,10,30,,snack_pm;almuerzo;cena,,,USDA,169988
+kale,"Kale, raw",vegetable,35,2.9,4.4,1.5,4.1,,,50,grams,,10,30,,desayuno;almuerzo;cena,,,USDA,168421
+repollo,"Cabbage, raw",vegetable,25,1.3,5.8,0.1,2.5,,,80,grams,,10,30,,almuerzo;cena,,,USDA,169975
+acelga,"Chard, swiss, raw",vegetable,19,1.8,3.7,0.2,1.6,,,50,grams,,10,30,,almuerzo;cena,,,USDA,169991
+rábano,"Radishes, raw",vegetable,16,0.7,3.4,0.1,1.6,,,50,grams,,10,30,,almuerzo;cena,,,USDA,169276
+remolacha,"Beets, raw",vegetable,43,1.6,9.6,0.2,2.8,,,80,grams,,10,30,,almuerzo;cena,,,USDA,169145
+espárragos,"Asparagus, raw",vegetable,20,2.2,3.9,0.1,2.1,,,90,grams,,10,30,,almuerzo;cena,,,USDA,168389
+alcachofa,"Artichokes, (globe or french), raw",vegetable,47,3.3,10.5,0.1,5.4,,,100,grams,,10,30,,almuerzo;cena,,,USDA,169205
+puerro,"Leeks, (bulb and lower leaf-portion), raw",vegetable,61,1.5,14.2,0.3,1.8,,,60,grams,,10,30,,almuerzo;cena,,,USDA,169246
+ajo,"Garlic, raw",vegetable,149,6.4,33.1,0.5,2.1,,,10,grams,,5,5,,almuerzo;cena,,,USDA,169230
+palmito,"Hearts of palm, canned",vegetable,28,2.5,4.6,0.6,2.4,,,80,grams,,10,30,,almuerzo;cena,,,USDA,168569
+ahuyama,"Pumpkin, raw",vegetable,26,1,6.5,0.1,0.5,,,100,grams,,10,30,,almuerzo;cena,,,USDA,168448
+col de bruselas,"Brussels sprouts, raw",vegetable,43,3.4,8.9,0.3,3.8,,,80,grams,,10,30,,almuerzo;cena,,,USDA,170383
