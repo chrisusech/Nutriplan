@@ -10,6 +10,7 @@ from uuid import UUID
 
 from nutriplan.adapters.render.color import MACRO_COLORS
 from nutriplan.adapters.render.view import DAY_LABELS, natural_units, portion_text
+from nutriplan.domain.meal_template import MealCatalog, expand, pool_health
 from nutriplan.domain.models import (
     Client,
     DayPlan,
@@ -29,7 +30,7 @@ from nutriplan.domain.nutrition_config import (
     PROTEIN_G_PER_KG_RANGE,
     NutritionConfig,
 )
-from nutriplan.domain.portioning import macros_of
+from nutriplan.domain.portioning import fits_protein, macros_of
 from nutriplan.domain.validation import fiber_shortfall, validate_day
 
 DAY_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -440,3 +441,54 @@ def client_card(client: Client, cycles: list[PlanCycle],
         "kcal": f"{fmt_kcal(targets.daily.kcal)} kcal" if targets else "Sin plan",
         "status": client_status(cycles),
     }
+
+
+def pool_warnings(
+    allowed: list[FoodItem],
+    catalog: MealCatalog,
+    daily: MacroTargets,
+    config: NutritionConfig,
+) -> list[dict[str, Any]]:
+    """Los slots donde el cliente tiene tan pocos platos que va a repetir.
+
+    El universo del plan sigue siendo lo que el cliente marcó que le gusta, así
+    que una lista corta condena a repetir. Esto lo hace VISIBLE en el generador —
+    antes de gastar una generación— en vez de entregar yogur siete días en
+    silencio, que es exactamente lo que pasaba.
+
+    No vive en el plan: es una propiedad de la LISTA DEL CLIENTE, no del plan. Si
+    el entrenador añade tres lácteos, el aviso tiene que desaparecer sin
+    regenerar nada.
+    """
+    if not allowed:
+        return []
+    share = dict(config.meal_distribution)
+    targets = {slot: daily.protein_g * share[slot] for slot in MealSlot}
+
+    def admissible(food: FoodItem, slot: MealSlot) -> bool:
+        return fits_protein(food, targets[slot])
+
+    pools = expand(catalog, allowed, admissible=admissible)
+    out: list[dict[str, Any]] = []
+    for warning in pool_health(pools):
+        meta = SLOT_META[warning.slot]
+        if warning.dish_count == 0:
+            message = (
+                f"No hay ninguna comida que se pueda armar para {meta['name'].lower()} "
+                f"con los alimentos marcados."
+            )
+        else:
+            message = (
+                f"Solo hay {warning.dish_count} "
+                f"{'opción' if warning.dish_count == 1 else 'opciones'} de "
+                f"{meta['name'].lower()}: se van a repetir. Marca más alimentos."
+            )
+        out.append({
+            "slot": warning.slot.value,
+            "label": meta["name"],
+            "icon": meta["icon"],
+            "count": warning.dish_count,
+            "message": message,
+            "severity": "error" if warning.dish_count == 0 else "warn",
+        })
+    return out

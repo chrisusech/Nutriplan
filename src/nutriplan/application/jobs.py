@@ -14,6 +14,7 @@ import structlog
 from nutriplan.application.export_plan import export_plan
 from nutriplan.application.generate_plan import generate_plan_for_client
 from nutriplan.domain.errors import GenerationError
+from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import Branding
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.ports.food_repository import FoodRepository
@@ -65,6 +66,7 @@ async def run_generation_job(
     model: str,
     variant: int = 0,
     duration_days: int = 15,
+    catalog: MealCatalog | None = None,
 ) -> Job:
     job = await _finish(job, job_repo, status=JobStatus.RUNNING)
     try:
@@ -88,6 +90,7 @@ async def run_generation_job(
             model=model,
             variant=variant,
             duration_days=duration_days,
+            catalog=catalog,
         )
         return await _finish(
             job,

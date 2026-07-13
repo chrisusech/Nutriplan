@@ -53,5 +53,10 @@ portioning:
   min_portion_g: 20
 generation:
   max_retries: 3                       # reintentos de selección por slot/día
-  max_protein_repeats_per_week: 3      # variedad: misma proteína máx. N veces
-  max_carb_repeats_per_week: 4
+  # Topes de variedad, POR SLOT (check_variety los suma sobre los slots donde el
+  # alimento sale). El huevo estaba en 3 y los planes reales de la entrenadora
+  # llevan huevo al desayuno 5 o 6 días de 7: era un tope que ningún plan de
+  # verdad cumple. 4 es conservador y coincide con lo que el motor heurístico ya
+  # hacía a mano (`egg_days = 4`).
+  max_protein_repeats_per_week: 4      # misma proteína, máx. N veces en un slot
+  max_carb_repeats_per_week: 4         # mismo carbohidrato, máx. N veces en un slot

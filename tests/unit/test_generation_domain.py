@@ -9,6 +9,7 @@ from tests.fixtures.plan_builder import catalog_by_name
 from nutriplan.domain.errors import GenerationError
 from nutriplan.domain.generation_rules import (
     check_variety,
+    slot_availability,
     validate_selection_structure,
 )
 from nutriplan.domain.models import (
@@ -268,18 +269,64 @@ def test_variety_flags_overuse_when_alternatives_exist(foods) -> None:
         protein = "tilapia" if i == 6 else "pechuga de pollo"
         d["meals"][2]["food_ids"] = [str(foods[protein].id), str(foods["arroz blanco cocido"].id)]
         days.append(d)
-    violations = check_variety(_selection(days), lookup, max_protein_repeats=3, max_carb_repeats=4)
-    # 2 proteínas → límite ⌈7/2⌉=4 (o el tope 3, el mayor); pollo 6× lo supera
+    violations = check_variety(
+        _selection(days),
+        lookup,
+        max_protein_repeats=3,
+        max_carb_repeats=4,
+        available=slot_availability(list(foods.values())),
+    )
+    # Hay muchas proteínas de almuerzo disponibles → el límite se queda en el tope
+    # de config (3) y el pollo, con 6 usos, lo supera.
     assert any(v.food_name == "pechuga de pollo" and v.times_used == 6 for v in violations)
 
 
-def test_variety_relaxes_when_only_one_option(foods) -> None:
-    """Lista pobre: una sola proteína viable no debe fallar la generación."""
+def test_variety_counts_a_food_across_slots_not_per_slot(foods) -> None:
+    """El mismo alimento en los dos snacks son 14 usos, no dos contadores de 7.
+
+    Este era el agujero por el que pasaba el yogur: se contaba por
+    `(alimento, slot)`, así que 7 usos en el snack de la mañana y 7 en el de la
+    tarde eran dos cuentas independientes y ninguna pasaba del límite.
+    """
     lookup = {str(f.id): f for f in foods.values()}
-    # pollo en los 7 almuerzos, pero es la única opción usada en ese slot
+    yogur = foods["yogur griego natural"]
+    days = []
+    for i in range(7):
+        d = _full_day(foods, i)
+        for meal_index in (1, 3):  # snack_am y snack_pm
+            d["meals"][meal_index]["food_ids"] = [str(yogur.id), str(foods["banano"].id)]
+        days.append(d)
+    violations = check_variety(
+        _selection(days),
+        lookup,
+        max_protein_repeats=3,
+        max_carb_repeats=4,
+        available=slot_availability(list(foods.values())),
+    )
+    entry = next(v for v in violations if v.food_name == "yogur griego natural")
+    assert entry.times_used == 14
+
+
+def test_variety_relaxes_when_only_one_option(foods) -> None:
+    """Lista pobre: una sola proteína viable no debe fallar la generación.
+
+    Repetir es inevitable, y reventar la generación no ayuda a nadie: lo que se
+    hace es AVISAR al entrenador (`meal_template.pool_health`).
+    """
+    lookup = {str(f.id): f for f in foods.values()}
+    # pollo en los 7 almuerzos, y es la única proteína de almuerzo que existe
     selection = _selection([_full_day(foods, i) for i in range(7)])
-    violations = check_variety(selection, lookup, max_protein_repeats=3, max_carb_repeats=4)
-    # límite adaptativo ⌈7/1⌉=7 → pollo 7× no se marca (nada mejor era posible)
+    only_chicken = [
+        f for f in foods.values()
+        if f.name_es == "pechuga de pollo" or f.category is not FoodCategory.PROTEIN
+    ]
+    violations = check_variety(
+        selection,
+        lookup,
+        max_protein_repeats=3,
+        max_carb_repeats=4,
+        available=slot_availability(only_chicken),
+    )
     assert not any(v.food_name == "pechuga de pollo" for v in violations)
 
 

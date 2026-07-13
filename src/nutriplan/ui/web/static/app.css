@@ -511,3 +511,20 @@ select.plain {
   .preview-actions .btn { width: 100%; }
   .gen-controls .btn-big { font-size: 14px; padding: 14px 12px; }
 }
+
+/* Aviso de pobreza de pool: el cliente tiene tan pocos alimentos marcados que su
+   plan va a repetir comidas. Se muestra ANTES de generar, para que el entrenador
+   arregle la lista en vez de gastar una generación. */
+.pool-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+.pool-warning .icon { font-size: 18px; flex: none; margin-top: 1px; }
+.pool-warning.warn { background: var(--warn-soft); color: var(--warn); }
+.pool-warning.error { background: #FBE5E5; color: #C0392B; }

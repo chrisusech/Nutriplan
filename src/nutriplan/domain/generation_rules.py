@@ -5,7 +5,8 @@ Grupos de macro dominante:
   P (proteína): PROTEIN + DAIRY · C (carbo): CARB + FRUIT · F (grasa): FAT
 """
 
-from collections import defaultdict
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -20,7 +21,10 @@ FAT_GROUP = {FoodCategory.FAT}
 class SlotStructure:
     requires_protein: bool
     requires_carb: bool
-    fruit_as_carb: bool = False  # snacks: el carbo es una fruta
+    # Los snacks exigían que su carbohidrato fuera FRUTA, sin más. Con eso, "atún
+    # con galletas de arroz" era estructuralmente ilegal. Lo que hace coherente un
+    # snack es el PLATO (nadie escribió "yogur con pan"), no prohibir los carbos.
+    fruit_as_carb: bool = False
     carb_optional: bool = False
     allows_fat_item: bool = True
     free_salad_default: bool = False
@@ -38,9 +42,8 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
     MealSlot.SNACK_AM: SlotStructure(
         requires_protein=True,
         requires_carb=True,
-        fruit_as_carb=True,
         max_items=3,
-        description="lácteo o proteína ligera + 1 fruta + 1 grasa opcional",
+        description="lácteo o proteína ligera + 1 fruta (o carbo ligero) + 1 grasa opcional",
     ),
     MealSlot.LUNCH: SlotStructure(
         requires_protein=True,
@@ -52,9 +55,8 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
     MealSlot.SNACK_PM: SlotStructure(
         requires_protein=True,
         requires_carb=True,
-        fruit_as_carb=True,
         max_items=3,
-        description="lácteo o proteína ligera + 1 fruta + 1 grasa opcional",
+        description="lácteo o proteína ligera + 1 fruta (o carbo ligero) + 1 grasa opcional",
     ),
     MealSlot.DINNER: SlotStructure(
         requires_protein=True,
@@ -158,42 +160,86 @@ def check_variety(
     *,
     max_protein_repeats: int,
     max_carb_repeats: int,
+    available: Mapping[tuple[MealSlot, FoodCategory], int] | None = None,
 ) -> list[VarietyViolation]:
-    """Variedad determinista y ADAPTATIVA a la diversidad disponible.
+    """Variedad determinista, adaptada a lo que el cliente TIENE DISPONIBLE.
 
-    Un alimento no debe repetirse en un slot más que el mínimo inevitable dado
-    cuántas opciones distintas de su categoría entraron en ese slot: con 5
-    proteínas distintas en el almuerzo, ninguna pasa de ⌈7/5⌉ = 2; con una sola
-    opción (lista pobre del cliente), el límite se relaja a 7 en vez de fallar
-    la generación. El tope de config actúa como cota superior deseada.
+    Dos cosas estaban mal y se tapaban entre sí:
+
+    1. Se contaba por `(alimento, slot)`, así que el mismo yogur en el snack de
+       la mañana y en el de la tarde eran DOS contadores independientes: 14 usos
+       en una semana pasaban limpios.
+
+    2. El límite se derivaba de las opciones que el selector había ELEGIDO, no de
+       las que había. Si el selector repetía un solo alimento, `n_distinct` valía
+       1, el límite se relajaba a 7 y 7 usos de 7 no eran violación. La regla
+       absolvía justo el caso que existía para detectar — la repetición total— y
+       solo castigaba la moderada. Un bucle que se auto-justificaba.
+
+    Ahora se cuenta por alimento en TODA la semana, y el límite se deriva de lo que
+    el cliente TIENE PARA CADA SLOT — no del total de su categoría. La diferencia
+    importa: un cliente puede tener tres proteínas y que solo una (el huevo) pueda
+    ir a un snack, porque las otras dos son pollo y atún. Contar tres cuando de
+    verdad hay una haría fallar la generación por una repetición que era
+    inevitable.
+
+    Con una lista pobre el límite es laxo a propósito: repetir es entonces
+    inevitable y reventar la generación no ayuda a nadie. Lo que se hace en ese
+    caso es AVISAR al entrenador (`meal_template.pool_health`) para que amplíe la
+    lista. La variedad de verdad la produce el motor de platos con su función de
+    coste; esta regla solo es la red que impide que el motor se acomode.
     """
-    distinct: dict[tuple[MealSlot, FoodCategory], set[str]] = defaultdict(set)
-    usage: dict[tuple[str, MealSlot], VarietyViolation] = {}
+    available = available or {}
+    usage: dict[str, VarietyViolation] = {}
+    # Cuántas comidas de la semana necesitaron cada (slot, categoría).
+    demand: Counter[tuple[MealSlot, FoodCategory]] = Counter()
+
     for day in selection.days:
         for meal in day.meals:
+            categories_here: set[FoodCategory] = set()
             for fid in meal.food_ids:
                 food = foods_by_id.get(fid)
                 if food is None or food.category not in _VARIETY_CATEGORIES:
                     continue
-                distinct[(meal.slot, food.category)].add(fid)
-                entry = usage.setdefault(
-                    (fid, meal.slot), VarietyViolation(food.name_es, 0, 0, [])
-                )
+                categories_here.add(food.category)
+                entry = usage.setdefault(fid, VarietyViolation(food.name_es, 0, 0, []))
                 entry.times_used += 1
                 entry.slots.append((day.day_index, meal.slot))
+            for category in categories_here:
+                demand[(meal.slot, category)] += 1
 
-    ndays = len(selection.days) or 7
     violations: list[VarietyViolation] = []
-    for (fid, slot), entry in usage.items():
+    for fid, entry in usage.items():
         food = foods_by_id[fid]
-        config_cap = max_protein_repeats if food.category in (
-            FoodCategory.PROTEIN, FoodCategory.DAIRY
-        ) else max_carb_repeats
-        n_distinct = len(distinct[(slot, food.category)]) or 1
-        # mínimo inevitable dado el pool; si es menor que el tope de config, se
-        # exige el tope; si el pool es tan pobre que obliga a repetir, se relaja.
-        limit = max(config_cap, ceil(ndays / n_distinct))
-        entry.limit = limit
-        if entry.times_used > limit:
+        is_protein = food.category in (FoodCategory.PROTEIN, FoodCategory.DAIRY)
+        config_cap = max_protein_repeats if is_protein else max_carb_repeats
+
+        # El techo se calcula POR SLOT —sobre los slots donde el alimento SALE— y
+        # se suma. El tope de config ("la misma proteína, máximo 3 veces por
+        # semana") se escribió cuando el conteo era por slot; aplicado de golpe a
+        # la semana entera significaría algo mucho más estricto: un huevo, que
+        # puede ir al desayuno, a los dos snacks y a la cena, no puede tener el
+        # mismo techo semanal que un salmón que solo va a almuerzo y cena.
+        # En cada slot el alimento puede salir como mucho el tope de config, o más
+        # si repetir ahí es inevitable porque no hay alternativas.
+        limit = 0
+        for slot in {slot for _day, slot in entry.slots}:
+            needed = demand.get((slot, food.category), 0)
+            options = available.get((slot, food.category), 0) or 1
+            limit += max(config_cap, ceil(needed / options))
+
+        entry.limit = max(config_cap, limit)
+        if entry.times_used > entry.limit:
             violations.append(entry)
     return violations
+
+
+def slot_availability(
+    allowed: Sequence[FoodItem],
+) -> dict[tuple[MealSlot, FoodCategory], int]:
+    """Cuántos alimentos de cada categoría puede el cliente poner en cada slot."""
+    counts: Counter[tuple[MealSlot, FoodCategory]] = Counter()
+    for food in allowed:
+        for slot in food.meal_slots:
+            counts[(slot, food.category)] += 1
+    return dict(counts)

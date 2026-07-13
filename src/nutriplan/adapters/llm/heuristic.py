@@ -20,8 +20,9 @@ from pydantic import BaseModel
 
 from nutriplan.domain import meal_affinity
 from nutriplan.domain.errors import LLMError
-from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot, UnitGranularity
+from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot
 from nutriplan.domain.nutrition_config import NutritionConfig
+from nutriplan.domain.portioning import fits_protein
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -35,33 +36,14 @@ _FALLBACK_SHARE = {
     MealSlot.SNACK_PM: 0.10,
     MealSlot.DINNER: 0.25,
 }
-# Piso de tolerancia en gramos: espeja MIN_RELEVANT_G del validador, así lo que
-# el heurístico considera "cabe" es lo que validate_day aceptará por slot.
-_PROTEIN_FLOOR_G = 10.0
-
-
 def _unit_protein(food: FoodItem) -> float:
     """Proteína por unidad servible (huevo, loncha, lata). En gramos si no hay unidad."""
     return food.protein_100g * (food.default_unit_g or 100.0) / 100.0
 
 
-def _fits_protein(food: FoodItem, target_g: float) -> bool:
-    """¿Este alimento puede cubrir la proteína del slot sin ser absurdo?
-
-    Un alimento en gramos siempre cabe (se porciona fino). Uno por unidades
-    (huevo, lata) solo cabe si algún número entero/medio de unidades aterriza
-    dentro de la tolerancia del slot: 2 huevos ≈ 12 g sirve para un snack; una
-    lata de atún (26 g) no — se pasa del objetivo de 12 g.
-    """
-    if food.unit_granularity is UnitGranularity.GRAMS or not food.default_unit_g:
-        return True
-    unit_protein = food.protein_100g * food.default_unit_g / 100.0
-    if unit_protein <= 0:
-        return True  # su rol no es la proteína (pan, aguacate)
-    step = 1.0 if food.unit_granularity is UnitGranularity.WHOLE else 0.5
-    count = max(round(target_g / unit_protein / step) * step, step)
-    tol = max(0.15 * target_g, _PROTEIN_FLOOR_G)
-    return abs(count * unit_protein - target_g) <= tol
+# `fits_protein` vive en el dominio (portioning): la usan este motor y el de
+# platos, y estaba duplicada.
+_fits_protein = fits_protein
 
 
 class HeuristicSelector:

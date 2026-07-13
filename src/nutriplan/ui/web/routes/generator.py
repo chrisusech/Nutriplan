@@ -84,17 +84,25 @@ async def _generator_context(request: Request, session: AsyncSession,
     stale = False
     day_view = None
     phases: list[PlanPhase] = []
+
+    # El conjunto permitido se calcula SIEMPRE (antes solo si ya había plan): el
+    # aviso de pobreza de pool tiene que verse ANTES de gastar una generación,
+    # para que el entrenador arregle la lista en vez de recibir yogur siete días.
+    banned = set(await repos.clients.list_banned_food_ids(client.id))
+    allowed = allowed_foods(
+        await repos.foods.get_by_ids(client.liked_food_ids),
+        client.restrictions,
+        banned,
+    )
+    catalog = container.meal_catalog
+    pool_warnings = presenter.pool_warnings(allowed, catalog, targets.daily, config)
+
     if plan is not None:
-        banned = set(await repos.clients.list_banned_food_ids(client.id))
-        allowed = allowed_foods(
-            await repos.foods.get_by_ids(client.liked_food_ids),
-            client.restrictions,
-            banned,
-        )
         prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
         current = compute_input_hash(
             client, targets, config.version, prompt.version, allowed,
             plan.variant, duration_days=plan.duration_days,
+            catalog_version=catalog.version,
         )
         stale = plan.input_hash != current
         phases = presenter.plan_phases(plan)
@@ -129,6 +137,7 @@ async def _generator_context(request: Request, session: AsyncSession,
         "formula": presenter.formula_view(client, targets, error=formula_error),
         "has_overrides": bool(targets.overrides),
         "groups": groups,
+        "pool_warnings": pool_warnings,
         "plan": plan,
         "history_count": len(cycles),
         "stale": stale,
@@ -287,6 +296,7 @@ async def _run_generation(
             llm=container.llm_client,
             prompts_dir=container.settings.prompts_dir, model=model, variant=variant,
             duration_days=duration_days,
+            catalog=container.meal_catalog,
         )
         await session.commit()
 
@@ -322,6 +332,7 @@ async def _launch_generation(request: Request, session: AsyncSession,
     input_hash = compute_input_hash(
         client, targets, config.version, prompt.version, allowed, variant,
         duration_days=duration_days,
+        catalog_version=container.meal_catalog.version,
     )
     key = f"gen:{client.id}:{input_hash[:16]}"
     tenant_id = tenant_of(request)

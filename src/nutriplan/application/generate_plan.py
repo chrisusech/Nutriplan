@@ -20,8 +20,10 @@ from nutriplan.domain.food_filter import allowed_foods
 from nutriplan.domain.generation_rules import (
     SLOT_STRUCTURE,
     check_variety,
+    slot_availability,
     validate_selection_structure,
 )
+from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import (
     Client,
     DayPlan,
@@ -65,9 +67,17 @@ def compute_input_hash(
     variant: int = 0,
     *,
     duration_days: int = 15,
+    catalog_version: str = "",
 ) -> str:
-    """Idempotencia (11.6): mismo insumo → mismo hash → mismo plan."""
+    """Idempotencia (11.6): mismo insumo → mismo hash → mismo plan.
+
+    `catalog_version` es la versión del catálogo de PLATOS. Sin ella, editar
+    meal_templates.yaml no cambia el hash, `find_by_input_hash` devuelve el plan
+    viejo y los platos nuevos no aparecen jamás — parecería que el motor está
+    roto cuando lo que está roto es la caché.
+    """
     snapshot = {
+        "catalog_version": catalog_version,
         "variant": variant,
         "duration_days": duration_days,
         "client": {
@@ -197,13 +207,30 @@ def _llm_for_phase(
     config: NutritionConfig,
     variant: int,
     phase: PlanPhase,
+    catalog: MealCatalog | None = None,
 ) -> LLMClient:
-    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+    """El motor de la fase.
 
-    if llm is None or isinstance(llm, HeuristicSelector):
-        seed = variant + (100 if phase is PlanPhase.NEXT_15 else 0)
-        return HeuristicSelector(allowed, targets.daily.protein_g, seed=seed, config=config)
-    return llm
+    Con `ANTHROPIC_API_KEY` manda el LLM real. Sin ella, el de PLATOS, que solo
+    emite combinaciones que un humano escribió. Si la lista del cliente es tan
+    corta que no da para armar ningún plato en algún slot, cae al heurístico
+    —que compone rol por rol y siempre produce algo— en vez de fallar.
+    """
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+    from nutriplan.adapters.llm.template_selector import InsufficientDishes, TemplateSelector
+
+    if llm is not None and not isinstance(llm, HeuristicSelector | TemplateSelector):
+        return llm
+
+    seed = variant + (100 if phase is PlanPhase.NEXT_15 else 0)
+    if catalog is not None:
+        try:
+            return TemplateSelector(
+                allowed, catalog, targets.daily, seed=seed, config=config
+            )
+        except InsufficientDishes as exc:
+            logger.warning("template_pool_insufficient", reason=str(exc))
+    return HeuristicSelector(allowed, targets.daily.protein_g, seed=seed, config=config)
 
 
 async def _generate_phase_week(
@@ -219,11 +246,12 @@ async def _generate_phase_week(
     phase: PlanPhase,
     duration_days: int,
     feedback: str | None,
+    catalog: MealCatalog | None = None,
 ) -> tuple[list[DayPlan], list[str]]:
     prompt = load_prompt(prompts_dir, "plan_generation")
     schema = build_selection_schema(allowed)
     foods_by_id = {str(f.id): f for f in allowed}
-    selector = _llm_for_phase(llm, allowed, targets, config, variant, phase)
+    selector = _llm_for_phase(llm, allowed, targets, config, variant, phase, catalog)
 
     user_prompt = build_selection_prompt(
         targets, allowed, config, feedback, duration_days=duration_days, phase=phase
@@ -245,6 +273,7 @@ async def _generate_phase_week(
             foods_by_id,
             max_protein_repeats=config.generation.max_protein_repeats_per_week,
             max_carb_repeats=config.generation.max_carb_repeats_per_week,
+            available=slot_availability(allowed),
         )
     ]
     days, solve_problems = _selection_to_days(
@@ -271,6 +300,7 @@ async def generate_cycle(
     model: str,
     variant: int = 0,
     duration_days: int = 15,
+    catalog: MealCatalog | None = None,
 ) -> PlanCycle:
     if duration_days not in (15, 30):
         raise GenerationError("duration_days debe ser 15 o 30")
@@ -308,6 +338,7 @@ async def generate_cycle(
                 phase=phase,
                 duration_days=duration_days,
                 feedback=feedback,
+                catalog=catalog,
             )
             problems += phase_problems
             all_days += days
@@ -361,6 +392,7 @@ async def generate_plan_for_client(
     model: str,
     variant: int = 0,
     duration_days: int = 15,
+    catalog: MealCatalog | None = None,
 ) -> PlanCycle:
     """Orquesta el plan: 15 días (1 semana) o 30 días (2 semanas en 2 fases)."""
     liked = await food_repo.get_by_ids(client.liked_food_ids)
@@ -381,6 +413,7 @@ async def generate_plan_for_client(
         allowed,
         variant,
         duration_days=duration_days,
+        catalog_version=catalog.version if catalog else "",
     )
     existing = await plan_repo.find_by_input_hash(input_hash)
     if existing:
@@ -397,6 +430,7 @@ async def generate_plan_for_client(
         model=model,
         variant=variant,
         duration_days=duration_days,
+        catalog=catalog,
     )
     await plan_repo.add(cycle)
     return cycle

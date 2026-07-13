@@ -1,0 +1,117 @@
+# Platos: las combinaciones que un nutricionista firmaría.
+#
+# Un plato declara sus componentes por ROL. Cada uno apunta a una CLASE
+# (`@lacteo_magro`) o a un alimento concreto (`#aguacate`). `optional: true` = si
+# el cliente no tiene nada que lo cubra, el plato se sirve sin él en vez de
+# descartarse.
+#
+# Máximo 4 componentes: `build_selection_schema` no admite más alimentos por comida.
+#
+# `version` entra en compute_input_hash: si añades un plato, los planes se
+# regeneran en vez de servirse de la caché.
+version: "2026.07.13"
+
+templates:
+  # ---------------------------------------------------------------- DESAYUNO --
+
+  - id: huevos_carbo_grasa
+    name: Huevos con carbohidrato y grasa
+    slots: [desayuno]
+    components:
+      - {role: protein, sel: "@huevos"}
+      - {role: carb, sel: "@carbo_desayuno"}
+      - {role: fat, sel: "@grasa_desayuno", optional: true}
+
+  - id: bowl_lacteo_avena_fruta
+    name: Bowl de lácteo con avena y fruta
+    slots: [desayuno]
+    components:
+      - {role: protein, sel: "@lacteo_magro"}
+      - {role: carb, sel: "@avena"}
+      - {role: fruit, sel: "@fruta_bowl"}
+
+  - id: lacteo_carbo_crema
+    name: Lácteo con tostada y crema de frutos secos
+    slots: [desayuno]
+    components:
+      - {role: protein, sel: "@lacteo_magro"}
+      - {role: carb, sel: "@carbo_desayuno"}
+      - {role: fat, sel: "@crema_frutos_secos"}
+
+  - id: batido_avena_fruta
+    name: Batido de proteína con avena y fruta
+    slots: [desayuno]
+    components:
+      - {role: protein, sel: "@batido"}
+      - {role: carb, sel: "@avena"}
+      - {role: fruit, sel: "@fruta_bowl"}
+
+  - id: loncha_carbo_aguacate
+    name: Tostada con loncha y aguacate
+    slots: [desayuno]
+    components:
+      - {role: protein, sel: "@loncha"}
+      - {role: carb, sel: "@carbo_desayuno"}
+      - {role: fat, sel: "#aguacate"}
+
+  # ------------------------------------------------------------------ SNACKS --
+  # Los snacks NO tienen por qué girar en torno al lácteo. Ese era justo el
+  # problema: un cliente con un solo yogur en su lista lo comía catorce veces por
+  # semana. Fruta con crema de frutos secos, o huevo duro con fruta, son snacks
+  # perfectamente legítimos y no necesitan un lácteo.
+
+  - id: lacteo_fruta
+    name: Lácteo con fruta
+    slots: [snack_am, snack_pm]
+    components:
+      - {role: protein, sel: "@lacteo_magro"}
+      - {role: fruit, sel: "@fruta"}
+
+  - id: lacteo_fruta_frutos_secos
+    name: Lácteo con fruta y frutos secos
+    slots: [snack_am, snack_pm]
+    components:
+      - {role: protein, sel: "@lacteo_magro"}
+      - {role: fruit, sel: "@fruta"}
+      - {role: fat, sel: "@frutos_secos"}
+
+  - id: huevo_duro_fruta
+    name: Huevo duro con fruta
+    slots: [snack_am, snack_pm]
+    components:
+      - {role: protein, sel: "@huevos"}
+      - {role: fruit, sel: "@fruta"}
+
+  - id: loncha_carbo_snack
+    name: Loncha con galletas o tostada
+    slots: [snack_am, snack_pm]
+    components:
+      - {role: protein, sel: "@loncha"}
+      - {role: carb, sel: "@carbo_snack"}
+
+  - id: batido_fruta
+    name: Batido de proteína con fruta
+    slots: [snack_am, snack_pm]
+    components:
+      - {role: protein, sel: "@batido"}
+      - {role: fruit, sel: "@fruta"}
+
+  # --------------------------------------------------------- ALMUERZO / CENA --
+
+  - id: proteina_carbo_ensalada
+    name: Proteína con carbohidrato y ensalada
+    slots: [almuerzo, cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@carne_magra"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "@grasa_cocina", optional: true}
+
+  - id: proteina_carbo_aguacate
+    name: Proteína con carbohidrato y aguacate
+    slots: [almuerzo, cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@carne_magra"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "#aguacate"}

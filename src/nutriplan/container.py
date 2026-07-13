@@ -31,9 +31,11 @@ from nutriplan.adapters.db.repositories import (
 )
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.adapters.db.session import create_engine, create_session_factory
+from nutriplan.adapters.meals.template_store import cached_meal_catalog
 from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer
 from nutriplan.config.settings import Settings, get_settings
+from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import Branding
 from nutriplan.observability.logging import configure_logging
 from nutriplan.ports.llm_client import LLMClient
@@ -95,6 +97,13 @@ class Container:
     @cached_property
     def config_provider(self) -> YamlConfigProvider:
         return YamlConfigProvider(self.settings.nutrition_config_path)
+
+    @cached_property
+    def meal_catalog(self) -> MealCatalog:
+        """El catálogo de platos. Un YAML mal formado revienta aquí, al arrancar."""
+        return cached_meal_catalog(
+            self.settings.food_classes_path, self.settings.meal_templates_path
+        )
 
     @cached_property
     def llm_client(self) -> LLMClient | None:

@@ -1,0 +1,129 @@
+# Clases de alimentos: predicados sobre el catálogo.
+#
+# Una clase es un AND de sus campos; los que faltan no filtran. La afinidad por
+# comida (`meal_slots`) la declara siempre el alimento: una clase solo puede
+# estrecharla, nunca ensancharla.
+#
+# `version` entra en compute_input_hash: si cambias una clase, los planes se
+# regeneran en vez de servirse de la caché.
+version: "2026.07.13"
+
+classes:
+  # --- Proteínas -------------------------------------------------------------
+
+  huevos:
+    label: huevos
+    categories: [protein]
+    all_tags: [huevo]
+
+  # El plato principal: lo salado. Magro, porque la grasa del día vive en los
+  # ítems de grasa, no escondida en la carne.
+  carne_magra:
+    label: carne, pescado o marisco magro
+    categories: [protein]
+    none_tags: [huevo, batido]
+    slots_any: [almuerzo, cena]
+    min_per_100g: {protein_100g: 18.0}
+    max_ratio:
+      fat_100g: {of: protein_100g, value: 0.5}
+
+  # Lácteo con proteína de verdad y poca grasa. Deja fuera al yogur natural
+  # (3.5 g de proteína) y al cheddar (34 g de grasa): el primero no sostiene un
+  # desayuno, el segundo se come el presupuesto de grasa del día.
+  lacteo_magro:
+    label: lácteo magro
+    categories: [dairy]
+    min_per_100g: {protein_100g: 8.0}
+    max_per_100g: {fat_100g: 5.0}
+
+  batido:
+    label: batido de proteína
+    categories: [protein]
+    all_tags: [batido]
+
+  # Loncha o porción unitaria pequeña: jamón, queso fresco, sardinas.
+  # El tope de grasa NO es cosmético: sin él, el cheddar (34 g/100 g) entra aquí
+  # como "loncha", mete diez gramos de grasa escondida en una comida que vale el
+  # 10% del día, y el presupuesto de grasa se agota antes de llegar a los ítems de
+  # grasa —que ya no pueden bajar de su porción mínima—. El reparador entonces
+  # recorta la PROTEÍNA para compensar y la comida se queda sin ella.
+  loncha:
+    label: loncha o lata pequeña
+    categories: [protein, dairy]
+    unit_granularity: whole
+    max_unit_g: 35.0
+    max_per_100g: {fat_100g: 25.0}
+
+  # --- Carbohidratos ---------------------------------------------------------
+
+  # El `max_ratio` deja fuera las legumbres: son carbo Y proteína a la vez, y el
+  # solver reparte por roles — una fuente que cubre dos macros rompe la premisa.
+  carbo_desayuno:
+    label: carbohidrato de desayuno
+    categories: [carb]
+    slots_any: [desayuno]
+    min_per_100g: {carb_100g: 20.0}
+    max_ratio:
+      protein_100g: {of: carb_100g, value: 0.3}
+
+  carbo_principal:
+    label: carbohidrato principal
+    categories: [carb]
+    slots_any: [almuerzo, cena]
+    min_per_100g: {carb_100g: 20.0}
+    max_ratio:
+      protein_100g: {of: carb_100g, value: 0.3}
+
+  carbo_snack:
+    label: carbohidrato de snack
+    categories: [carb]
+    slots_any: [snack_am, snack_pm]
+
+  avena:
+    label: avena
+    categories: [carb]
+    names_any: [avena en hojuelas, avena instantánea]
+
+  # --- Frutas y grasas -------------------------------------------------------
+
+  fruta:
+    label: fruta
+    categories: [fruit]
+
+  # Fruta que pega en un bowl: bayas y trozos pequeños, no medio melón.
+  fruta_bowl:
+    label: fruta de bowl
+    categories: [fruit]
+    names_any:
+      [fresa, arándanos, mora, frambuesa, banano, mango, papaya, kiwi, durazno, cereza]
+
+  crema_frutos_secos:
+    label: mantequilla de frutos secos
+    categories: [fat]
+    names_any:
+      [mantequilla de maní, mantequilla de almendras, mantequilla de marañón, tahini]
+
+  # Frutos secos y semillas enteros, para picar.
+  frutos_secos:
+    label: frutos secos o semillas
+    categories: [fat]
+    slots_any: [snack_am, snack_pm]
+    any_tags: [frutos_secos]
+
+  # La grasa que acompaña un desayuno: aguacate, crema de frutos secos, semillas.
+  # Nada de aceite: nadie se toma una cucharada de aceite de oliva a las 7 am.
+  grasa_desayuno:
+    label: grasa de desayuno
+    categories: [fat]
+    slots_any: [desayuno]
+    max_per_100g: {protein_100g: 25.0}
+
+  grasa_cocina:
+    label: grasa de cocina
+    categories: [fat]
+    slots_any: [almuerzo, cena]
+
+  aguacate:
+    label: aguacate
+    categories: [fat]
+    names_any: [aguacate]

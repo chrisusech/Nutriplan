@@ -44,6 +44,14 @@ class Settings(BaseSettings):
         return self.project_root / "prompts"
 
     @property
+    def food_classes_path(self) -> Path:
+        return self.project_root / "data" / "meals" / "food_classes.yaml"
+
+    @property
+    def meal_templates_path(self) -> Path:
+        return self.project_root / "data" / "meals" / "meal_templates.yaml"
+
+    @property
     def branding_dir(self) -> Path:
         return self.project_root / "config" / "branding"
 

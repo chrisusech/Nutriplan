@@ -139,6 +139,16 @@
         <div class="card-title" style="margin-bottom:3px">Alimentos que le gustan</div>
         <div class="card-sub">Toca para incluir o quitar</div>
       </div>
+
+      {# Avisa ANTES de generar: con pocos alimentos marcados, el plan repite. Es
+         lo que evita volver a entregar el mismo yogur siete días en silencio. #}
+      {% for w in ctx.pool_warnings %}
+      <div class="pool-warning {{ w.severity }}">
+        <span class="icon">{{ w.icon }}</span>
+        <span>{{ w.message }}</span>
+      </div>
+      {% endfor %}
+
       {% for g in ctx.groups %}
       <div class="food-group">
         <div class="head"><span class="icon">{{ g.icon }}</span><span>{{ g.label }}</span></div>

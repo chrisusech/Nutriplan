@@ -34,12 +34,36 @@ from nutriplan.domain.models import (
     MacroTargets,
     MealFoodPortion,
     MealSlot,
+    UnitGranularity,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.validation import MIN_RELEVANT_G
 
 MAX_PORTION_G = 600.0
 FIXED_POINT_ITERATIONS = 10
+
+
+def fits_protein(food: FoodItem, target_g: float) -> bool:
+    """¿Este alimento puede cubrir la proteína del slot sin ser absurdo?
+
+    Un alimento que se pesa en gramos siempre cabe: se porciona fino. Uno que va
+    por unidades (huevo, lata, loncha) solo cabe si algún número entero o medio de
+    unidades aterriza dentro de la tolerancia del slot: 2 huevos ≈ 12 g sirven
+    para un snack; una lata de atún (26 g) no — se pasa del objetivo de 12 g y no
+    hay forma de bajarla.
+
+    Vive aquí, y no en el motor, porque la usan los dos: el heurístico para armar
+    sus pools y el de platos para decidir qué ancla proteica es admisible.
+    """
+    if food.unit_granularity is UnitGranularity.GRAMS or not food.default_unit_g:
+        return True
+    unit_protein = food.protein_100g * food.default_unit_g / 100.0
+    if unit_protein <= 0:
+        return True  # su rol no es la proteína (pan, aguacate)
+    step = 1.0 if food.unit_granularity is UnitGranularity.WHOLE else 0.5
+    count = max(round(target_g / unit_protein / step) * step, step)
+    tol = max(0.15 * target_g, MIN_RELEVANT_G)
+    return abs(count * unit_protein - target_g) <= tol
 
 
 def _cap_g(food: FoodItem) -> float:
