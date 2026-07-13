@@ -1,5 +1,7 @@
 """Módulo 5: snapshot del HTML intermedio + smoke de PDF y DOCX."""
 
+import re
+import zlib
 from io import BytesIO
 
 import pytest
@@ -36,12 +38,13 @@ def test_html_contains_business_format(fixed_plan) -> None:
         assert label in html
     for day in ("Lunes", "Domingo"):
         assert day in html
-    assert "Anotaciones importantes" in html
+    assert "Anotaciones Importantes" in html
     assert "Ensalada libre" in html
     assert "Valeria Fit" in html
+    assert "@valeria.fit" in html  # el handle, que antes nunca se pintaba
     assert "2 huevos (100 g)" in html
     assert "Totales día" in html
-    assert "Objetivo diario" in html
+    assert "Tu objetivo diario" in html
     assert "Plan 15 días (1 semana)" in html
     assert "<table" in html
     assert "Cliente Ejemplo" in html
@@ -63,8 +66,8 @@ def test_thirty_day_pdf_has_two_week_grids(fixed_plan) -> None:
     plan = plan.model_copy(update={"duration_days": 30, "days": plan.days + second_week})
     html = render_plan_html(plan, branding, foods, client_name="Cliente")
     assert html.count('<table class="grid">') == 2
-    assert "Semana 1" in html
-    assert "Semana 2" in html
+    assert "primeros 15 días" in html
+    assert "próximos 15 días" in html
     assert "Plan 30 días (2 semanas)" in html
 
 
@@ -73,6 +76,45 @@ async def test_pdf_renders(fixed_plan) -> None:
     pdf = await WeasyPrintRenderer().render(plan, branding, foods, "pdf")
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 10_000
+
+
+def _pdf_font_names(pdf: bytes) -> set[str]:
+    """Los /BaseFont del PDF. Van dentro de object streams comprimidos, así que un
+    grep sobre los bytes crudos no los ve — y daría un falso negativo."""
+    names: set[str] = set()
+    for match in re.finditer(rb"stream\r?\n", pdf):
+        start = match.end()
+        end = pdf.find(b"endstream", start)
+        try:
+            blob = zlib.decompress(pdf[start:end])
+        except zlib.error:
+            continue
+        for font in re.findall(rb"/BaseFont\s*/([A-Za-z0-9+\-]+)", blob):
+            names.add(font.decode("latin1"))
+    return names
+
+
+async def test_pdf_embeds_poppins(fixed_plan) -> None:
+    """La fuente de marca tiene que VIAJAR dentro del PDF.
+
+    WeasyPrint no descarga webfonts declaradas solo con `font-family`, y además
+    ignora el @font-face EN SILENCIO si no se le pasa un FontConfiguration: el
+    PDF salía en Helvetica mientras la app usaba Poppins y ningún test lo veía,
+    porque todos miraban el HTML en vez de los bytes del PDF.
+    """
+    plan, foods, branding = fixed_plan
+    pdf = await WeasyPrintRenderer().render(plan, branding, foods, "pdf")
+    fonts = _pdf_font_names(pdf)
+    assert any("Poppins" in f for f in fonts), fonts
+    assert not any("Helvetica" in f for f in fonts), fonts
+
+
+async def test_pdf_uses_the_tenant_brand_color(fixed_plan) -> None:
+    """El PDF pinta el coral de la app, no el verde del default viejo."""
+    plan, foods, branding = fixed_plan
+    html = render_plan_html(plan, branding, foods, client_name="Cliente")
+    assert "--brand: #F26D5B" in html
+    assert "#2E7D32" not in html
 
 
 async def test_docx_renders_and_reopens(fixed_plan) -> None:

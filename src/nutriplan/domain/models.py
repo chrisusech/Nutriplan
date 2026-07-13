@@ -387,8 +387,11 @@ class PlanSelection(BaseModel):
 class Branding(BaseModel):
     tenant_name: str
     logo_path: str | None = None
-    primary_color: str = "#2E7D32"
-    accent_color: str = "#F9A825"
+    # El coral de la app. Antes el default era un verde que contradecía a
+    # `branding_store.DEFAULT_BRANDING`: cualquier tenant creado sin elegir color
+    # se guardaba en verde, y el PDF salía de otro producto que la web.
+    primary_color: str = "#F26D5B"
+    accent_color: str = "#F0925E"
     handle: str | None = None  # @instagram u otro
 
 

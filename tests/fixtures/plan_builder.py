@@ -80,8 +80,8 @@ def build_fixed_plan() -> tuple[PlanCycle, dict, Branding]:
     branding = Branding(
         tenant_name="Valeria Fit",
         handle="@valeria.fit",
-        primary_color="#2E7D32",
-        accent_color="#F9A825",
+        primary_color="#F26D5B",
+        accent_color="#F0925E",
     )
     food_lookup = {f.id: f for f in foods.values()}
     return plan, food_lookup, branding

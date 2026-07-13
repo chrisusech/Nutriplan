@@ -49,16 +49,32 @@ SLOT_TIMES: dict[MealSlot, str] = {
     MealSlot.DINNER: "7:30 pm",
 }
 
-# Sección fija del formato del negocio (sección 12.2).
+# Sección fija del formato del negocio (sección 12.2). Es el texto REAL de los
+# planes que entrega la entrenadora. La versión anterior decía "pesar los
+# alimentos ya cocidos", que contradice el plan de verdad: las proteínas se pesan
+# en CRUDO y los carbohidratos ya cocidos.
 ANOTACIONES_IMPORTANTES = [
-    "Pesar los alimentos ya cocidos, con gramera.",
-    "Tomar mínimo 2 litros de agua al día.",
-    "La ensalada es libre: verduras verdes, tomate, cebolla, limón y especias sin restricción.",
-    "Cocinar con poco aceite (medir el que indica el plan) y preferir aire, horno o plancha.",
-    "Respetar los horarios de las 5 comidas; no saltarse ninguna.",
-    "Endulzantes sin calorías permitidos con moderación; evitar azúcar y bebidas azucaradas.",
-    "Este plan es un borrador profesional revisado y aprobado por tu entrenador(a).",
+    "El plan consta de 5 comidas: desayuno, snack AM, almuerzo, snack PM y cena.",
+    "Las proteínas se pesan en CRUDO.",
+    "Los carbohidratos se miden ya COCIDOS.",
+    "Los huevos los puedes preparar como gustes, incluso con los vegetales que "
+    "desees, excepto fritos (evitar exceso de aceite).",
+    "La gelatina sin azúcar la puedes comer cuando quieras.",
+    "Puedes comer 3 cuadritos de chocolate 80% cacao todos los días, MENOS sábado "
+    "y domingo.",
+    "La comida libre puedes hacerla el sábado o el domingo, según prefieras.",
+    "Alimentos libres: café sin azúcar, aromática sin azúcar, todos los vegetales "
+    "que quieras y bebidas sin azúcar ni calorías.",
+    "Las comidas son cada 2 a 3 horas.",
 ]
+
+# Encabezado de cada rejilla, con el tono de los planes reales.
+PHASE_INTRO: dict[PlanPhase, str] = {
+    PlanPhase.FIRST_15: "Para tus primeros 15 días, tu plan personalizado está "
+                        "inspirado en lo que te gusta:",
+    PlanPhase.NEXT_15: "Para tus próximos 15 días, tu plan personalizado está "
+                       "inspirado en lo que te gusta:",
+}
 
 
 @dataclass

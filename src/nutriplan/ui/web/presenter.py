@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from nutriplan.adapters.render.color import MACRO_COLORS
 from nutriplan.adapters.render.view import DAY_LABELS, natural_units, portion_text
 from nutriplan.domain.models import (
     Client,
@@ -106,15 +107,17 @@ SLOT_META: dict[MealSlot, dict[str, str]] = {
     MealSlot.DINNER: {"name": "Cena", "time": "7:30 pm", "icon": "dinner_dining"},
 }
 
+# La paleta la manda `adapters.render.color`, que también la usa el PDF: si vive
+# solo aquí, el PDF no puede pintar los colores por macro sin que un adapter
+# importe de la UI. El icono sí es de la web (Material Symbols).
+_MACRO_ICONS = {
+    "kcal": "local_fire_department",
+    "protein_g": "egg_alt",
+    "carb_g": "bakery_dining",
+    "fat_g": "water_drop",
+}
 MACRO_META = [
-    {"key": "kcal", "label": "Calorías", "unit": "kcal", "color": "#F2704F",
-     "soft": "#FCE9E3", "icon": "local_fire_department"},
-    {"key": "protein_g", "label": "Proteína", "unit": "g", "color": "#E8607A",
-     "soft": "#FBE5EC", "icon": "egg_alt"},
-    {"key": "carb_g", "label": "Carbos", "unit": "g", "color": "#E0A537",
-     "soft": "#FBF0DA", "icon": "bakery_dining"},
-    {"key": "fat_g", "label": "Grasas", "unit": "g", "color": "#B08968",
-     "soft": "#F3EBE3", "icon": "water_drop"},
+    {"key": key, "icon": _MACRO_ICONS[key], **meta} for key, meta in MACRO_COLORS.items()
 ]
 
 GOAL_META: dict[Goal, dict[str, str]] = {
