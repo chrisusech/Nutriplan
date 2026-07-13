@@ -1,4 +1,4 @@
-"""Portion solver v1 por roles (sección 11.3) — determinista, sin IA.
+"""Portion solver por roles (sección 11.3) — determinista, sin IA.
 
 Estrategia:
 1. Proteína y carbohidratos se resuelven POR SLOT contra el reparto de la
@@ -7,14 +7,19 @@ Estrategia:
 2. La grasa cierra A NIVEL DE DÍA: los ítems de grasa explícitos absorben la
    grasa faltante tras contar la que ya traen proteínas y carbos. (Un snack
    de yogur+fruta no puede aportar la grasa de su % de kcal; esa cuota vive
-   donde hay fuente real — instancia válida de la estrategia de la spec.)
-3. Redondeo a múltiplos de grams_rounding, respetando min_portion_g.
+   donde hay fuente real.)
+3. Cada porción aterriza en la REJILLA de su alimento: el huevo salta de 50 en
+   50, el arroz de 10 en 10. Nadie pesa 137 g.
+4. El residuo del redondeo se repara con una búsqueda local entera. Los pasos 1
+   y 2 son continuos y la rejilla no lo es: un huevo de más son 143 kcal, y ese
+   error no lo absorbe nadie por su cuenta.
 
 El código es dueño de los números: `computed` SIEMPRE se recalcula desde los
 gramos finales y la base de alimentos.
 """
 
 from dataclasses import dataclass
+from math import ceil
 
 from nutriplan.domain.errors import GenerationError
 from nutriplan.domain.generation_rules import (
@@ -29,12 +34,19 @@ from nutriplan.domain.models import (
     MacroTargets,
     MealFoodPortion,
     MealSlot,
-    UnitGranularity,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
+from nutriplan.domain.validation import MIN_RELEVANT_G
 
 MAX_PORTION_G = 600.0
 FIXED_POINT_ITERATIONS = 10
+
+
+def _cap_g(food: FoodItem) -> float:
+    """Tope de porción de un alimento (p. ej. aceitunas ≤ 30 g)."""
+    if food.portion_max_g is not None:
+        return min(food.portion_max_g, MAX_PORTION_G)
+    return MAX_PORTION_G
 
 
 @dataclass
@@ -44,32 +56,32 @@ class SolvedMeal:
     computed: MacroTargets
 
 
-def _round_portion(
-    grams: float, cfg: NutritionConfig, food: FoodItem, *, is_fat: bool = False
-) -> float:
-    """Redondea la porción a algo que un humano sirve de verdad.
+def _grid(food: FoodItem, cfg: NutritionConfig) -> tuple[float, float]:
+    """Paso y piso de un alimento, ya alineados entre sí.
 
-    Alimentos contables (huevo, lata de atún, aguacate, pan) se cuantizan a la
-    unidad — enteros o medios según su `unit_granularity` — así el plan nunca
-    pide '5.5 huevos'. El resto sigue en gramos libres (múltiplos de 5 g).
+    El paso lo declara el alimento (un huevo salta de 50 en 50, el arroz de 10 en
+    10): la báscula la usa una persona, y es más fácil pesar 120 o 150 g que 137.
+    El piso se sube al paso — un mínimo de 20 g con un paso de 15 (una cucharada)
+    devolvería 20 g, que no es ninguna cucharada real.
     """
-    if food.unit_granularity is not UnitGranularity.GRAMS and food.default_unit_g:
-        unit = food.default_unit_g
-        step_g = unit if food.unit_granularity is UnitGranularity.WHOLE else unit / 2.0
-        n = round(grams / step_g)
-        if n <= 0:
-            return 0.0  # el llamador la descarta; una comida no lleva 0.4 huevos
-        return float(min(n * step_g, MAX_PORTION_G))
+    step = food.portion_step_g or float(cfg.portioning.grams_rounding)
+    floor = food.portion_min_g or float(cfg.portioning.min_portion_g)
+    return step, ceil(floor / step) * step
 
-    step = cfg.portioning.grams_rounding
-    rounded = round(grams / step) * step
-    if rounded <= 0:
+
+def _round_portion(grams: float, cfg: NutritionConfig, food: FoodItem) -> float:
+    """Redondea la porción a algo que una persona sirve y pesa de verdad.
+
+    Devuelve 0.0 si no llega ni a un paso: el llamador decide si la sube al piso
+    (el slot exige ese macro) o la descarta (era opcional).
+    """
+    if food.is_free:
         return 0.0
-    # Las grasas puras (aceites) admiten porciones pequeñas (una cucharada ≈ 15 g):
-    # forzarlas al mínimo general de 20 g deja días en una zona muerta donde ni
-    # con ni sin el ítem cuadra la grasa.
-    floor = step if is_fat else cfg.portioning.min_portion_g
-    return float(min(max(rounded, floor), MAX_PORTION_G))
+    step, floor = _grid(food, cfg)
+    n = round(grams / step)
+    if n <= 0:
+        return 0.0
+    return float(min(max(n * step, floor), _cap_g(food)))
 
 
 def macros_of(portions: list[tuple[FoodItem, float]]) -> MacroTargets:
@@ -83,6 +95,7 @@ def macros_of(portions: list[tuple[FoodItem, float]]) -> MacroTargets:
         protein_g=total("protein_100g"),
         carb_g=total("carb_100g"),
         fat_g=total("fat_100g"),
+        fiber_g=total("fiber_100g"),
     )
 
 
@@ -158,7 +171,7 @@ def solve_day_portions(
                         raise GenerationError(
                             f"{f.name_es} no aporta {attr}; selección inválida"
                         )
-                    grams[(slot, str(f.id))] = min(share / density, MAX_PORTION_G)
+                    grams[(slot, str(f.id))] = min(share / density, _cap_g(f))
 
         # --- Paso 2 (dentro del punto fijo): la grasa cierra a nivel de día.
         # Un ítem de grasa puede traer proteína/carbo (maní, aguacate); al
@@ -169,21 +182,53 @@ def solve_day_portions(
             for f in foods
             if f.category not in FAT_GROUP
         )
-        fat_needed = daily.fat_g - fat_so_far
+        fat_needed = max(daily.fat_g - fat_so_far, 0.0)
+        # El reparto va PONDERADO por el peso del slot, no a partes iguales: un
+        # snack que vale el 10% del día no puede llevarse la misma grasa que un
+        # almuerzo del 30%. Con grasa permitida en los snacks, los ítems pasaron
+        # de 3 a 5 y el reparto uniforme dejaba 2 cucharadas de maní a media
+        # mañana y un almuerzo sin aceite.
         if fat_items:
-            share = max(fat_needed, 0.0) / len(fat_items)
+            total_weight = sum(distribution[slot] for slot, _f in fat_items)
             for slot, f in fat_items:
-                grams[(slot, str(f.id))] = min(share / (f.fat_100g / 100.0), MAX_PORTION_G)
+                weight = (
+                    distribution[slot] / total_weight
+                    if total_weight > 0
+                    else 1.0 / len(fat_items)
+                )
+                share = fat_needed * weight
+                grams[(slot, str(f.id))] = min(share / (f.fat_100g / 100.0), _cap_g(f))
 
-    # --- Paso 3: redondeo y recálculo (el código es dueño de los números)
+    # --- Paso 3: aterrizar en la rejilla de cada alimento
+    for slot, foods in meals:
+        rule = SLOT_STRUCTURE[slot]
+        for f in foods:
+            key = (slot, str(f.id))
+            g = _round_portion(grams[key], config, f)
+            if g == 0.0 and not f.is_free:
+                # Redondeó a nada. Si el slot EXIGE ese macro, se sube al piso;
+                # si era opcional (el carbo de la cena), se descarta — que es
+                # justo la "cena sin carbohidrato" de los planes reales.
+                required = (rule.requires_protein and f.category in PROTEIN_GROUP) or (
+                    rule.requires_carb
+                    and not rule.carb_optional
+                    and f.category in CARB_GROUP
+                )
+                if required:
+                    g = _grid(f, config)[1]
+            grams[key] = g
+
+    # --- Paso 4: reparar el residuo del redondeo.
+    # El punto fijo es continuo; la rejilla no. Un huevo de más son 143 kcal, y
+    # ese error no lo absorbe nadie solo. Sin este paso, los pasos gruesos sacan
+    # el día de tolerancia y `generate_cycle` agota los reintentos.
+    _repair_residual(grams, meals, daily, config)
+
+    # --- Paso 5: recálculo (el código es dueño de los números)
     solved: list[SolvedMeal] = []
     for slot, foods in meals:
-        final: list[tuple[FoodItem, float]] = []
-        for f in foods:
-            g = _round_portion(grams[(slot, str(f.id))], config, f,
-                               is_fat=f.category in FAT_GROUP)
-            if g > 0:
-                final.append((f, g))
+        final = [(f, grams[(slot, str(f.id))]) for f in foods
+                 if grams[(slot, str(f.id))] > 0]
         if not final:
             raise GenerationError(f"Slot {slot.value}: ninguna porción resuelta")
         solved.append(
@@ -194,3 +239,160 @@ def solve_day_portions(
             )
         )
     return solved
+
+
+_MACRO_ATTR = {
+    "kcal": "kcal_100g",
+    "protein_g": "protein_100g",
+    "carb_g": "carb_100g",
+    "fat_g": "fat_100g",
+}
+MAX_REPAIR_MOVES = 80
+
+Key = tuple[MealSlot, str]
+
+
+@dataclass
+class _Term:
+    """Un objetivo que la reparación intenta cumplir.
+
+    Son exactamente los que mira `validate_day`: los 4 macros del día, y la
+    proteína y el carbohidrato de cada slot. Si solo se optimizara el día, la
+    reparación cuadraría el total robándole el carbohidrato al desayuno —
+    aritmética impecable, comida sin sentido.
+
+    El coste replica el criterio del validador, banda muerta incluida: dentro de
+    la tolerancia no cuesta nada (el objetivo ya está cumplido, no hay que
+    afinar más), y fuera crece rápido. Sin la banda, la reparación optimizaría
+    términos que al validador le dan igual a costa de los que no.
+    """
+
+    target: float
+    allowance: float  # lo que `validate_day` deja pasar sin quejarse
+    density: dict[Key, float]  # aporte por gramo de cada ítem
+    actual: float = 0.0
+
+    def cost(self, actual: float) -> float:
+        off = abs(actual - self.target) / self.allowance
+        excess = max(0.0, off - 1.0)
+        # El segundo término solo desempata: dentro de la banda hay un gradiente
+        # suave hacia el centro, para que la búsqueda no se quede en una meseta.
+        return excess**2 + 1e-3 * off**2
+
+
+def _repair_residual(
+    grams: dict[Key, float],
+    meals: list[tuple[MealSlot, list[FoodItem]]],
+    daily: MacroTargets,
+    config: NutritionConfig,
+    locked: frozenset[Key] = frozenset(),
+    protein_relaxed_slots: frozenset[MealSlot] = frozenset(),
+) -> None:
+    """Descenso por coordenadas sobre la rejilla, hasta que ningún paso mejore.
+
+    Determinista y sin aleatoriedad: el orden de los candidatos es fijo, así que
+    el mismo día siempre repara igual. Se prueban de más fino a más grueso — el
+    pollo (paso 10 g) absorbe el error que el huevo (paso 50 g) no puede.
+    """
+    tol = config.tolerances
+    tolerances = {
+        "kcal": tol.kcal,
+        "protein_g": tol.protein_g,
+        "carb_g": tol.carb_g,
+        "fat_g": tol.fat_g,
+    }
+    items: list[tuple[Key, FoodItem]] = [
+        ((slot, str(f.id)), f) for slot, foods in meals for f in foods if not f.is_free
+    ]
+
+    terms: list[_Term] = []
+    for macro, attr in _MACRO_ATTR.items():
+        target = getattr(daily, macro)
+        if target > 0:
+            allowance = target * tolerances[macro]
+            terms.append(
+                _Term(target, allowance, {k: getattr(f, attr) / 100.0 for k, f in items})
+            )
+    # Por slot solo proteína y carbo, igual que validate_day — y con su mismo
+    # piso absoluto: un objetivo de 9.9 g admite ±10 g. Antes estos términos se
+    # SALTABAN por pequeños, así que la reparación inflaba el requesón del snack
+    # a 200 g sin coste alguno mientras el validador sí lo rechazaba.
+    for slot, foods in meals:
+        pct = config.meal_distribution[slot]
+        for macro in ("protein_g", "carb_g"):
+            if macro == "protein_g" and slot in protein_relaxed_slots:
+                continue
+            target = getattr(daily, macro) * pct
+            if target <= 0:
+                continue
+            attr = _MACRO_ATTR[macro]
+            allowance = max(target * tolerances[macro], MIN_RELEVANT_G)
+            terms.append(
+                _Term(
+                    target,
+                    allowance,
+                    {(slot, str(f.id)): getattr(f, attr) / 100.0 for f in foods if not f.is_free},
+                )
+            )
+
+    terms_of: dict[Key, list[_Term]] = {k: [] for k, _ in items}
+    for term in terms:
+        term.actual = sum(d * grams[k] for k, d in term.density.items())
+        for k in term.density:
+            terms_of[k].append(term)
+
+    candidates = sorted(
+        (pair for pair in items if pair[0] not in locked),
+        key=lambda pair: (pair[1].portion_step_g, pair[1].name_es, pair[0][1]),
+    )
+    if not candidates:
+        return
+
+    for _ in range(MAX_REPAIR_MOVES):
+        best_gain = 1e-9
+        move: tuple[Key, float, list[tuple[_Term, float]]] | None = None
+        for key, food in candidates:
+            current = grams[key]
+            step, floor = _grid(food, config)
+            for delta in (step, -step):
+                new = current + delta
+                # No se baja un ítem por debajo de su piso ni se resucita uno
+                # descartado: eso lo decidió el redondeo, aquí solo se afina.
+                cap = _cap_g(food)
+                if new < floor or new > cap or current == 0.0:
+                    continue
+                gain, updates = 0.0, []
+                for term in terms_of[key]:
+                    actual = term.actual + term.density[key] * delta
+                    gain += term.cost(term.actual) - term.cost(actual)
+                    updates.append((term, actual))
+                if gain > best_gain:
+                    best_gain, move = gain, (key, new, updates)
+        if move is None:
+            return  # óptimo local en la rejilla: ningún paso mejora
+        key, new, updates = move
+        grams[key] = new
+        for term, actual in updates:
+            term.actual = actual
+
+
+def rebalance_day_after_edit(
+    meals: list[tuple[MealSlot, list[FoodItem]]],
+    grams: dict[Key, float],
+    daily: MacroTargets,
+    config: NutritionConfig,
+    *,
+    locked: frozenset[Key],
+    protein_relaxed_slots: frozenset[MealSlot] = frozenset(),
+) -> dict[Key, float]:
+    """Tras editar un slot, compensa el día: lo editado queda fijo, el resto ajusta."""
+    working = dict(grams)
+    _repair_residual(
+        working,
+        meals,
+        daily,
+        config,
+        locked=locked,
+        protein_relaxed_slots=protein_relaxed_slots,
+    )
+    return working

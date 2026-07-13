@@ -39,9 +39,8 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
         requires_protein=True,
         requires_carb=True,
         fruit_as_carb=True,
-        allows_fat_item=False,
-        max_items=2,
-        description="lácteo o proteína ligera + 1 fruta",
+        max_items=3,
+        description="lácteo o proteína ligera + 1 fruta + 1 grasa opcional",
     ),
     MealSlot.LUNCH: SlotStructure(
         requires_protein=True,
@@ -54,9 +53,8 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
         requires_protein=True,
         requires_carb=True,
         fruit_as_carb=True,
-        allows_fat_item=False,
-        max_items=2,
-        description="lácteo o proteína ligera + 1 fruta",
+        max_items=3,
+        description="lácteo o proteína ligera + 1 fruta + 1 grasa opcional",
     ),
     MealSlot.DINNER: SlotStructure(
         requires_protein=True,

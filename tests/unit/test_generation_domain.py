@@ -12,13 +12,14 @@ from nutriplan.domain.generation_rules import (
     validate_selection_structure,
 )
 from nutriplan.domain.models import (
+    FoodCategory,
     MacroTargets,
     MealSlot,
     PlanSelection,
 )
 from nutriplan.domain.portioning import solve_day_portions
 from nutriplan.domain.selection_schema import build_selection_schema
-from nutriplan.domain.validation import validate_day
+from nutriplan.domain.validation import fiber_shortfall, validate_day
 
 DAILY = MacroTargets(kcal=1703.5, protein_g=124.0, carb_g=182.6, fat_g=53.0)
 
@@ -56,13 +57,22 @@ def test_solver_squares_the_day(foods, nutrition_config) -> None:
     assert totals_kcal == pytest.approx(DAILY.kcal, rel=0.08)
 
 
-def test_solver_respects_rounding_and_minimums(foods, nutrition_config) -> None:
+def test_portions_land_on_numbers_a_person_can_weigh(foods, nutrition_config) -> None:
+    """Cada porción cae en la rejilla de SU alimento, no en una global de 5 g.
+
+    Es más fácil pesar 120 o 150 g que 137, y los huevos se cuentan de uno en
+    uno. El paso lo declara el alimento; el piso también (una cucharada de
+    aceite no baja de 10 g).
+    """
     solved = solve_day_portions(day_meals(foods), DAILY, nutrition_config)
-    step = nutrition_config.portioning.grams_rounding
+    catalog = {f.id: f for _slot, fs in day_meals(foods) for f in fs}
     for meal in solved:
         for portion in meal.portions:
-            assert portion.grams % step == 0
-            assert portion.grams >= nutrition_config.portioning.min_portion_g
+            food = catalog[portion.food_id]
+            step = food.portion_step_g
+            floor = food.portion_min_g or nutrition_config.portioning.min_portion_g
+            assert portion.grams % step == 0, f"{food.name_es}: {portion.grams} g no cae en {step}"
+            assert portion.grams >= floor, f"{food.name_es}: {portion.grams} g bajo su piso"
 
 
 def test_unit_foods_quantize_to_whole_or_half(foods, nutrition_config) -> None:
@@ -77,6 +87,40 @@ def test_unit_foods_quantize_to_whole_or_half(foods, nutrition_config) -> None:
                 assert portion.grams % 50 == 0, portion.grams
             if food.name_es == "aguacate":  # grams → múltiplos de 5 g
                 assert portion.grams % 5 == 0, portion.grams
+
+
+def test_tuna_portions_are_whole_cans(foods, nutrition_config) -> None:
+    meals = [
+        (MealSlot.LUNCH, [foods["atún en agua"], foods["arroz blanco cocido"]]),
+    ] + [
+        (slot, items) for slot, items in day_meals(foods) if slot is not MealSlot.LUNCH
+    ]
+    solved = solve_day_portions(meals, DAILY, nutrition_config)
+    tuna = next(
+        p for m in solved if m.slot is MealSlot.LUNCH for p in m.portions
+        if foods["atún en agua"].id == p.food_id
+    )
+    assert tuna.grams % 100 == 0
+    assert tuna.grams >= 100
+
+
+def test_olives_never_exceed_snack_portion_cap(foods, nutrition_config) -> None:
+    """Las aceitunas son un toque pequeño — el solver no las infla sin límite."""
+    lunch = [foods["pechuga de pollo"], foods["arroz blanco cocido"], foods["aceitunas"]]
+    dinner = [foods["tilapia"], foods["batata cocida"], foods["aceitunas"]]
+    meals = [
+        (MealSlot.LUNCH, lunch),
+        (MealSlot.DINNER, dinner),
+    ] + [
+        (slot, items) for slot, items in day_meals(foods)
+        if slot not in (MealSlot.LUNCH, MealSlot.DINNER)
+    ]
+    solved = solve_day_portions(meals, DAILY, nutrition_config)
+    lookup = {f.id: f for f in foods.values()}
+    for meal in solved:
+        for p in meal.portions:
+            if lookup[p.food_id].name_es == "aceitunas":
+                assert p.grams <= 30, p.grams
 
 
 def test_solver_computed_is_recalculated_from_grams(foods, nutrition_config) -> None:
@@ -172,9 +216,11 @@ def test_structure_flags_violations(foods) -> None:
     lookup = {str(f.id): f for f in foods.values()}
     day = _full_day(foods, 0)
     day["meals"][0]["food_ids"] = [str(foods["arepa de maíz"].id)]  # sin proteína
-    day["meals"][1]["food_ids"] = [
+    day["meals"][1]["food_ids"] = [  # 4 ítems: se pasa del máximo del snack
         str(foods["yogur griego natural"].id),
-        str(foods["aguacate"].id),  # grasa en snack
+        str(foods["banano"].id),
+        str(foods["aguacate"].id),
+        str(foods["almendras"].id),
     ]
     day["meals"][2]["food_ids"] = [
         str(foods["pechuga de pollo"].id),
@@ -183,9 +229,22 @@ def test_structure_flags_violations(foods) -> None:
     selection = _selection([day] + [_full_day(foods, i) for i in range(1, 7)])
     reasons = {v.reason for v in validate_selection_structure(selection, lookup)}
     assert "falta fuente de proteína" in reasons
-    assert "grasa no permitida en snack" in reasons
+    assert "máximo 3 alimentos" in reasons
     assert any("ensalada libre" in r for r in reasons)
     assert any("falta" in r and "carbohidrato" in r for r in reasons)
+
+
+def test_structure_accepts_fat_in_snack(foods) -> None:
+    """Un snack de fruta + mantequilla de frutos secos es legítimo (era ilegal)."""
+    lookup = {str(f.id): f for f in foods.values()}
+    day = _full_day(foods, 0)
+    day["meals"][1]["food_ids"] = [
+        str(foods["yogur griego natural"].id),
+        str(foods["banano"].id),
+        str(foods["almendras"].id),
+    ]
+    selection = _selection([day] + [_full_day(foods, i) for i in range(1, 7)])
+    assert validate_selection_structure(selection, lookup) == []
 
 
 def test_structure_flags_missing_slot(foods) -> None:
@@ -239,6 +298,127 @@ async def test_new_version_differs_from_previous(foods) -> None:
     menu0 = [tuple(m.food_ids) for d in v0.days for m in d.meals]
     menu1 = [tuple(m.food_ids) for d in v1.days for m in d.meals]
     assert menu0 != menu1  # el mes 2 no repite el menú del mes 1
+
+
+async def test_heuristic_meals_are_appetizing(foods) -> None:
+    """Destilado de menús reales: huevos como base del desayuno (mayoría de
+    días), snacks ligeros (lácteo/fruta, nunca carne) y carnes en almuerzo/cena.
+    """
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+    from nutriplan.domain import meal_affinity
+
+    allowed = list(foods.values())
+    schema = build_selection_schema(allowed)
+    sel = await HeuristicSelector(allowed, 124.0, seed=0).select_plan(
+        system="", prompt="", schema=schema, model="x"
+    )
+    byid = {str(f.id): f for f in allowed}
+    egg_breakfasts = 0
+    for day in sel.days:
+        meals = {m.slot: [byid[i] for i in m.food_ids] for m in day.meals}
+
+        bfast = meals[MealSlot.BREAKFAST]
+        prot = [f for f in bfast if f.category in (FoodCategory.PROTEIN, FoodCategory.DAIRY)]
+        assert prot, "desayuno sin proteína"
+        assert all(meal_affinity.breakfast_protein(f) for f in prot), \
+            f"desayuno con proteína inapropiada: {[f.name_es for f in prot]}"
+        if any(meal_affinity.is_egg(f) for f in bfast):
+            egg_breakfasts += 1
+
+        for slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM):
+            for f in meals[slot]:
+                assert not meal_affinity.main_protein(f), \
+                    f"{f.name_es} (carne/pescado) no va en un snack"
+
+        for slot in (MealSlot.LUNCH, MealSlot.DINNER):
+            assert any(meal_affinity.main_protein(f) for f in meals[slot]), \
+                f"{slot.value} sin proteína de plato principal"
+
+    assert egg_breakfasts >= 3, f"los huevos deben ser mayoritarios (fueron {egg_breakfasts}/7)"
+
+
+async def test_every_item_belongs_in_the_slot_it_was_put_in(foods) -> None:
+    """La afinidad vive en `FoodItem.meal_slots` y el selector la respeta.
+
+    Antes solo la miraban las proteínas y los carbos, así que el pool de grasas
+    metía dos cucharadas de aceite de oliva en el desayuno: el dato existía y
+    nadie lo leía.
+    """
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+    from nutriplan.domain import meal_affinity
+
+    allowed = list(foods.values())
+    sel = await HeuristicSelector(allowed, 124.0, seed=0).select_plan(
+        system="", prompt="", schema=build_selection_schema(allowed), model="x"
+    )
+    byid = {str(f.id): f for f in allowed}
+    for day in sel.days:
+        for meal in day.meals:
+            for food in (byid[i] for i in meal.food_ids):
+                assert meal_affinity.allows(food, meal.slot), (
+                    f"{food.name_es} no encaja en {meal.slot.value} "
+                    f"(sus comidas: {[s.value for s in food.meal_slots]})"
+                )
+
+
+async def test_every_day_carries_two_servings_of_fruit(foods) -> None:
+    """La regla de digestión sale de la ESTRUCTURA, no de una validación aparte.
+
+    Los dos snacks declaran `fruit_as_carb` y `carb_optional=False`, así que
+    ninguna semana puede salir sin fruta en ambos. Es lo que hacen los planes
+    reales, y el motor no puede desviarse de ello ni queriendo.
+    """
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+
+    allowed = list(foods.values())
+    sel = await HeuristicSelector(allowed, 124.0, seed=0).select_plan(
+        system="", prompt="", schema=build_selection_schema(allowed), model="x"
+    )
+    byid = {str(f.id): f for f in allowed}
+    for day in sel.days:
+        fruit = [
+            byid[i].name_es
+            for m in day.meals
+            for i in m.food_ids
+            if byid[i].category is FoodCategory.FRUIT
+        ]
+        assert len(fruit) >= 2, f"día {day.day_index}: solo {len(fruit)} frutas ({fruit})"
+
+
+async def test_heuristic_snacks_rotate_proteins(foods) -> None:
+    """Los snacks no deben ser yogur+fruta los 14 días de la semana."""
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+
+    allowed = list(foods.values())
+    sel = await HeuristicSelector(allowed, 124.0, seed=0).select_plan(
+        system="", prompt="", schema=build_selection_schema(allowed), model="x"
+    )
+    byid = {str(f.id): f for f in allowed}
+    snack_proteins: list[str] = []
+    for day in sel.days:
+        for slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM):
+            for fid in next(m.food_ids for m in day.meals if m.slot is slot):
+                food = byid[fid]
+                if food.category in (FoodCategory.PROTEIN, FoodCategory.DAIRY):
+                    snack_proteins.append(food.name_es)
+    unique = set(snack_proteins)
+    assert len(unique) >= 4, f"poca variedad en snacks: {unique}"
+    assert snack_proteins.count("yogur griego natural") <= 4, snack_proteins
+
+
+def test_fiber_informs_but_never_blocks_the_plan(foods, nutrition_config) -> None:
+    """La fibra es un aviso, no una compuerta.
+
+    Depende de lo que al cliente le guste comer: negarle el plan a quien no
+    soporta las legumbres sería absurdo. Se calcula, se reporta, y el entrenador
+    decide.
+    """
+    solved = solve_day_portions(day_meals(foods), DAILY, nutrition_config)
+    assert sum(m.computed.fiber_g for m in solved) > 0  # se calcula de verdad
+
+    hambriento = DAILY.model_copy(update={"fiber_g": 500.0})  # objetivo imposible
+    assert fiber_shortfall(solved, hambriento) > 0  # lo reporta...
+    assert validate_day(solved, hambriento, nutrition_config) == []  # ...y no bloquea
 
 
 def test_variety_rotated_week_is_clean(foods) -> None:
