@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
-from nutriplan.adapters.food.usda_importer import load_curated_foods
+from nutriplan.adapters.food.curated_loader import load_curated_foods
 from nutriplan.domain.models import (
     Branding,
     DayPlan,
@@ -14,7 +14,6 @@ from nutriplan.domain.models import (
     MealFoodPortion,
     MealSlot,
     PlanCycle,
-    PlanPhase,
 )
 
 CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
@@ -71,7 +70,6 @@ def build_fixed_plan() -> tuple[PlanCycle, dict, Branding]:
         tenant_id=uuid5(_NS, "tenant"),
         client_id=uuid5(_NS, "client"),
         targets_id=uuid5(_NS, "targets"),
-        phase=PlanPhase.FIRST_15,
         days=days,
         config_version="2026.07.01",
         prompt_version="plan_generation.v1",

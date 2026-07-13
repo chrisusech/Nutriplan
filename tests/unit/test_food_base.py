@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from nutriplan.adapters.food.usda_importer import load_curated_foods
+from nutriplan.adapters.food.curated_loader import load_curated_foods
 from nutriplan.domain.food_filter import KNOWN_TAGS, allowed_foods, forbidden_tags
 from nutriplan.domain.food_matching import match_food_names, normalize
 from nutriplan.domain.models import FoodCategory
@@ -22,7 +22,8 @@ def catalog():
 
 def test_catalog_size_and_categories(catalog) -> None:
     assert len(catalog) >= 60
-    assert {f.category for f in catalog} == set(FoodCategory) - {FoodCategory.OTHER}
+    # OTHER ya se usa: es la categoría de los alimentos libres (ensalada, café).
+    assert {f.category for f in catalog} == set(FoodCategory)
 
 
 def test_catalog_is_global_and_tagged_with_known_vocabulary(catalog) -> None:

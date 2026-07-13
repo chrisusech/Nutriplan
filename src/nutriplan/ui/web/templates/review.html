@@ -7,27 +7,39 @@
     <h2 style="font:800 24px Poppins;color:var(--ink);margin:0">Revisar plan · {{ client.name }}</h2>
     <p style="font:500 14px Poppins;color:var(--muted);margin:2px 0 0">{{ subtitle }}</p>
   </div>
-  {% if fit_days == 7 %}
+  {% if fit_days == grid|length %}
   <span class="badge badge-ok" style="font-weight:700;font-size:13px;padding:9px 15px">
-    <span class="icon fill" style="font-size:18px">verified</span>Los 7 días cuadran
+    <span class="icon fill" style="font-size:18px">verified</span>Los {{ grid|length }} días cuadran
   </span>
   {% else %}
   <span class="badge badge-warn" style="font-weight:700;font-size:13px;padding:9px 15px">
-    <span class="icon fill" style="font-size:18px">verified</span>{{ fit_days }} de 7 días cuadran
+    <span class="icon fill" style="font-size:18px">verified</span>{{ fit_days }} de {{ grid|length }} días cuadran
   </span>
   {% endif %}
 </div>
 
 <div class="review-grid">
   <div class="review-main card" style="padding:22px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-      <span style="font:700 16px Poppins;color:var(--ink)">Plan de la semana</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
+      <span style="font:700 16px Poppins;color:var(--ink)">
+        {% if cycle.duration_days >= 30 %}Plan · 30 días (2 semanas){% else %}Plan · 15 días (1 semana){% endif %}
+      </span>
       <span style="font:500 12px Poppins;color:var(--muted-2)">Toca un día para ajustarlo</span>
     </div>
+    {% if phases|length > 1 %}
+    <div class="day-tabs" style="margin-bottom:12px">
+      {% for ph in phases %}
+      <a class="day-pill {% if ph.value == fase %}on{% endif %}"
+         href="/planes/{{ cycle.id }}?fase={{ ph.value }}">
+        <span class="d">{{ PHASE_LABELS[ph] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
     <div class="grid7">
       {% for cell in grid %}
       <a class="day-cell" style="background:{{ cell.soft }}"
-         href="/generador?cliente={{ client.id }}&dia={{ cell.day_index }}&editar=1"
+         href="/generador?cliente={{ client.id }}&dia={{ cell.day_index }}&fase={{ cell.fase }}&editar=1"
          onmouseover="this.style.borderColor='{{ cell.color }}'" onmouseout="this.style.borderColor='transparent'">
         <span class="n">{{ cell.label }}</span>
         <span class="dot" style="background:{{ cell.color }}"></span>
@@ -36,7 +48,9 @@
     </div>
     <div class="legend">
       <span><i style="background:#45B37E"></i>Cuadra ({{ fit_days }})</span>
-      {% if fit_days < 7 %}<span><i style="background:#E0982E"></i>Por revisar ({{ 7 - fit_days }})</span>{% endif %}
+      {% if fit_days < grid|length %}
+      <span><i style="background:#E0982E"></i>Por revisar ({{ grid|length - fit_days }})</span>
+      {% endif %}
     </div>
   </div>
 
@@ -74,7 +88,7 @@
       {% if approved %}
       <div style="display:flex;gap:8px">
         <a class="btn btn-primary" style="flex:1;padding:12px;font-size:13.5px" href="/planes/{{ cycle.id }}/export.pdf">
-          <span class="icon" style="font-size:18px">picture_as_pdf</span>Descargar PDF
+          <span class="icon" style="font-size:18px">picture_as_pdf</span>PDF · {{ cycle.duration_days }} días
         </a>
         <a class="btn btn-outline" style="padding:12px 14px;font-size:13.5px" href="/planes/{{ cycle.id }}/export.docx" title="Word editable">
           <span class="icon" style="font-size:18px">description</span>DOCX
@@ -90,7 +104,7 @@
           <span class="icon" style="font-size:22px">check_circle</span>Aprobar y exportar PDF
         </button>
       </form>
-      <a class="btn btn-outline" style="border-radius:18px;padding:14px" href="/generador?cliente={{ client.id }}&editar=1">
+      <a class="btn btn-outline" style="border-radius:18px;padding:14px" href="/generador?cliente={{ client.id }}&editar=1&fase={{ fase }}">
         <span class="icon" style="font-size:20px">tune</span>Seguir ajustando
       </a>
       {% else %}
@@ -103,6 +117,18 @@
           <span class="icon" style="font-size:20px">edit</span>Reabrir para corregir
         </button>
       </form>
+      {% endif %}
+      {% if cycle.duration_days < 30 %}
+      <div class="card" style="padding:14px;border-color:#F1E4DD;background:#FBF7F4">
+        <div style="font:700 13.5px Poppins;color:var(--ink);margin-bottom:6px">¿Necesitas 2 semanas?</div>
+        <p style="font:500 12.5px Poppins;color:var(--muted);margin:0 0 12px;line-height:1.45">
+          Este plan cubre <b>1 semana</b> (15 días). Para un PDF con Semana 1 y Semana 2, genera un plan de 30 días.
+        </p>
+        <a class="btn btn-primary" style="width:100%;padding:12px;font-size:13.5px;border-radius:14px"
+           href="/generador?cliente={{ client.id }}#duracion">
+          <span class="icon" style="font-size:18px">calendar_month</span>Generar plan 30 días
+        </a>
+      </div>
       {% endif %}
     </div>
   </div>

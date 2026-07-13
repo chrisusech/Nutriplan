@@ -8,7 +8,7 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from nutriplan.domain.models import ActivityLevel, Goal, MealSlot
+from nutriplan.domain.models import ActivityLevel, Goal, MealSlot, Sex
 
 
 class Tolerances(BaseModel):
@@ -29,12 +29,27 @@ class GenerationConfig(BaseModel):
     max_carb_repeats_per_week: int = Field(default=4, ge=1)
 
 
+class FiberConfig(BaseModel):
+    g_per_1000_kcal: float = Field(default=14.0, gt=0)
+    min_fruit_servings: int = Field(default=2, ge=0)
+
+
+# Los rangos de la estrategia: fuera de aquí, la config no carga. Es lo que
+# impide que un typo en el YAML meta a alguien en 3 g/kg de proteína.
+PROTEIN_G_PER_KG_RANGE = (1.6, 2.2)
+FAT_G_PER_KG_RANGE = (0.8, 1.0)
+
+
 class NutritionConfig(BaseModel):
     version: str
     activity_factors: dict[ActivityLevel, float]
     goal_adjustments: dict[Goal, float]
     protein_g_per_kg: dict[Goal, float]
-    fat_pct_of_kcal: float = Field(gt=0, lt=1)
+    fat_g_per_kg: dict[Goal, float]
+    fat_pct_of_kcal: float = Field(gt=0, lt=1)  # fallback si un goal no trae g/kg
+    kcal_floor: dict[Sex, float]
+    carb_floor_g_per_kg: float = Field(default=0.5, ge=0)
+    fiber: FiberConfig = FiberConfig()
     meal_distribution: dict[MealSlot, float]
     tolerances: Tolerances
     portioning: PortioningConfig
@@ -46,6 +61,19 @@ class NutritionConfig(BaseModel):
             raise ValueError("activity_factors debe cubrir todos los niveles de actividad")
         if set(self.goal_adjustments) != set(Goal) or set(self.protein_g_per_kg) != set(Goal):
             raise ValueError("goal_adjustments y protein_g_per_kg deben cubrir todos los objetivos")
+        if set(self.fat_g_per_kg) != set(Goal):
+            raise ValueError("fat_g_per_kg debe cubrir todos los objetivos")
+        if set(self.kcal_floor) != set(Sex):
+            raise ValueError("kcal_floor debe cubrir todos los sexos")
+        for name, values, (lo, hi) in (
+            ("protein_g_per_kg", self.protein_g_per_kg, PROTEIN_G_PER_KG_RANGE),
+            ("fat_g_per_kg", self.fat_g_per_kg, FAT_G_PER_KG_RANGE),
+        ):
+            for goal, value in values.items():
+                if not lo <= value <= hi:
+                    raise ValueError(
+                        f"{name}[{goal.value}] = {value} fuera del rango [{lo}, {hi}]"
+                    )
         if set(self.meal_distribution) != set(MealSlot):
             raise ValueError("meal_distribution debe cubrir los 5 slots")
         total = sum(self.meal_distribution.values())

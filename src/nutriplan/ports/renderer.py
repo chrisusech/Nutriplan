@@ -8,7 +8,7 @@ alimentos del plan ya cargado (el caso de uso ExportPlan lo arma).
 from typing import Literal, Protocol
 from uuid import UUID
 
-from nutriplan.domain.models import Branding, FoodItem, PlanCycle
+from nutriplan.domain.models import Branding, FoodItem, MacroTargets, PlanCycle
 
 
 class Renderer(Protocol):
@@ -19,4 +19,5 @@ class Renderer(Protocol):
         foods: dict[UUID, FoodItem],
         fmt: Literal["pdf", "docx"],
         client_name: str | None = None,
+        daily_targets: MacroTargets | None = None,
     ) -> bytes: ...

@@ -1,8 +1,8 @@
-"""tablas iniciales (seccion 7.4)
+"""esquema inicial
 
-Revision ID: 4097b9d2f23d
+Revision ID: d1818c5c59dd
 Revises: 
-Create Date: 2026-07-03 17:06:45.455653
+Create Date: 2026-07-13 10:49:09.623153
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '4097b9d2f23d'
+revision: str = 'd1818c5c59dd'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -31,7 +31,9 @@ def upgrade() -> None:
     sa.Column('at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_audit_log_tenant_id'), 'audit_log', ['tenant_id'], unique=False)
+    with op.batch_alter_table('audit_log', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_audit_log_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('foods',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=True),
@@ -47,11 +49,15 @@ def upgrade() -> None:
     sa.Column('fat_100g', sa.Float(), nullable=False),
     sa.Column('tags', sa.JSON(), nullable=False),
     sa.Column('default_unit_g', sa.Float(), nullable=True),
+    sa.Column('unit_granularity', sa.String(length=10), nullable=False),
+    sa.Column('unit_name', sa.String(length=30), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_foods_category'), 'foods', ['category'], unique=False)
-    op.create_index(op.f('ix_foods_name_norm'), 'foods', ['name_norm'], unique=False)
-    op.create_index(op.f('ix_foods_tenant_id'), 'foods', ['tenant_id'], unique=False)
+    with op.batch_alter_table('foods', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_foods_category'), ['category'], unique=False)
+        batch_op.create_index(batch_op.f('ix_foods_name_norm'), ['name_norm'], unique=False)
+        batch_op.create_index(batch_op.f('ix_foods_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('generation_jobs',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -66,8 +72,10 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('tenant_id', 'idempotency_key')
     )
-    op.create_index(op.f('ix_generation_jobs_status'), 'generation_jobs', ['status'], unique=False)
-    op.create_index(op.f('ix_generation_jobs_tenant_id'), 'generation_jobs', ['tenant_id'], unique=False)
+    with op.batch_alter_table('generation_jobs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_generation_jobs_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_generation_jobs_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('intake_documents',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -80,8 +88,27 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_intake_documents_status'), 'intake_documents', ['status'], unique=False)
-    op.create_index(op.f('ix_intake_documents_tenant_id'), 'intake_documents', ['tenant_id'], unique=False)
+    with op.batch_alter_table('intake_documents', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_intake_documents_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_intake_documents_tenant_id'), ['tenant_id'], unique=False)
+
+    op.create_table('recipes',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('tenant_id', sa.Uuid(), nullable=False),
+    sa.Column('name', sa.String(length=200), nullable=False),
+    sa.Column('ingredients', sa.JSON(), nullable=False),
+    sa.Column('macros', sa.JSON(), nullable=False),
+    sa.Column('total_grams', sa.Float(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('created_by', sa.Uuid(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('compound_food_id', sa.Uuid(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('recipes', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_recipes_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_recipes_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('tenants',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('name', sa.String(length=200), nullable=False),
@@ -104,16 +131,24 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_clients_tenant_id'), 'clients', ['tenant_id'], unique=False)
+    with op.batch_alter_table('clients', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_clients_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('users',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.Column('email', sa.String(length=320), nullable=True),
+    sa.Column('password_hash', sa.String(length=255), nullable=True),
+    sa.Column('role', sa.String(length=20), nullable=False),
+    sa.Column('client_id', sa.Uuid(), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_users_tenant_id'), 'users', ['tenant_id'], unique=False)
+    with op.batch_alter_table('users', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_users_email'), ['email'], unique=True)
+        batch_op.create_index(batch_op.f('ix_users_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('client_food_preferences',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -124,8 +159,10 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('client_id', 'food_id')
     )
-    op.create_index(op.f('ix_client_food_preferences_client_id'), 'client_food_preferences', ['client_id'], unique=False)
-    op.create_index(op.f('ix_client_food_preferences_tenant_id'), 'client_food_preferences', ['tenant_id'], unique=False)
+    with op.batch_alter_table('client_food_preferences', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_client_food_preferences_client_id'), ['client_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_client_food_preferences_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('nutrition_targets',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -135,12 +172,15 @@ def upgrade() -> None:
     sa.Column('method', sa.String(length=40), nullable=False),
     sa.Column('config_version', sa.String(length=40), nullable=False),
     sa.Column('overrides', sa.JSON(), nullable=False),
+    sa.Column('formula', sa.JSON(), nullable=False),
     sa.Column('computed_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['client_id'], ['clients.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_nutrition_targets_client_id'), 'nutrition_targets', ['client_id'], unique=False)
-    op.create_index(op.f('ix_nutrition_targets_tenant_id'), 'nutrition_targets', ['tenant_id'], unique=False)
+    with op.batch_alter_table('nutrition_targets', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_nutrition_targets_client_id'), ['client_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_nutrition_targets_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('plan_cycles',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -160,10 +200,12 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('tenant_id', 'input_hash', 'phase')
     )
-    op.create_index(op.f('ix_plan_cycles_client_id'), 'plan_cycles', ['client_id'], unique=False)
-    op.create_index(op.f('ix_plan_cycles_input_hash'), 'plan_cycles', ['input_hash'], unique=False)
-    op.create_index(op.f('ix_plan_cycles_status'), 'plan_cycles', ['status'], unique=False)
-    op.create_index(op.f('ix_plan_cycles_tenant_id'), 'plan_cycles', ['tenant_id'], unique=False)
+    with op.batch_alter_table('plan_cycles', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_plan_cycles_client_id'), ['client_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_plan_cycles_input_hash'), ['input_hash'], unique=False)
+        batch_op.create_index(batch_op.f('ix_plan_cycles_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_plan_cycles_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('day_plans',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -174,8 +216,10 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('plan_cycle_id', 'day_index')
     )
-    op.create_index(op.f('ix_day_plans_plan_cycle_id'), 'day_plans', ['plan_cycle_id'], unique=False)
-    op.create_index(op.f('ix_day_plans_tenant_id'), 'day_plans', ['tenant_id'], unique=False)
+    with op.batch_alter_table('day_plans', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_day_plans_plan_cycle_id'), ['plan_cycle_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_day_plans_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('export_artifacts',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -186,8 +230,10 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['plan_cycle_id'], ['plan_cycles.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_export_artifacts_plan_cycle_id'), 'export_artifacts', ['plan_cycle_id'], unique=False)
-    op.create_index(op.f('ix_export_artifacts_tenant_id'), 'export_artifacts', ['tenant_id'], unique=False)
+    with op.batch_alter_table('export_artifacts', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_export_artifacts_plan_cycle_id'), ['plan_cycle_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_export_artifacts_tenant_id'), ['tenant_id'], unique=False)
+
     op.create_table('meal_entries',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('tenant_id', sa.Uuid(), nullable=False),
@@ -201,49 +247,81 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['day_plan_id'], ['day_plans.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_meal_entries_day_plan_id'), 'meal_entries', ['day_plan_id'], unique=False)
-    op.create_index(op.f('ix_meal_entries_tenant_id'), 'meal_entries', ['tenant_id'], unique=False)
+    with op.batch_alter_table('meal_entries', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_meal_entries_day_plan_id'), ['day_plan_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_meal_entries_tenant_id'), ['tenant_id'], unique=False)
+
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_index(op.f('ix_meal_entries_tenant_id'), table_name='meal_entries')
-    op.drop_index(op.f('ix_meal_entries_day_plan_id'), table_name='meal_entries')
+    with op.batch_alter_table('meal_entries', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_meal_entries_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_meal_entries_day_plan_id'))
+
     op.drop_table('meal_entries')
-    op.drop_index(op.f('ix_export_artifacts_tenant_id'), table_name='export_artifacts')
-    op.drop_index(op.f('ix_export_artifacts_plan_cycle_id'), table_name='export_artifacts')
+    with op.batch_alter_table('export_artifacts', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_export_artifacts_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_export_artifacts_plan_cycle_id'))
+
     op.drop_table('export_artifacts')
-    op.drop_index(op.f('ix_day_plans_tenant_id'), table_name='day_plans')
-    op.drop_index(op.f('ix_day_plans_plan_cycle_id'), table_name='day_plans')
+    with op.batch_alter_table('day_plans', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_day_plans_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_day_plans_plan_cycle_id'))
+
     op.drop_table('day_plans')
-    op.drop_index(op.f('ix_plan_cycles_tenant_id'), table_name='plan_cycles')
-    op.drop_index(op.f('ix_plan_cycles_status'), table_name='plan_cycles')
-    op.drop_index(op.f('ix_plan_cycles_input_hash'), table_name='plan_cycles')
-    op.drop_index(op.f('ix_plan_cycles_client_id'), table_name='plan_cycles')
+    with op.batch_alter_table('plan_cycles', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_plan_cycles_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_plan_cycles_status'))
+        batch_op.drop_index(batch_op.f('ix_plan_cycles_input_hash'))
+        batch_op.drop_index(batch_op.f('ix_plan_cycles_client_id'))
+
     op.drop_table('plan_cycles')
-    op.drop_index(op.f('ix_nutrition_targets_tenant_id'), table_name='nutrition_targets')
-    op.drop_index(op.f('ix_nutrition_targets_client_id'), table_name='nutrition_targets')
+    with op.batch_alter_table('nutrition_targets', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_nutrition_targets_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_nutrition_targets_client_id'))
+
     op.drop_table('nutrition_targets')
-    op.drop_index(op.f('ix_client_food_preferences_tenant_id'), table_name='client_food_preferences')
-    op.drop_index(op.f('ix_client_food_preferences_client_id'), table_name='client_food_preferences')
+    with op.batch_alter_table('client_food_preferences', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_client_food_preferences_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_client_food_preferences_client_id'))
+
     op.drop_table('client_food_preferences')
-    op.drop_index(op.f('ix_users_tenant_id'), table_name='users')
+    with op.batch_alter_table('users', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_users_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_users_email'))
+
     op.drop_table('users')
-    op.drop_index(op.f('ix_clients_tenant_id'), table_name='clients')
+    with op.batch_alter_table('clients', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_clients_tenant_id'))
+
     op.drop_table('clients')
     op.drop_table('tenants')
-    op.drop_index(op.f('ix_intake_documents_tenant_id'), table_name='intake_documents')
-    op.drop_index(op.f('ix_intake_documents_status'), table_name='intake_documents')
+    with op.batch_alter_table('recipes', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_recipes_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_recipes_status'))
+
+    op.drop_table('recipes')
+    with op.batch_alter_table('intake_documents', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_intake_documents_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_intake_documents_status'))
+
     op.drop_table('intake_documents')
-    op.drop_index(op.f('ix_generation_jobs_tenant_id'), table_name='generation_jobs')
-    op.drop_index(op.f('ix_generation_jobs_status'), table_name='generation_jobs')
+    with op.batch_alter_table('generation_jobs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_generation_jobs_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_generation_jobs_status'))
+
     op.drop_table('generation_jobs')
-    op.drop_index(op.f('ix_foods_tenant_id'), table_name='foods')
-    op.drop_index(op.f('ix_foods_name_norm'), table_name='foods')
-    op.drop_index(op.f('ix_foods_category'), table_name='foods')
+    with op.batch_alter_table('foods', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_foods_tenant_id'))
+        batch_op.drop_index(batch_op.f('ix_foods_name_norm'))
+        batch_op.drop_index(batch_op.f('ix_foods_category'))
+
     op.drop_table('foods')
-    op.drop_index(op.f('ix_audit_log_tenant_id'), table_name='audit_log')
+    with op.batch_alter_table('audit_log', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_audit_log_tenant_id'))
+
     op.drop_table('audit_log')
     # ### end Alembic commands ###

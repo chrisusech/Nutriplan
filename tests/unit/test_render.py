@@ -31,16 +31,41 @@ def test_html_is_deterministic(fixed_plan) -> None:
 
 def test_html_contains_business_format(fixed_plan) -> None:
     plan, foods, branding = fixed_plan
-    html = render_plan_html(plan, branding, foods)
+    html = render_plan_html(plan, branding, foods, client_name="Cliente Ejemplo")
     for label in ("Desayuno", "Snack AM", "Almuerzo", "Snack PM", "Cena"):
         assert label in html
     for day in ("Lunes", "Domingo"):
         assert day in html
     assert "Anotaciones importantes" in html
     assert "Ensalada libre" in html
-    assert "Valeria Fit" in html  # la marca del entrenador en la portada
+    assert "Valeria Fit" in html
     assert "2 huevos (100 g)" in html
-    assert "Plan nutricional semanal" in html  # portada del diseño nuevo
+    assert "Totales día" in html
+    assert "Objetivo diario" in html
+    assert "Plan 15 días (1 semana)" in html
+    assert "<table" in html
+    assert "Cliente Ejemplo" in html
+
+
+def test_thirty_day_pdf_has_two_week_grids(fixed_plan) -> None:
+    from nutriplan.domain.models import DayPlan, PlanPhase
+
+    plan, foods, branding = fixed_plan
+    second_week = [
+        DayPlan(
+            day_index=d.day_index,
+            phase=PlanPhase.NEXT_15,
+            meals=d.meals,
+            totals=d.totals,
+        )
+        for d in plan.days
+    ]
+    plan = plan.model_copy(update={"duration_days": 30, "days": plan.days + second_week})
+    html = render_plan_html(plan, branding, foods, client_name="Cliente")
+    assert html.count('<table class="grid">') == 2
+    assert "Semana 1" in html
+    assert "Semana 2" in html
+    assert "Plan 30 días (2 semanas)" in html
 
 
 async def test_pdf_renders(fixed_plan) -> None:

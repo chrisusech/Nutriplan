@@ -26,6 +26,16 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "intakes"
 
 GENERATION_TIMEOUT_S = 60.0
+# Texto literal de partials/gen_error.html. Si esa plantilla cambia, este test
+# tiene que enterarse: un marcador que no existe convierte cada fallo de
+# generación en una espera de 60 s con un mensaje que no dice nada.
+FAILURE_MARKER = "No se pudo generar el plan."
+
+
+def _failure_reason(html: str) -> str:
+    """El motivo real que el job dejó en gen_error.html, sin el HTML alrededor."""
+    match = re.search(r'<div style="margin-top:4px">(.*?)</div>', html, re.S)
+    return match.group(1).strip() if match else html[:300]
 
 
 @pytest.fixture
@@ -112,12 +122,29 @@ def _generate_and_wait(client: TestClient, cid: str) -> str:
         html = client.get(f"/generador/{cid}/estado", params={"job": job, "n": 0}).text
         if "Todo listo" in html:
             return job
-        assert "gen-error" not in html, f"la generación falló: {html[:400]}"
+        # El marcador tiene que existir de verdad en partials/gen_error.html. Antes
+        # se buscaba "gen-error", que no aparece en ninguna plantilla: un job que
+        # fallaba no se detectaba nunca y el test se comía los 60 s de timeout
+        # entero para morir diciendo "no terminó" en vez de decir por qué falló.
+        assert FAILURE_MARKER not in html, f"la generación falló: {_failure_reason(html)}"
         time.sleep(0.05)
     pytest.fail("la generación no terminó dentro del timeout")
 
 
 # --- Estados vacíos --------------------------------------------------------
+
+
+def test_failure_marker_matches_the_error_template() -> None:
+    """El detector de fallos de `_generate_and_wait` debe existir en la plantilla.
+
+    Si no, un job que falla no se detecta: el bucle espera el timeout completo y
+    reporta "no terminó" en vez del motivo. Es cómo se colaron 7 minutos de
+    espera en la suite.
+    """
+    template = (
+        ROOT / "src" / "nutriplan" / "ui" / "web" / "templates" / "partials" / "gen_error.html"
+    )
+    assert FAILURE_MARKER in template.read_text(encoding="utf-8")
 
 
 def test_dashboard_without_clients_renders_empty_state(offline) -> None:
@@ -208,6 +235,22 @@ def test_formula_g_per_kg_moves_kcal_live(offline) -> None:
     assert "reparto" in response.text and "%" in response.text
 
 
+def test_kcal_below_the_floor_explains_itself_instead_of_crashing(offline) -> None:
+    """Escribir 1200 kcal a mano no es un 500 ni un plan insostenible.
+
+    La pantalla sigue en pie con los targets anteriores y dice por qué se rechaza.
+    """
+    client, _ = offline
+    cid = _create_client(client)
+    response = client.post(
+        f"/generador/{cid}/formula",
+        data={"protein_g_per_kg": "1.6", "fat_g_per_kg": "0.8", "kcal_override": "1200"},
+    )
+    assert response.status_code == 200
+    assert "bajo el piso" in response.text
+    assert "no es sostenible" in response.text
+
+
 def test_manual_kcal_override_sticks(offline) -> None:
     client, _ = offline
     cid = _create_client(client)
@@ -247,6 +290,8 @@ def test_generation_job_completes_and_shows_preview(offline) -> None:
 
     page = client.get("/generador", params={"cliente": cid}).text
     assert "Vista previa del plan" in page
+    assert "Duración del plan" in page
+    assert "Plan 30 días" in page
 
     listed = client.get("/planes")
     assert "Ana Pérez" in listed.text
@@ -297,8 +342,8 @@ def test_draft_cannot_be_exported_until_approved(offline) -> None:
     assert pdf.content[:5] == b"%PDF-"
     # "Ana Pérez" no cabe cruda en un header HTTP: ASCII + parámetro RFC 6266
     disposition = pdf.headers["content-disposition"]
-    assert 'filename="plan_semanal_Ana_Perez.pdf"' in disposition
-    assert "filename*=UTF-8''plan_semanal_Ana_P%C3%A9rez.pdf" in disposition
+    assert 'filename="plan_15d_Ana_Perez.pdf"' in disposition
+    assert "filename*=UTF-8''plan_15d_Ana_P%C3%A9rez.pdf" in disposition
 
     docx = client.get(f"/planes/{cycle}/export.docx")
     assert docx.status_code == 200
@@ -337,8 +382,9 @@ def test_review_page_shows_the_week_grid(offline) -> None:
     _generate_and_wait(client, cid)
 
     review = client.get(f"/planes/{_cycle_id(client)}").text
-    assert "Plan de la semana" in review
+    assert "Plan · 15 días (1 semana)" in review
     assert review.count('class="day-cell"') == 7  # una semana
+    assert "Generar plan 30 días" in review
 
 
 # --- Multi-entrenador: login y aislamiento por tenant (Workstream G) --------
@@ -471,7 +517,7 @@ def test_client_portal_shows_plan_read_only_and_blocks_trainer_routes(offline) -
     assert portal.get("/planes", follow_redirects=False).headers["location"] == "/portal"
 
 
-# --- Edición de porciones (ejercita SqlPlanRepository.update_days) ----------
+# --- Edición de porciones (update_day por día) --------------------------------
 
 
 def test_editing_portions_recomputes_macros_and_persists(offline) -> None:
@@ -486,18 +532,133 @@ def test_editing_portions_recomputes_macros_and_persists(offline) -> None:
     field, original = grams_field.group(1), float(grams_field.group(2))
 
     response = client.post(
-        f"/planes/{cycle}/dia/0/porciones",
-        data={"slot": "desayuno", "cliente": cid, "fase": "0", field: original + 30},
+        f"/planes/{cycle}/dia/0/porciones?fase=first_15",
+        data={"slot": "desayuno", "cliente": cid, "fase": "first_15", field: original + 30},
     )
     assert response.status_code == 200
 
-    # update_days borra los días viejos antes de reinsertar: sin esto, el unique
-    # (plan_cycle_id, day_index) hace fallar el segundo guardado del mismo día.
     again = client.post(
-        f"/planes/{cycle}/dia/0/porciones",
-        data={"slot": "desayuno", "cliente": cid, "fase": "0", field: original + 60},
+        f"/planes/{cycle}/dia/0/porciones?fase=first_15",
+        data={"slot": "desayuno", "cliente": cid, "fase": "first_15", field: original + 60},
     )
     assert again.status_code == 200
 
     reloaded = client.get("/generador", params={"cliente": cid, "editar": 1}).text
     assert f'name="{field}" value="{original + 60:g}"' in reloaded
+
+
+def test_create_client_tolerates_bad_food_ids(offline) -> None:
+    """IDs de alimento inválidos o inexistentes no deben tumbar el POST /clientes."""
+    client, _ = offline
+    response = client.post(
+        "/clientes",
+        data={
+            "name": "Cliente robusto",
+            "sex": "female",
+            "age_years": 30,
+            "height_cm": 165.0,
+            "weight_kg": 60.0,
+            "goal": "maintain",
+            "activity_level": "moderate",
+            "food_ids": ["not-a-uuid", "00000000-0000-0000-0000-000000000099"],
+            "intake_id": "tampoco-es-uuid",
+        },
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303, response.text
+    assert "cliente=" in response.headers.get("HX-Redirect", "")
+
+
+def test_create_client_invalid_sex_shows_form_error(offline) -> None:
+    client, _ = offline
+    response = client.post(
+        "/clientes",
+        data={
+            "name": "Ana",
+            "sex": "otro",
+            "age_years": 30,
+            "height_cm": 165.0,
+            "weight_kg": 60.0,
+            "goal": "maintain",
+            "activity_level": "moderate",
+        },
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert "Sexo no válido" in response.text
+
+
+def test_stale_session_redirects_to_login(offline) -> None:
+    """Cookie con tenant inexistente (p. ej. tras migrar DB) → re-login, no 500."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from nutriplan.adapters.db.models import TenantRow, UserRow
+
+    client, container = offline
+    assert client.get("/").status_code == 200
+
+    async def delete_tenant() -> None:
+        async with container.session_factory() as s:
+            user = (
+                await s.execute(select(UserRow).where(UserRow.email == "valeria@fit.com"))
+            ).scalar_one()
+            tenant = await s.get(TenantRow, user.tenant_id)
+            if tenant is not None:
+                await s.delete(tenant)
+            await s.commit()
+
+    asyncio.run(delete_tenant())
+
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?sesion=expirada"
+
+
+def test_password_reset_flow(offline) -> None:
+    """Recuperación local: enlace en pantalla → nueva clave → login."""
+    client, _ = offline
+    email = "reset-me@fit.com"
+    client.post(
+        "/signup",
+        data={
+            "name": "Reset Me",
+            "business_name": "Reset Fit",
+            "email": email,
+            "password": "original12",
+        },
+        follow_redirects=False,
+    )
+    client.post("/logout")
+
+    page = client.post("/recuperar", data={"email": email})
+    assert page.status_code == 200
+    assert "Enlace listo" in page.text
+    import re
+
+    match = re.search(r'href="(/recuperar/[^"]+)"', page.text)
+    assert match is not None
+    reset_path = match.group(1)
+
+    confirm = client.get(reset_path)
+    assert confirm.status_code == 200
+    assert email in confirm.text
+
+    done = client.post(
+        reset_path,
+        data={"password": "nueva12345", "password_confirm": "nueva12345"},
+        follow_redirects=False,
+    )
+    assert done.status_code == 303
+
+    client.post("/logout")
+    bad = client.post("/login", data={"email": email, "password": "original12"})
+    assert "incorrectos" in bad.text
+    ok = client.post(
+        "/login",
+        data={"email": email, "password": "nueva12345"},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 303

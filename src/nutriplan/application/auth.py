@@ -27,6 +27,7 @@ class AuthRepository(Protocol):
         self, *, tenant_id: UUID, client_id: UUID, name: str,
         email: str, password_hash: str,
     ) -> Trainer: ...
+    async def set_password_hash(self, email: str, password_hash: str) -> bool: ...
 
 
 class SignupError(ValueError):

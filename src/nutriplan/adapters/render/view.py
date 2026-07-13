@@ -6,8 +6,10 @@ from uuid import UUID
 from nutriplan.domain.errors import RenderError
 from nutriplan.domain.models import (
     FoodItem,
+    MacroTargets,
     MealSlot,
     PlanCycle,
+    PlanPhase,
     UnitGranularity,
 )
 
@@ -20,6 +22,25 @@ SLOT_LABELS: dict[MealSlot, str] = {
 }
 DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 WEEK_SUBTITLE = "Plan semanal · 7 días"
+PHASE_SUBTITLES: dict[PlanPhase, str] = {
+    PlanPhase.FIRST_15: "Semana 1 · días 1-15",
+    PlanPhase.NEXT_15: "Semana 2 · días 16-30",
+}
+
+
+def _days_for_phase(plan: PlanCycle, phase: PlanPhase | None = None) -> list:
+    days = plan.days
+    if phase is not None:
+        days = [d for d in days if d.phase == phase]
+    return sorted(days, key=lambda d: d.day_index)
+
+
+def plan_phases_in(plan: PlanCycle) -> list[PlanPhase]:
+    """Fases presentes en el plan; planes de 30 días siempre incluyen las 2 semanas."""
+    if plan.duration_days >= 30:
+        return [PlanPhase.FIRST_15, PlanPhase.NEXT_15]
+    present = sorted({d.phase for d in plan.days}, key=lambda p: p.value)
+    return present or [PlanPhase.FIRST_15]
 SLOT_TIMES: dict[MealSlot, str] = {
     MealSlot.BREAKFAST: "7:00 am",
     MealSlot.SNACK_AM: "10:30 am",
@@ -50,6 +71,51 @@ class CellView:
     portions: list[PortionView]
     extras: list[str]  # "Ensalada libre", "Proteína libre"
     kcal: float
+    protein_g: float = 0.0
+    carb_g: float = 0.0
+    fat_g: float = 0.0
+    macro_line: str = ""  # preformateado para Jinja/PDF
+
+
+def cell_for_template(cell: CellView) -> dict[str, object]:
+    """Dict plano: Jinja no depende de atributos opcionales del dataclass."""
+    return {
+        "portions": cell.portions,
+        "extras": cell.extras,
+        "kcal": cell.kcal,
+        "protein_g": cell.protein_g,
+        "carb_g": cell.carb_g,
+        "fat_g": cell.fat_g,
+        "macro_line": cell.macro_line,
+    }
+
+
+@dataclass
+class DayTotalsView:
+    kcal: int
+    protein_g: int
+    carb_g: int
+    fat_g: int
+
+
+def macro_line(m: MacroTargets, *, kcal: bool = True) -> str:
+    """Una línea legible: kcal + P/C/G."""
+    parts: list[str] = []
+    if kcal:
+        parts.append(f"{round(m.kcal)} kcal")
+    parts.append(f"P {round(m.protein_g)} g")
+    parts.append(f"C {round(m.carb_g)} g")
+    parts.append(f"G {round(m.fat_g)} g")
+    return " · ".join(parts)
+
+
+def macro_compact(m: MacroTargets) -> str:
+    """Macros sin kcal, para celdas pequeñas."""
+    return (
+        f"P {round(m.protein_g)} · "
+        f"C {round(m.carb_g)} · "
+        f"G {round(m.fat_g)}"
+    )
 
 
 @dataclass
@@ -71,10 +137,12 @@ class DayCard:
     meals: list[MealCard]
 
 
-def build_week(plan: PlanCycle, foods: dict[UUID, FoodItem]) -> list[DayCard]:
-    """View-model del PDF semanal: 7 tarjetas de día, cada una con sus comidas."""
+def build_week(
+    plan: PlanCycle, foods: dict[UUID, FoodItem], phase: PlanPhase | None = None
+) -> list[DayCard]:
+    """View-model del PDF: tarjetas de día (una fase a la vez)."""
     cards: list[DayCard] = []
-    for day in sorted(plan.days, key=lambda d: d.day_index):
+    for day in _days_for_phase(plan, phase):
         by_slot = {m.slot: m for m in day.meals}
         meals: list[MealCard] = []
         for slot in SLOT_LABELS:
@@ -146,11 +214,13 @@ def portion_text(grams: float, food: FoodItem) -> str:
 
 
 def build_grid(
-    plan: PlanCycle, foods: dict[UUID, FoodItem]
+    plan: PlanCycle,
+    foods: dict[UUID, FoodItem],
+    phase: PlanPhase | None = None,
 ) -> dict[MealSlot, list[CellView]]:
-    """Filas = slots, columnas = 7 días."""
+    """Filas = slots, columnas = 7 días de una fase."""
     grid: dict[MealSlot, list[CellView]] = {slot: [] for slot in SLOT_LABELS}
-    for day in sorted(plan.days, key=lambda d: d.day_index):
+    for day in _days_for_phase(plan, phase):
         by_slot = {meal.slot: meal for meal in day.meals}
         for slot in SLOT_LABELS:
             meal = by_slot.get(slot)
@@ -168,5 +238,29 @@ def build_grid(
                 extras.append("Proteína libre")
             if meal.free_salad:
                 extras.append("Ensalada libre")
-            grid[slot].append(CellView(portions=portions, extras=extras, kcal=meal.computed.kcal))
+            c = meal.computed
+            macro = (
+                f"{round(c.kcal)} kcal · {macro_compact(c)}"
+                if c.kcal
+                else ""
+            )
+            grid[slot].append(CellView(
+                portions=portions, extras=extras, kcal=c.kcal,
+                protein_g=c.protein_g, carb_g=c.carb_g, fat_g=c.fat_g,
+                macro_line=macro,
+            ))
     return grid
+
+
+def day_totals_row(
+    plan: PlanCycle, phase: PlanPhase | None = None
+) -> list[DayTotalsView]:
+    """Totales diarios por columna de la rejilla (7 días)."""
+    row: list[DayTotalsView] = []
+    for day in _days_for_phase(plan, phase):
+        t = day.totals
+        row.append(DayTotalsView(
+            kcal=round(t.kcal), protein_g=round(t.protein_g),
+            carb_g=round(t.carb_g), fat_g=round(t.fat_g),
+        ))
+    return row

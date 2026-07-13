@@ -44,7 +44,11 @@ async def parse_intake(
     ambiguities = detect_ambiguities(parsed)
 
     # Mapeo determinista texto → FoodItem; lo no reconocido va a revisión.
-    universe = await food_repo.list_universe()
+    # Los alimentos libres (ensalada, café, gelatina) quedan fuera: no son una
+    # preferencia que el cliente elige, están siempre disponibles. Si entraran,
+    # un "me gusta la ensalada" acabaría emparejado con "ensalada libre" y ese
+    # alimento sin macros se colaría en su lista de preferencias.
+    universe = [f for f in await food_repo.list_universe() if not f.is_free]
     match = match_food_names(all_liked_food_names(parsed), universe)
     for name in match.unrecognized:
         ambiguities.append(f"alimento no reconocido: {name}")

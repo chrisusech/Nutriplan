@@ -4,15 +4,19 @@ Toda implementación inyecta el filtro tenant_id desde el contexto de la
 petición: nunca se consulta sin ese filtro (regla de oro, sección 7).
 """
 
+from __future__ import annotations
+
 from typing import Any, Protocol
 from uuid import UUID
 
 from nutriplan.domain.models import (
     Client,
+    DayPlan,
     IntakeDocument,
     IntakeStatus,
     NutritionTargets,
     PlanCycle,
+    PlanPhase,
     PlanStatus,
 )
 
@@ -22,6 +26,8 @@ class ClientRepository(Protocol):
     async def get(self, client_id: UUID) -> Client | None: ...
     async def list(self) -> list[Client]: ...
     async def update(self, client: Client) -> None: ...
+    async def list_banned_food_ids(self, client_id: UUID) -> list[UUID]: ...
+    async def ban_food(self, client_id: UUID, food_id: UUID) -> None: ...
 
 
 class IntakeRepository(Protocol):
@@ -44,5 +50,15 @@ class PlanRepository(Protocol):
     async def get(self, plan_id: UUID) -> PlanCycle | None: ...
     async def list_for_client(self, client_id: UUID) -> list[PlanCycle]: ...
     async def find_by_input_hash(self, input_hash: str) -> list[PlanCycle]: ...
-    async def update_days(self, plan: PlanCycle) -> None: ...
+    async def update_day(
+        self,
+        plan_id: UUID,
+        phase: PlanPhase,
+        day_index: int,
+        day: DayPlan,
+        *,
+        mark_edited: bool = False,
+        edited_by: UUID | None = None,
+    ) -> None: ...
+    async def mark_edited(self, plan_id: UUID, *, edited_by: UUID | None = None) -> None: ...
     async def set_status(self, plan_id: UUID, status: PlanStatus) -> None: ...

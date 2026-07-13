@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     env: Environment = Environment.LOCAL
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
+    run_migrations_on_start: bool = True
     anthropic_api_key: str = ""
     llm_model_ingest: str = "claude-haiku-4-5"
     llm_model_generate: str = "claude-sonnet-5"

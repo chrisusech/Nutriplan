@@ -26,6 +26,7 @@ templates.env.globals.update(
     ACTIVITY_LABELS=presenter.ACTIVITY_LABELS,
     SEX_LABELS=presenter.SEX_LABELS,
     DAY_SHORT=presenter.DAY_SHORT,
+    PHASE_LABELS=presenter.PHASE_LABELS,
 )
 
 
@@ -76,8 +77,12 @@ async def db_session(request: Request) -> AsyncIterator[AsyncSession]:
     """Sesión por request; commit al final si la vista no falló."""
     container = container_of(request)
     async with container.session_factory() as session:
-        yield session
-        await session.commit()
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 def repos_of(request: Request, session: AsyncSession) -> Repos:

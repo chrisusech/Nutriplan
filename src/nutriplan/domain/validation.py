@@ -91,7 +91,23 @@ def day_totals(solved: Sequence[MealLike]) -> MacroTargets:
         protein_g=round(sum(m.computed.protein_g for m in solved), 1),
         carb_g=round(sum(m.computed.carb_g for m in solved), 1),
         fat_g=round(sum(m.computed.fat_g for m in solved), 1),
+        fiber_g=round(sum(m.computed.fiber_g for m in solved), 1),
     )
+
+
+def fiber_shortfall(solved: Sequence[MealLike], daily: MacroTargets) -> float:
+    """Cuánta fibra le falta al día. 0.0 si llega al objetivo.
+
+    NO es una desviación bloqueante, y es deliberado. La fibra depende de lo que
+    al cliente le guste comer: negarle el plan a quien no soporta las legumbres
+    sería absurdo. El motor ya garantiza la fruta por estructura (los dos snacks
+    la exigen); esto informa del resto para que el entrenador decida — añadir
+    avena, pan integral o frutos secos, o dejarlo así.
+    """
+    if daily.fiber_g <= 0:
+        return 0.0
+    actual = sum(m.computed.fiber_g for m in solved)
+    return round(max(0.0, daily.fiber_g - actual), 1)
 
 
 def slot_kcal_targets(daily: MacroTargets, config: NutritionConfig) -> dict[MealSlot, float]:

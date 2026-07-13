@@ -12,15 +12,18 @@ from uuid import UUID
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
     Uuid,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -78,6 +81,18 @@ class ClientFoodPreferenceRow(Base):
     food_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("foods.id"))
 
 
+class ClientFoodBanRow(Base):
+    """Alimentos vetados para un cliente (Fase 6 — edición quirúrgica)."""
+
+    __tablename__ = "client_food_bans"
+    __table_args__ = (UniqueConstraint("client_id", "food_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
+    food_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("foods.id"))
+
+
 class FoodRow(Base):
     __tablename__ = "foods"
 
@@ -93,10 +108,20 @@ class FoodRow(Base):
     protein_100g: Mapped[float] = mapped_column(Float)
     carb_100g: Mapped[float] = mapped_column(Float)
     fat_100g: Mapped[float] = mapped_column(Float)
+    fiber_100g: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     default_unit_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit_granularity: Mapped[str] = mapped_column(String(10), default="grams")
     unit_name: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # A qué múltiplo redondea el solver, y el piso propio del alimento.
+    portion_step_g: Mapped[float] = mapped_column(Float, default=10.0, server_default="10")
+    portion_min_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    portion_max_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Afinidad por comida: antes era una lista de nombres hardcodeada en Python.
+    meal_slots: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    # Alimentos libres (ensalada, café, gelatina): el solver los ignora.
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    free_text: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
 
 class IntakeDocumentRow(Base):
@@ -130,13 +155,14 @@ class NutritionTargetsRow(Base):
 
 class PlanCycleRow(Base):
     __tablename__ = "plan_cycles"
-    __table_args__ = (UniqueConstraint("tenant_id", "input_hash", "phase"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "input_hash", "variant"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
     targets_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("nutrition_targets.id"))
-    phase: Mapped[str] = mapped_column(String(20))
+    duration_days: Mapped[int] = mapped_column(SmallInteger, default=15, server_default="15")
+    variant: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     status: Mapped[str] = mapped_column(String(20), index=True)
     config_version: Mapped[str] = mapped_column(String(40))
     prompt_version: Mapped[str] = mapped_column(String(60))
@@ -145,19 +171,25 @@ class PlanCycleRow(Base):
     created_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    edit_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     days: Mapped[list["DayPlanRow"]] = relationship(
-        cascade="all, delete-orphan", lazy="selectin", order_by="DayPlanRow.day_index"
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="DayPlanRow.day_index",
     )
 
 
 class DayPlanRow(Base):
     __tablename__ = "day_plans"
-    __table_args__ = (UniqueConstraint("plan_cycle_id", "day_index"),)
+    __table_args__ = (UniqueConstraint("plan_cycle_id", "phase", "day_index"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     plan_cycle_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("plan_cycles.id"), index=True)
+    phase: Mapped[str] = mapped_column(String(20), default="first_15", server_default="first_15")
     day_index: Mapped[int] = mapped_column(Integer)
     totals: Mapped[dict[str, float]] = mapped_column(JSON)
 
@@ -174,10 +206,44 @@ class MealEntryRow(Base):
     day_plan_id: Mapped[int] = mapped_column(Integer, ForeignKey("day_plans.id"), index=True)
     position: Mapped[int] = mapped_column(Integer)  # orden dentro del día
     slot: Mapped[str] = mapped_column(String(20))
-    portions: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # [{food_id, grams}]
+    portions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list
+    )  # legacy; vacío con meal_items
     computed: Mapped[dict[str, float]] = mapped_column(JSON)
     free_salad: Mapped[bool] = mapped_column(Boolean, default=False)
     free_protein: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    items: Mapped[list["MealItemRow"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="MealItemRow.position"
+    )
+
+
+class MealItemRow(Base):
+    __tablename__ = "meal_items"
+    __table_args__ = (
+        CheckConstraint(
+            "(food_id IS NOT NULL AND recipe_id IS NULL) OR "
+            "(food_id IS NULL AND recipe_id IS NOT NULL)",
+            name="meal_items_one_source",
+        ),
+        CheckConstraint(
+            "is_free OR (grams IS NOT NULL AND grams > 0)",
+            name="meal_items_grams_positive",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    meal_entry_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("meal_entries.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    food_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("foods.id"), nullable=True)
+    recipe_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("recipes.id"), nullable=True)
+    grams: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
 class GenerationJobRow(Base):

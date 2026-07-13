@@ -3,6 +3,7 @@
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
+import structlog
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ from nutriplan.ui.web import presenter
 from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
 
 router = APIRouter()
+logger = structlog.get_logger(__name__)
 
 # Objetivo en texto libre del intake → Goal (heurística mínima; el entrenador
 # siempre confirma en el formulario).
@@ -28,6 +30,56 @@ GOAL_HINTS = [
     (Goal.LOSE_FAT, ("bajar", "grasa", "adelgazar", "definir", "perder")),
     (Goal.GAIN_MUSCLE, ("masa", "ganar", "volumen", "subir")),
 ]
+
+_SEX_ALIASES = {
+    "mujer": Sex.FEMALE,
+    "f": Sex.FEMALE,
+    "hombre": Sex.MALE,
+    "m": Sex.MALE,
+}
+
+
+def _safe_uuid(raw: str) -> UUID | None:
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except ValueError:
+        return None
+
+
+def _safe_uuids(raw_ids: list[str]) -> list[UUID]:
+    ids: list[UUID] = []
+    for raw in raw_ids:
+        parsed = _safe_uuid(raw)
+        if parsed is not None:
+            ids.append(parsed)
+    return ids
+
+
+def _coerce_sex(raw: str) -> Sex:
+    try:
+        return Sex(raw)
+    except ValueError:
+        alias = _SEX_ALIASES.get(raw.strip().lower())
+        if alias is not None:
+            return alias
+        raise ValueError(f"Sexo no válido: {raw}") from None
+
+
+def _coerce_goal(raw: str) -> Goal:
+    try:
+        return Goal(raw)
+    except ValueError as exc:
+        raise ValueError(f"Objetivo no válido: {raw}") from exc
+
+
+def _coerce_activity(raw: str) -> ActivityLevel:
+    try:
+        return ActivityLevel(raw)
+    except ValueError as exc:
+        raise ValueError(f"Actividad no válida: {raw}") from exc
 
 RESTRICTION_HINTS = {
     "no_seafood": ("marisco",),
@@ -70,6 +122,43 @@ async def _food_groups(request: Request, session: AsyncSession,
     return groups
 
 
+async def _render_client_form_error(
+    request: Request,
+    session: AsyncSession,
+    message: str,
+    *,
+    name: str,
+    sex: str,
+    age_years: int,
+    height_cm: float,
+    weight_kg: float,
+    goal: str,
+    activity_level: str,
+    restrictions: list[str],
+    food_ids: list[str],
+    intake_id: str,
+) -> HTMLResponse:
+    """Devuelve el formulario con error en lugar de un 500 opaco (HTMX)."""
+    form = {
+        "intake_id": intake_id,
+        "name": name,
+        "sex": sex,
+        "age_years": age_years,
+        "height_cm": height_cm,
+        "weight_kg": weight_kg,
+        "goal": goal,
+        "activity_level": activity_level,
+        "restrictions": restrictions,
+    }
+    return render(
+        request,
+        "partials/intake_review.html",
+        form=form,
+        error=message,
+        groups=await _food_groups(request, session, set(food_ids)),
+    )
+
+
 @router.get("/clientes/nuevo", response_class=HTMLResponse)
 async def new_client_page(request: Request,
                           session: Annotated[AsyncSession, Depends(db_session)]) -> HTMLResponse:
@@ -104,7 +193,7 @@ async def upload_intake(request: Request,
             form = {
                 "intake_id": str(doc.id),
                 "name": parsed.get("name") or "",
-                "sex": parsed.get("sex") or "female",
+                "sex": (parsed.get("sex") or Sex.FEMALE.value),
                 "age_years": parsed.get("age_years") or "",
                 "height_cm": parsed.get("height_cm") or "",
                 "weight_kg": parsed.get("weight_kg") or "",
@@ -125,7 +214,7 @@ async def upload_intake(request: Request,
                   groups=await _food_groups(request, session, set()))
 
 
-@router.post("/clientes")
+@router.post("/clientes", response_model=None)
 async def create_client(
     request: Request,
     session: Annotated[AsyncSession, Depends(db_session)],
@@ -140,34 +229,70 @@ async def create_client(
     food_ids: Annotated[list[str], Form()] = [],  # noqa: B006
     intake_id: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
-) -> RedirectResponse:
+) -> HTMLResponse | RedirectResponse:
     container = container_of(request)
     repos = repos_of(request, session)
-    client = Client(
-        id=uuid4(),
-        tenant_id=tenant_of(request),
-        name=name.strip(),
-        sex=Sex(sex),
-        age_years=age_years,
-        height_cm=height_cm,
-        weight_kg=weight_kg,
-        goal=Goal(goal),
-        activity_level=ActivityLevel(activity_level),
-        liked_food_ids=[UUID(f) for f in food_ids],
-        restrictions=restrictions,
-        notes=notes.strip() or None,
-    )
-    await repos.clients.add(client)
-    await compute_and_store_targets(
-        client=client, config_provider=container.config_provider, targets_repo=repos.targets
-    )
-    if intake_id:
-        doc = await repos.intakes.get(UUID(intake_id))
-        if doc:
-            await repos.intakes.update_status(
-                doc.id, IntakeStatus.CONFIRMED,
-                parsed={**doc.parsed, "client_id": str(client.id)},
-            )
+
+    form_kwargs = {
+        "name": name.strip(),
+        "sex": sex,
+        "age_years": age_years,
+        "height_cm": height_cm,
+        "weight_kg": weight_kg,
+        "goal": goal,
+        "activity_level": activity_level,
+        "restrictions": restrictions,
+        "food_ids": food_ids,
+        "intake_id": intake_id,
+    }
+
+    try:
+        sex_v = _coerce_sex(sex)
+        goal_v = _coerce_goal(goal)
+        activity_v = _coerce_activity(activity_level)
+    except ValueError as exc:
+        return await _render_client_form_error(request, session, str(exc), **form_kwargs)
+
+    try:
+        requested_foods = _safe_uuids(food_ids)
+        known_foods = await repos.foods.get_by_ids(requested_foods)
+        liked_food_ids = [f.id for f in known_foods]
+
+        client = Client(
+            id=uuid4(),
+            tenant_id=tenant_of(request),
+            name=name.strip(),
+            sex=sex_v,
+            age_years=age_years,
+            height_cm=height_cm,
+            weight_kg=weight_kg,
+            goal=goal_v,
+            activity_level=activity_v,
+            liked_food_ids=liked_food_ids,
+            restrictions=restrictions,
+            notes=notes.strip() or None,
+        )
+        await repos.clients.add(client)
+        await compute_and_store_targets(
+            client=client, config_provider=container.config_provider, targets_repo=repos.targets
+        )
+        if parsed_intake_id := _safe_uuid(intake_id):
+            doc = await repos.intakes.get(parsed_intake_id)
+            if doc:
+                await repos.intakes.update_status(
+                    doc.id, IntakeStatus.CONFIRMED,
+                    parsed={**doc.parsed, "client_id": str(client.id)},
+                )
+    except Exception as exc:
+        await session.rollback()
+        logger.exception("create_client_failed", error=str(exc))
+        return await _render_client_form_error(
+            request,
+            session,
+            "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.",
+            **form_kwargs,
+        )
+
     response = RedirectResponse(f"/generador?cliente={client.id}", status_code=303)
     if request.headers.get("HX-Request"):
         response.headers["HX-Redirect"] = f"/generador?cliente={client.id}"

@@ -21,7 +21,14 @@ import nutriplan.adapters.db.models  # noqa: E402, F401  (registra las tablas en
 from nutriplan.adapters.db.session import Base  # noqa: E402
 from nutriplan.config.settings import get_settings  # noqa: E402
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# El que invoca manda: si nos pasaron una URL (tests, migrate.py), esa se usa.
+# Solo cuando no hay ninguna (o sigue el placeholder de alembic.ini) caemos a
+# Settings. Sin esto, un `upgrade` contra una DB temporal apuntaba en realidad a
+# la DB de desarrollo.
+_url = config.get_main_option("sqlalchemy.url", "") or ""
+if not _url or _url.startswith("driver://"):
+    _url = get_settings().database_url
+config.set_main_option("sqlalchemy.url", _url)
 
 target_metadata = Base.metadata
 
@@ -51,7 +58,15 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    # SQLite no sabe ALTER TABLE de verdad; batch mode recrea la tabla por detrás.
+    # Los tests corren en SQLite y producción en Postgres: la misma migración
+    # tiene que servir para las dos.
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=connection.dialect.name == "sqlite",
+        compare_type=True,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

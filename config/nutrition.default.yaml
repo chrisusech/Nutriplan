@@ -9,11 +9,34 @@ goal_adjustments:                      # fracción sobre TDEE
   lose_fat: -0.18
   maintain: 0.0
   gain_muscle: 0.10
-protein_g_per_kg:
-  lose_fat: 2.0
-  maintain: 1.8
-  gain_muscle: 2.0
+# Proteína y grasa se fijan al SUELO de su rango: es lo que deja más kcal libres
+# para el carbohidrato (que cierra el resto). El entrenador sube el slider por
+# cliente cuando hace falta.
+protein_g_per_kg:                      # rango admitido 1.6–2.2
+  lose_fat: 1.6
+  maintain: 1.6
+  gain_muscle: 1.6
+fat_g_per_kg:                          # rango admitido 0.8–1.0
+  lose_fat: 0.8
+  maintain: 0.8
+  gain_muscle: 0.8
+# Solo fallback si un objetivo no declara fat_g_per_kg. Un % fijo de las kcal se
+# encoge con el déficit (0.62 g/kg en un plan de 1400 kcal) y se dispara en
+# volumen (1.33 g/kg en uno de 3400): por eso g/kg manda.
 fat_pct_of_kcal: 0.28
+
+# Piso energético. Las kcal son el MÁXIMO de tres cosas: el déficit sobre el
+# TDEE, el BMR (nadie come bajo su metabolismo basal) y este piso por sexo.
+# Sin él, una mujer sedentaria de 70 kg salía en 1398 kcal y una de 80 kg en
+# 1496 — por debajo de su propio BMR. Rango de la guía AHA/ACC/TOS: 1200–1500
+# en mujeres, 1500–1800 en hombres.
+kcal_floor:
+  female: 1450
+  male: 1700
+carb_floor_g_per_kg: 0.5               # guarda de imposibilidad, no de opinión
+fiber:
+  g_per_1000_kcal: 14                  # estándar DRI
+  min_fruit_servings: 2                # fruta al día (digestión)
 meal_distribution:                     # debe sumar 1.0
   desayuno: 0.25
   snack_am: 0.10

@@ -46,6 +46,12 @@
         </button>
       </form>
 
+      {% if mode == "login" %}
+      <p style="text-align:center;font:500 13px Poppins;color:var(--muted);margin:12px 0 0">
+        <a href="/recuperar" style="color:var(--brand);font-weight:600">¿Olvidaste tu contraseña?</a>
+      </p>
+      {% endif %}
+
       <p style="text-align:center;font:500 13px Poppins;color:var(--muted);margin:18px 0 0">
         {% if mode == "signup" %}
         ¿Ya tienes cuenta? <a href="/login" style="color:var(--brand);font-weight:600">Entra</a>

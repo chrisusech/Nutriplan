@@ -11,8 +11,9 @@ from uuid import UUID, uuid4
 
 import structlog
 
+from nutriplan.adapters.render.view import plan_phases_in
 from nutriplan.domain.errors import RenderError
-from nutriplan.domain.models import Branding, PlanStatus
+from nutriplan.domain.models import Branding, MacroTargets, PlanStatus
 from nutriplan.ports.food_repository import FoodRepository
 from nutriplan.ports.job_repository import ArtifactRepository, ExportArtifact
 from nutriplan.ports.renderer import Renderer
@@ -32,6 +33,7 @@ async def export_plan(
     branding: Branding,
     exports_dir: Path,
     client_name: str | None = None,
+    daily_targets: MacroTargets | None = None,
 ) -> tuple[ExportArtifact, bytes]:
     plan = await plan_repo.get(plan_id)
     if plan is None:
@@ -44,7 +46,18 @@ async def export_plan(
     food_ids = {p.food_id for day in plan.days for meal in day.meals for p in meal.portions}
     foods = {f.id: f for f in await food_repo.get_by_ids(sorted(food_ids, key=str))}
 
-    content = await renderer.render(plan, branding, foods, fmt, client_name)
+    if plan.duration_days >= 30:
+        phases = plan_phases_in(plan)
+        expected_days = 7 * len(phases)
+        if len(plan.days) < expected_days:
+            raise RenderError(
+                f"El plan es de 30 días pero solo tiene {len(plan.days)} días guardados "
+                f"(se esperaban {expected_days}). Regenera con «Plan 30 días» y vuelve a aprobar."
+            )
+
+    content = await renderer.render(
+        plan, branding, foods, fmt, client_name, daily_targets=daily_targets
+    )
 
     exports_dir.mkdir(parents=True, exist_ok=True)
     path = exports_dir / f"plan_semanal_{plan_id}.{fmt}"

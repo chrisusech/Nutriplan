@@ -6,560 +6,229 @@
   <head>
   <meta charset="utf-8">
   <style>
-    @page { size: letter; margin: 1.5cm 1.4cm; }
+    @page { size: letter landscape; margin: 1.2cm 1cm; }
     * { box-sizing: border-box; }
     body {
       font-family: "Poppins", "Helvetica Neue", Arial, sans-serif;
-      color: #3B2E2B; margin: 0; font-size: 10pt; line-height: 1.4;
+      color: #3B2E2B; margin: 0; font-size: 8.5pt; line-height: 1.35;
     }
     .cover {
-      background: #2E7D32; color: #fff; border-radius: 22px;
-      padding: 30px 30px 26px; margin-bottom: 20px;
+      background: #2E7D32; color: #fff; border-radius: 16px;
+      padding: 22px 24px 18px; margin-bottom: 14px;
     }
-    .cover .trainer { font-size: 11pt; font-weight: 700; opacity: .9; margin-bottom: 18px; }
-    .cover .kicker {
-      font-size: 8.5pt; font-weight: 600; letter-spacing: .5px;
-      text-transform: uppercase; opacity: .85; margin-bottom: 4px;
+    .cover h1 { font-size: 20pt; font-weight: 800; margin: 0 0 4px; }
+    .cover .sub { font-size: 10pt; opacity: .92; margin: 0; }
+    .phase-title {
+      font-size: 11pt; font-weight: 800; margin: 16px 0 8px; color: #3B2E2B;
     }
-    .cover h1 { font-size: 24pt; font-weight: 800; margin: 0 0 4px; letter-spacing: -.5px; }
-    .cover .sub { font-size: 11pt; opacity: .92; margin: 0 0 18px; }
-    .cover .macros { display: flex; gap: 8px; }
-    .cover .chip {
-      background: rgba(255,255,255,.16); border-radius: 12px;
-      padding: 9px 13px; min-width: 92px;
+    .phase-block { page-break-inside: avoid; margin-bottom: 18px; }
+    table.grid {
+      width: 100%; border-collapse: collapse; margin-bottom: 12px;
     }
-    .cover .chip .lbl { font-size: 8pt; opacity: .85; }
-    .cover .chip .val { font-size: 14pt; font-weight: 800; }
-  
-    .day {
-      border: 1px solid #F1E4DD; border-radius: 18px; overflow: hidden;
-      margin-bottom: 14px; break-inside: avoid;
+    table.grid th, table.grid td {
+      border: 1px solid #E8D8CF; vertical-align: top; padding: 5px 6px;
     }
-    .day .head {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 16px;
+    table.grid th {
+      background: #eaf2ea; font-weight: 700; font-size: 8pt;
+      text-align: center;
     }
-    .day .head.alt { background: #eaf2ea; }
-    .day .head.plain { background: #FBF7F4; }
-    .day .badge {
-      display: inline-block; width: 30px; height: 30px; line-height: 30px;
-      text-align: center; border-radius: 10px; background: #2E7D32;
-      color: #fff; font-weight: 800; font-size: 11pt; margin-right: 10px;
+    table.grid th.slot {
+      text-align: left; width: 72px; background: #FBF7F4;
     }
-    .day .name { font-size: 12pt; font-weight: 800; }
-    .day .totals { font-size: 8.5pt; color: #8A756C; }
-    .day .headwrap { display: flex; align-items: center; }
-    .meals { padding: 4px 16px 8px; }
-    .meal { padding: 9px 0; border-bottom: 1px solid #F6ECE7; }
-    .meal:last-child { border-bottom: none; }
-    .meal .top {
-      display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px;
+    .portion { display: block; margin-bottom: 2px; font-size: 7.5pt; }
+    .extra { display: block; font-size: 7pt; color: #8A756C; font-style: italic; }
+    .macros {
+      display: block; font-size: 6.5pt; font-weight: 700; color: #6B564E;
+      margin-top: 3px; padding-top: 2px; border-top: 1px solid #F1E4DD;
     }
-    .meal .nm { font-size: 10pt; font-weight: 700; }
-    .meal .meta { font-size: 8pt; color: #B0968C; }
-    .meal .items { }
-    .meal .it {
-      display: inline-block; font-size: 8.5pt; color: #5C4A44;
-      background: #FBF7F4; border: 1px solid #F1E4DD;
-      padding: 3px 9px; border-radius: 999px; margin: 0 4px 4px 0;
+    tr.day-totals th, tr.day-totals td {
+      background: #FBF7F4; font-weight: 700;
     }
-    .meal .it.free { background: #eaf2ea; border-color: #eaf2ea; }
-  
+    tr.day-totals td { font-size: 7pt; }
+    .day-macro-kcal { display: block; font-size: 7.5pt; color: #3B2E2B; }
+    .day-macro-pcg { display: block; font-size: 6.5pt; color: #8A756C; margin-top: 1px; }
     .note {
-      background: #FBF7F4; border: 1px solid #F1E4DD; border-radius: 16px;
-      padding: 14px 18px; margin-top: 6px; break-inside: avoid;
+      background: #FBF7F4; border: 1px solid #F1E4DD; border-radius: 12px;
+      padding: 12px 16px; margin-top: 8px; break-inside: avoid;
     }
-    .note h3 { font-size: 10.5pt; margin: 0 0 8px; color: #3B2E2B; }
-    .note ol { margin: 0; padding-left: 18px; }
-    .note li { font-size: 8.5pt; color: #6B564E; margin-bottom: 3px; }
-    .foot { margin-top: 12px; font-size: 6.5pt; color: #B0968C; text-align: center; }
+    .note h3 { font-size: 10pt; margin: 0 0 6px; }
+    .note ol { margin: 0; padding-left: 16px; }
+    .note li { font-size: 8pt; color: #6B564E; margin-bottom: 2px; }
   </style>
   </head>
   <body>
     <div class="cover">
-  <div class="trainer">Valeria Fit</div>    <div class="kicker">Plan nutricional semanal</div>
-      <h1>Cliente Ejemplo</h1>
-      <p class="sub">7 días · 1437 kcal diarias</p>
-      <div class="macros">
-        <div class="chip"><div class="lbl">Calorías</div><div class="val">1437</div></div>
-        <div class="chip"><div class="lbl">Proteína</div><div class="val">128 g</div></div>
-        <div class="chip"><div class="lbl">Carbos</div><div class="val">143 g</div></div>
-        <div class="chip"><div class="lbl">Grasas</div><div class="val">40 g</div></div>
-      </div>
+  <div style="font-size:9pt;font-weight:700;opacity:.9;margin-bottom:10px">Valeria Fit</div>    <h1>Cliente Ejemplo</h1>
+      <p class="sub">Objetivo diario · 1506 kcal · P 137 g · C 144 g · G 44 g · Plan 15 días (1 semana)</p>
     </div>
   
-    <div class="day">
-      <div class="head alt">
-        <div class="headwrap">
-          <span class="badge">1</span>
-          <div>
-            <div class="name">Lunes</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="day">
-      <div class="head plain">
-        <div class="headwrap">
-          <span class="badge">2</span>
-          <div>
-            <div class="name">Martes</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="day">
-      <div class="head alt">
-        <div class="headwrap">
-          <span class="badge">3</span>
-          <div>
-            <div class="name">Miércoles</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="day">
-      <div class="head plain">
-        <div class="headwrap">
-          <span class="badge">4</span>
-          <div>
-            <div class="name">Jueves</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="day">
-      <div class="head alt">
-        <div class="headwrap">
-          <span class="badge">5</span>
-          <div>
-            <div class="name">Viernes</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="day">
-      <div class="head plain">
-        <div class="headwrap">
-          <span class="badge">6</span>
-          <div>
-            <div class="name">Sábado</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="day">
-      <div class="head alt">
-        <div class="headwrap">
-          <span class="badge">7</span>
-          <div>
-            <div class="name">Domingo</div>
-            <div class="totals">1437 kcal · P 128g · C 143g · G 40g</div>
-          </div>
-        </div>
-      </div>
-      <div class="meals">
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Desayuno</span>
-            <span class="meta">7:00 am · 376 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">2 huevos (100 g)</span>
-            <span class="it">Arepa de maíz — 70 g</span>
-            <span class="it">Aguacate — 50 g</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack AM</span>
-            <span class="meta">10:30 am · 207 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Yogur griego natural — 170 g</span>
-            <span class="it">1 unidad de banano (120 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Almuerzo</span>
-            <span class="meta">1:00 pm · 404 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Pechuga de pollo — 150 g</span>
-            <span class="it">Arroz blanco cocido — 120 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Snack PM</span>
-            <span class="meta">4:30 pm · 252 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Queso fresco — 60 g</span>
-            <span class="it">1 unidad de manzana (180 g)</span>
-          </div>
-        </div>
-        <div class="meal">
-          <div class="top">
-            <span class="nm">Cena</span>
-            <span class="meta">7:30 pm · 198 kcal</span>
-          </div>
-          <div class="items">
-            <span class="it">Tilapia — 150 g</span>
-            <span class="it">Batata cocida — 60 g</span>
-            <span class="it free">Ensalada libre</span>
-          </div>
-        </div>
-      </div>
+    <div class="phase-block">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th class="slot"></th>
+  <th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th><th>Sábado</th><th>Domingo</th>        </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th class="slot">Desayuno</th>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+            <td>
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">376 kcal · P 17 · C 37 · G 18</span>
+            </td>
+          </tr>
+          <tr>
+            <th class="slot">Snack AM</th>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+            <td>
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">207 kcal · P 19 · C 34 · G 1</span>
+            </td>
+          </tr>
+          <tr>
+            <th class="slot">Almuerzo</th>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+            <td>
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">404 kcal · P 50 · C 34 · G 6</span>
+            </td>
+          </tr>
+          <tr>
+            <th class="slot">Snack PM</th>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+            <td>
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">273 kcal · P 11 · C 27 · G 15</span>
+            </td>
+          </tr>
+          <tr>
+            <th class="slot">Cena</th>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+            <td>
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">246 kcal · P 40 · C 12 · G 4</span>
+            </td>
+          </tr>
+          <tr class="day-totals">
+            <th class="slot">Totales día</th>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+            <td>
+              <span class="day-macro-kcal">1506 kcal</span>
+              <span class="day-macro-pcg">P 137 g · C 144 g · G 44 g</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   
     <div class="note">
       <h3>Anotaciones importantes</h3>
       <ol>
   <li>Pesar los alimentos ya cocidos, con gramera.</li><li>Tomar mínimo 2 litros de agua al día.</li><li>La ensalada es libre: verduras verdes, tomate, cebolla, limón y especias sin restricción.</li><li>Cocinar con poco aceite (medir el que indica el plan) y preferir aire, horno o plancha.</li><li>Respetar los horarios de las 5 comidas; no saltarse ninguna.</li><li>Endulzantes sin calorías permitidos con moderación; evitar azúcar y bebidas azucaradas.</li><li>Este plan es un borrador profesional revisado y aprobado por tu entrenador(a).</li>    </ol>
-    </div>
-  
-    <div class="foot">
-      Config 2026.07.01 · Prompt plan_generation.v1 ·
-      Modelo claude-sonnet-5 · Hash f1x3dh45h000
     </div>
   </body>
   </html>

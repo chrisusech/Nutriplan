@@ -5,6 +5,8 @@ consulta y escritura. Por construcción, un tenant no puede ver ni tocar
 datos de otro (sección 7.2).
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -14,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import (
     AuditLogRow,
+    ClientFoodBanRow,
     ClientFoodPreferenceRow,
     ClientRow,
     DayPlanRow,
@@ -22,6 +25,7 @@ from nutriplan.adapters.db.models import (
     GenerationJobRow,
     IntakeDocumentRow,
     MealEntryRow,
+    MealItemRow,
     NutritionTargetsRow,
     PlanCycleRow,
     RecipeRow,
@@ -42,7 +46,7 @@ from nutriplan.domain.models import (
     MacroFormula,
     MacroTargets,
     MealEntry,
-    MealFoodPortion,
+    MealItem,
     MealSlot,
     NutritionTargets,
     PlanCycle,
@@ -152,6 +156,28 @@ class SqlClientRepository:
         ]
         await self._s.flush()
 
+    async def list_banned_food_ids(self, client_id: UUID) -> list[UUID]:
+        stmt = select(ClientFoodBanRow.food_id).where(
+            ClientFoodBanRow.client_id == client_id,
+            ClientFoodBanRow.tenant_id == self._tenant,
+        )
+        return list((await self._s.execute(stmt)).scalars().all())
+
+    async def ban_food(self, client_id: UUID, food_id: UUID) -> None:
+        stmt = select(ClientFoodBanRow).where(
+            ClientFoodBanRow.client_id == client_id,
+            ClientFoodBanRow.food_id == food_id,
+            ClientFoodBanRow.tenant_id == self._tenant,
+        )
+        if (await self._s.execute(stmt)).scalar_one_or_none() is not None:
+            return
+        self._s.add(
+            ClientFoodBanRow(
+                tenant_id=self._tenant, client_id=client_id, food_id=food_id
+            )
+        )
+        await self._s.flush()
+
 
 class SqlFoodRepository:
     def __init__(self, session: AsyncSession, tenant_id: UUID) -> None:
@@ -172,10 +198,17 @@ class SqlFoodRepository:
             protein_100g=row.protein_100g,
             carb_100g=row.carb_100g,
             fat_100g=row.fat_100g,
+            fiber_100g=row.fiber_100g or 0.0,
             tags=list(row.tags or []),
             default_unit_g=row.default_unit_g,
             unit_granularity=UnitGranularity(row.unit_granularity or "grams"),
             unit_name=row.unit_name,
+            portion_step_g=row.portion_step_g,
+            portion_min_g=row.portion_min_g,
+            portion_max_g=row.portion_max_g,
+            meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
+            is_free=bool(row.is_free),
+            free_text=row.free_text,
         )
 
     @staticmethod
@@ -190,15 +223,27 @@ class SqlFoodRepository:
         row.protein_100g = food.protein_100g
         row.carb_100g = food.carb_100g
         row.fat_100g = food.fat_100g
+        row.fiber_100g = food.fiber_100g
         row.tags = list(food.tags)
         row.default_unit_g = food.default_unit_g
         row.unit_granularity = food.unit_granularity.value
         row.unit_name = food.unit_name
+        row.portion_step_g = food.portion_step_g
+        row.portion_min_g = food.portion_min_g
+        row.portion_max_g = food.portion_max_g
+        row.meal_slots = [s.value for s in food.meal_slots]
+        row.is_free = food.is_free
+        row.free_text = food.free_text
         return row
 
     async def upsert_globals(self, foods: list[FoodItem]) -> None:
+        if not foods:
+            return
+        ids = [food.id for food in foods]
+        stmt = select(FoodRow).where(FoodRow.id.in_(ids))
+        existing_map = {row.id: row for row in (await self._s.execute(stmt)).scalars()}
         for food in foods:
-            existing = await self._s.get(FoodRow, food.id)
+            existing = existing_map.get(food.id)
             if existing is None:
                 existing = FoodRow(id=food.id, tenant_id=None)
                 self._s.add(existing)
@@ -364,26 +409,106 @@ class SqlPlanRepository:
         self._s = session
         self._tenant = tenant_id
 
+    @staticmethod
+    def _items_from_legacy(portions: list[dict[str, Any]]) -> list[MealItem]:
+        return [
+            MealItem(
+                food_id=UUID(p["food_id"]),
+                grams=float(p["grams"]),
+                position=i,
+            )
+            for i, p in enumerate(portions)
+            if p.get("food_id") and p.get("grams")
+        ]
+
+    @staticmethod
+    def _meal_items_to_domain(rows: list[MealItemRow]) -> list[MealItem]:
+        return [
+            MealItem(
+                id=r.id,
+                food_id=r.food_id,
+                recipe_id=r.recipe_id,
+                grams=r.grams,
+                is_free=bool(r.is_free),
+                is_locked=bool(r.is_locked),
+                note=r.note,
+                position=r.position,
+            )
+            for r in rows
+        ]
+
+    @staticmethod
+    def _meal_entry_to_domain(row: MealEntryRow) -> MealEntry:
+        if row.items:
+            items = SqlPlanRepository._meal_items_to_domain(list(row.items))
+        elif row.portions:
+            items = SqlPlanRepository._items_from_legacy(list(row.portions))
+        else:
+            items = []
+        return MealEntry(
+            id=row.id,
+            slot=MealSlot(row.slot),
+            items=items,
+            computed=MacroTargets(**row.computed),
+            free_salad=row.free_salad,
+            free_protein=row.free_protein,
+        )
+
+    def _item_rows(
+        self,
+        items: list[MealItem],
+        *,
+        preserve_ids: dict[tuple[UUID | None, UUID | None], int] | None = None,
+        meal_entry_id: int | None = None,
+    ) -> list[MealItemRow]:
+        preserve_ids = preserve_ids or {}
+        rows: list[MealItemRow] = []
+        for item in items:
+            key = (item.food_id, item.recipe_id)
+            item_id = item.id
+            if item_id is None and key in preserve_ids:
+                item_id = preserve_ids[key]
+            row_kwargs: dict[str, Any] = {
+                "tenant_id": self._tenant,
+                "position": item.position,
+                "food_id": item.food_id,
+                "recipe_id": item.recipe_id,
+                "grams": item.grams,
+                "is_free": item.is_free,
+                "is_locked": item.is_locked,
+                "note": item.note,
+            }
+            if meal_entry_id is not None:
+                row_kwargs["meal_entry_id"] = meal_entry_id
+            if item_id is not None:
+                row_kwargs["id"] = item_id
+            rows.append(MealItemRow(**row_kwargs))
+        return rows
+
+    def _meal_rows(self, meals: list[MealEntry]) -> list[MealEntryRow]:
+        return [
+            MealEntryRow(
+                id=meal.id,
+                tenant_id=self._tenant,
+                position=i,
+                slot=meal.slot.value,
+                portions=[],  # legacy vacío: la fuente de verdad es meal_items
+                computed=meal.computed.model_dump(),
+                free_salad=meal.free_salad,
+                free_protein=meal.free_protein,
+                items=self._item_rows(meal.items),
+            )
+            for i, meal in enumerate(meals)
+        ]
+
     def _day_rows(self, plan: PlanCycle) -> list[DayPlanRow]:
         return [
             DayPlanRow(
                 tenant_id=self._tenant,
+                phase=day.phase.value,
                 day_index=day.day_index,
                 totals=day.totals.model_dump(),
-                meals=[
-                    MealEntryRow(
-                        tenant_id=self._tenant,
-                        position=i,
-                        slot=meal.slot.value,
-                        portions=[
-                            {"food_id": str(p.food_id), "grams": p.grams} for p in meal.portions
-                        ],
-                        computed=meal.computed.model_dump(),
-                        free_salad=meal.free_salad,
-                        free_protein=meal.free_protein,
-                    )
-                    for i, meal in enumerate(day.meals)
-                ],
+                meals=self._meal_rows(day.meals),
             )
             for day in plan.days
         ]
@@ -395,27 +520,20 @@ class SqlPlanRepository:
             tenant_id=row.tenant_id,
             client_id=row.client_id,
             targets_id=row.targets_id,
-            phase=PlanPhase(row.phase),
-            days=[
-                DayPlan(
-                    day_index=d.day_index,
-                    totals=MacroTargets(**d.totals),
-                    meals=[
-                        MealEntry(
-                            slot=MealSlot(m.slot),
-                            portions=[
-                                MealFoodPortion(food_id=UUID(p["food_id"]), grams=p["grams"])
-                                for p in m.portions
-                            ],
-                            computed=MacroTargets(**m.computed),
-                            free_salad=m.free_salad,
-                            free_protein=m.free_protein,
-                        )
-                        for m in d.meals
-                    ],
-                )
-                for d in row.days
-            ],
+            duration_days=row.duration_days,
+            variant=row.variant,
+            days=sorted(
+                (
+                    DayPlan(
+                        day_index=d.day_index,
+                        phase=PlanPhase(d.phase),
+                        totals=MacroTargets(**d.totals),
+                        meals=[SqlPlanRepository._meal_entry_to_domain(m) for m in d.meals],
+                    )
+                    for d in row.days
+                ),
+                key=lambda d: (d.phase.value, d.day_index),
+            ),
             status=PlanStatus(row.status),
             config_version=row.config_version,
             prompt_version=row.prompt_version,
@@ -424,6 +542,9 @@ class SqlPlanRepository:
             created_by=row.created_by,
             created_at=_aware(row.created_at),
             approved_at=_aware(row.approved_at) if row.approved_at else None,
+            edited_at=_aware(row.edited_at) if row.edited_at else None,
+            edited_by=row.edited_by,
+            edit_count=row.edit_count or 0,
         )
 
     async def add(self, plan: PlanCycle) -> None:
@@ -433,7 +554,8 @@ class SqlPlanRepository:
                 tenant_id=self._tenant,
                 client_id=plan.client_id,
                 targets_id=plan.targets_id,
-                phase=plan.phase.value,
+                duration_days=plan.duration_days,
+                variant=plan.variant,
                 status=plan.status.value,
                 config_version=plan.config_version,
                 prompt_version=plan.prompt_version,
@@ -442,6 +564,9 @@ class SqlPlanRepository:
                 created_by=plan.created_by,
                 created_at=plan.created_at,
                 approved_at=plan.approved_at,
+                edited_at=plan.edited_at,
+                edited_by=plan.edited_by,
+                edit_count=plan.edit_count,
                 days=self._day_rows(plan),
             )
         )
@@ -468,19 +593,94 @@ class SqlPlanRepository:
 
     async def find_by_input_hash(self, input_hash: str) -> list[PlanCycle]:
         stmt = select(PlanCycleRow).where(
-            PlanCycleRow.input_hash == input_hash, PlanCycleRow.tenant_id == self._tenant
+            PlanCycleRow.input_hash == input_hash,
+            PlanCycleRow.tenant_id == self._tenant,
+            PlanCycleRow.edit_count == 0,
         )
         rows = (await self._s.execute(stmt)).scalars().all()
-        return [self._to_domain(r) for r in rows]
+        return [self._to_domain(r) for r in rows if r.edited_at is None]
 
-    async def update_days(self, plan: PlanCycle) -> None:
-        row = await self._row(plan.id)
+    async def update_day(
+        self,
+        plan_id: UUID,
+        phase: PlanPhase,
+        day_index: int,
+        day: DayPlan,
+        *,
+        mark_edited: bool = False,
+        edited_by: UUID | None = None,
+    ) -> None:
+        """Reescribe un solo día preservando ids de meal_entries e items que no cambiaron."""
+        row = await self._row(plan_id)
         if row is None:
             raise TenantIsolationError("Plan inexistente para este tenant")
-        # borrar los días viejos antes de insertar (unique plan_cycle_id+day_index)
-        row.days.clear()
+
+        existing = next(
+            (
+                d
+                for d in row.days
+                if d.phase == phase.value and d.day_index == day_index
+            ),
+            None,
+        )
+        preserve_meals: dict[MealSlot, int] = {}
+        preserve_items: dict[MealSlot, dict[tuple[UUID | None, UUID | None], int]] = {}
+        if existing is not None:
+            for existing_meal in existing.meals:
+                slot = MealSlot(existing_meal.slot)
+                preserve_meals[slot] = existing_meal.id
+                preserve_items[slot] = {
+                    (item.food_id, item.recipe_id): item.id for item in existing_meal.items
+                }
+
+        if existing is not None:
+            await self._s.delete(existing)
+            await self._s.flush()
+
+        meal_rows: list[MealEntryRow] = []
+        for i, day_meal in enumerate(day.meals):
+            meal_id = day_meal.id or preserve_meals.get(day_meal.slot)
+            entry = MealEntryRow(
+                id=meal_id,
+                tenant_id=self._tenant,
+                position=i,
+                slot=day_meal.slot.value,
+                portions=[],
+                computed=day_meal.computed.model_dump(),
+                free_salad=day_meal.free_salad,
+                free_protein=day_meal.free_protein,
+                items=self._item_rows(
+                    day_meal.items,
+                    preserve_ids=preserve_items.get(day_meal.slot, {}),
+                ),
+            )
+            meal_rows.append(entry)
+
+        day_row = DayPlanRow(
+            tenant_id=self._tenant,
+            plan_cycle_id=plan_id,
+            phase=phase.value,
+            day_index=day_index,
+            totals=day.totals.model_dump(),
+            meals=meal_rows,
+        )
+        row.days.append(day_row)
         await self._s.flush()
-        row.days = self._day_rows(plan)
+
+        if mark_edited:
+            row.edited_at = datetime.now(UTC)
+            row.edited_by = edited_by
+            row.edit_count = (row.edit_count or 0) + 1
+
+        await self._s.flush()
+
+    async def mark_edited(self, plan_id: UUID, *, edited_by: UUID | None = None) -> None:
+        row = await self._row(plan_id)
+        if row is None:
+            raise TenantIsolationError("Plan inexistente para este tenant")
+        row.edited_at = datetime.now(UTC)
+        row.edited_by = edited_by
+        row.edit_count = (row.edit_count or 0) + 1
         await self._s.flush()
 
     async def set_status(self, plan_id: UUID, status: PlanStatus) -> None:
@@ -498,7 +698,7 @@ class SqlJobRepository:
         self._tenant = tenant_id
 
     @staticmethod
-    def _to_domain(row: GenerationJobRow) -> "Job":
+    def _to_domain(row: GenerationJobRow) -> Job:
         return Job(
             id=row.id,
             tenant_id=row.tenant_id,
@@ -512,7 +712,7 @@ class SqlJobRepository:
             updated_at=_aware(row.updated_at),
         )
 
-    async def add(self, job: "Job") -> None:
+    async def add(self, job: Job) -> None:
         self._s.add(
             GenerationJobRow(
                 id=job.id,
@@ -529,21 +729,21 @@ class SqlJobRepository:
         )
         await self._s.flush()
 
-    async def get(self, job_id: UUID) -> "Job | None":
+    async def get(self, job_id: UUID) -> Job | None:
         stmt = select(GenerationJobRow).where(
             GenerationJobRow.id == job_id, GenerationJobRow.tenant_id == self._tenant
         )
         row = (await self._s.execute(stmt)).scalar_one_or_none()
         return self._to_domain(row) if row else None
 
-    async def get_by_idempotency_key(self, key: str) -> "Job | None":
+    async def get_by_idempotency_key(self, key: str) -> Job | None:
         stmt = select(GenerationJobRow).where(
             GenerationJobRow.idempotency_key == key, GenerationJobRow.tenant_id == self._tenant
         )
         row = (await self._s.execute(stmt)).scalar_one_or_none()
         return self._to_domain(row) if row else None
 
-    async def update(self, job: "Job") -> None:
+    async def update(self, job: Job) -> None:
         stmt = select(GenerationJobRow).where(
             GenerationJobRow.id == job.id, GenerationJobRow.tenant_id == self._tenant
         )
@@ -563,7 +763,7 @@ class SqlArtifactRepository:
         self._s = session
         self._tenant = tenant_id
 
-    async def add(self, artifact: "ExportArtifact") -> None:
+    async def add(self, artifact: ExportArtifact) -> None:
         self._s.add(
             ExportArtifactRow(
                 id=artifact.id,
@@ -576,7 +776,7 @@ class SqlArtifactRepository:
         )
         await self._s.flush()
 
-    async def list_for_plan(self, plan_cycle_id: UUID) -> "list[ExportArtifact]":
+    async def list_for_plan(self, plan_cycle_id: UUID) -> list[ExportArtifact]:
         stmt = select(ExportArtifactRow).where(
             ExportArtifactRow.plan_cycle_id == plan_cycle_id,
             ExportArtifactRow.tenant_id == self._tenant,
@@ -642,6 +842,15 @@ class SqlAuthRepository:
         self._s.add(user)
         await self._s.flush()
         return self._to_domain(user)
+
+    async def set_password_hash(self, email: str, password_hash: str) -> bool:
+        stmt = select(UserRow).where(UserRow.email == email.strip().lower())
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return False
+        row.password_hash = password_hash
+        await self._s.flush()
+        return True
 
 
 class SqlRecipeRepository:

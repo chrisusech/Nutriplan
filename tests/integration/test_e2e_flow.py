@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from tests.integration.test_parse_intake import ANA
 
+from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
-from nutriplan.adapters.db.session import Base
 from nutriplan.adapters.llm.mock_client import MockLLMClient
 from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer
@@ -43,9 +43,9 @@ CSV_PATH = ROOT / "data" / "foods" / "curated_foods.csv"
 
 @pytest.fixture
 async def ctx(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/t.db")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    url = f"sqlite+aiosqlite:///{tmp_path}/t.db"
+    await upgrade_to_head_async(url)
+    engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     container = Container(tenant_id=DEFAULT_TENANT_ID)
     async with factory() as session:
@@ -131,6 +131,7 @@ async def test_word_to_pdf_full_flow(ctx) -> None:
         targets=targets,
         food_repo=repos.foods,
         plan_repo=repos.plans,
+        client_repo=repos.clients,
         config=config,
         llm=None,
         prompts_dir=PROMPTS,
@@ -186,7 +187,48 @@ async def test_word_to_pdf_full_flow(ctx) -> None:
     assert len(await repos.artifacts.list_for_plan(first.id)) == 2
 
 
-async def test_generation_job_failure_is_recorded(ctx) -> None:
+async def test_thirty_day_plan_has_two_phases(ctx) -> None:
+    """Fase 5: 30 días = 2 semanas (first_15 + next_15)."""
+    container, repos, _ = ctx
+    from nutriplan.application.compute_targets import compute_and_store_targets
+
+    foods = await repos.foods.list_universe()
+    client = Client(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        name="Plan 30",
+        sex=Sex.FEMALE,
+        age_years=30,
+        height_cm=165,
+        weight_kg=65,
+        goal=Goal.LOSE_FAT,
+        activity_level=ActivityLevel.MODERATE,
+        liked_food_ids=[f.id for f in foods],
+        restrictions=[],
+    )
+    await repos.clients.add(client)
+    targets = await compute_and_store_targets(
+        client=client, config_provider=container.config_provider, targets_repo=repos.targets
+    )
+    cycle = await generate_plan_for_client(
+        client=client,
+        targets=targets,
+        food_repo=repos.foods,
+        plan_repo=repos.plans,
+        client_repo=repos.clients,
+        config=container.config_provider.get_nutrition_config(),
+        llm=None,
+        prompts_dir=PROMPTS,
+        model="offline-heuristic",
+        duration_days=30,
+    )
+    assert cycle.duration_days == 30
+    assert len(cycle.days) == 14
+    from nutriplan.domain.models import PlanPhase
+
+    assert sum(1 for d in cycle.days if d.phase is PlanPhase.FIRST_15) == 7
+    assert sum(1 for d in cycle.days if d.phase is PlanPhase.NEXT_15) == 7
+
     container, repos, _ = ctx
     job = new_job(tenant_id=DEFAULT_TENANT_ID, kind=JobKind.GENERATE, idempotency_key="gen:x")
     await repos.jobs.add(job)

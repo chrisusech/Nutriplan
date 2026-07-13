@@ -17,6 +17,10 @@ htmlcov/
 data/*.db
 data/*.db-journal
 data/exports/
+# Staging de USDA FoodData Central: se reconstruye con `nutriplan-food
+# import-usda` desde el bulk CSV. Lo que se versiona es el resultado (el fdc_id
+# y los macros) dentro de data/foods/curated_foods.csv.
+data/usda/
 config/branding/
 
 # macOS

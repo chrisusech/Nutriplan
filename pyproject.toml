@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings>=2.2",
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.20",
+    "asyncpg>=0.30",
     "greenlet>=3.0",
     "alembic>=1.13",
     "anthropic>=0.40",
@@ -38,6 +39,7 @@ dev = [
 
 [project.scripts]
 nutriplan = "nutriplan.ui.web.app:main"
+nutriplan-food = "nutriplan.adapters.food.cli:main"
 
 [build-system]
 requires = ["hatchling"]

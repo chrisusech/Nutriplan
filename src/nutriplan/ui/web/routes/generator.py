@@ -9,6 +9,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.llm.prompts import load_prompt
@@ -17,6 +18,7 @@ from nutriplan.application.generate_plan import compute_input_hash
 from nutriplan.application.jobs import new_job, run_generation_job
 from nutriplan.container import Container
 from nutriplan.domain.calculation import compute_targets as compute_targets_domain
+from nutriplan.domain.errors import CalculationError
 from nutriplan.domain.food_filter import allowed_foods, forbidden_tags
 from nutriplan.domain.models import Client, Goal, MacroFormula, NutritionTargets
 from nutriplan.ports.job_repository import JobKind, JobStatus
@@ -53,13 +55,17 @@ async def _fresh_targets(request: Request, session: AsyncSession, client: Client
 
 async def _generator_context(request: Request, session: AsyncSession,
                              client: Client, dia: int, editar: bool,
-                             job_id: str | None = None) -> dict[str, Any]:
+                             job_id: str | None = None,
+                             formula_error: str | None = None,
+                             fase: str = "first_15") -> dict[str, Any]:
+    from nutriplan.domain.models import PlanPhase
+
     container = container_of(request)
     repos = repos_of(request, session)
     config = container.config_provider.get_nutrition_config()
     targets = await _fresh_targets(request, session, client)
+    phase = presenter.parse_plan_phase(fase)
 
-    # chips de alimentos: universo sin los restringidos, marcando los que le gustan
     universe = await repos.foods.list_universe()
     tags, _ = forbidden_tags(client.restrictions)
     visible = [f for f in universe if not (set(f.tags) & tags)]
@@ -73,23 +79,42 @@ async def _generator_context(request: Request, session: AsyncSession,
         if items:
             groups.append({**meta, "items": items})
 
-    # plan semanal más reciente + frescura frente a los insumos actuales
     cycles = await repos.plans.list_for_client(client.id)
     plan = presenter.latest_plan(cycles)
     stale = False
     day_view = None
+    phases: list[PlanPhase] = []
     if plan is not None:
-        allowed = allowed_foods(await repos.foods.get_by_ids(client.liked_food_ids),
-                                client.restrictions)
+        banned = set(await repos.clients.list_banned_food_ids(client.id))
+        allowed = allowed_foods(
+            await repos.foods.get_by_ids(client.liked_food_ids),
+            client.restrictions,
+            banned,
+        )
         prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
-        current = compute_input_hash(client, targets, config.version, prompt.version, allowed)
+        current = compute_input_hash(
+            client, targets, config.version, prompt.version, allowed,
+            plan.variant, duration_days=plan.duration_days,
+        )
         stale = plan.input_hash != current
+        phases = presenter.plan_phases(plan)
+        if phase not in phases:
+            phase = phases[0]
 
         dia = max(0, min(dia, 6))
-        food_ids = {p.food_id for d in plan.days for m in d.meals for p in m.portions}
+        food_ids = {
+            item.food_id for d in plan.days for m in d.meals
+            for item in m.items if item.food_id
+        }
         foods_by_id = {f.id: f for f in await repos.foods.get_by_ids(sorted(food_ids, key=str))}
-        day = next(d for d in plan.days if d.day_index == dia)
-        day_view = presenter.day_view(day, targets, config, foods_by_id)
+        swap_pool = {f.id: f for f in allowed}
+        for f in allowed:
+            foods_by_id.setdefault(f.id, f)
+        day = presenter.get_plan_day(plan, phase, dia)
+        if day is not None:
+            day_view = presenter.day_view(
+                day, targets, config, foods_by_id, swap_pool=list(swap_pool.values())
+            )
 
     goal_meta = presenter.GOAL_META[client.goal]
     return {
@@ -101,13 +126,16 @@ async def _generator_context(request: Request, session: AsyncSession,
         "goal_meta": goal_meta,
         "targets": targets,
         "tiles": presenter.macro_tiles(targets.daily),
-        "formula": presenter.formula_view(client, targets),
+        "formula": presenter.formula_view(client, targets, error=formula_error),
         "has_overrides": bool(targets.overrides),
         "groups": groups,
         "plan": plan,
         "history_count": len(cycles),
         "stale": stale,
         "dia": max(0, min(dia, 6)),
+        "fase": phase.value,
+        "phases": [{"value": p.value, "label": presenter.PHASE_LABELS[p]} for p in phases],
+        "duration_label": presenter.duration_label(plan) if plan else "15 días",
         "dv": day_view,
         "editar": editar and plan is not None and plan.status.value == "draft",
         "job_id": job_id,
@@ -119,7 +147,7 @@ async def _generator_context(request: Request, session: AsyncSession,
 async def generator_page(request: Request,
                          session: Annotated[AsyncSession, Depends(db_session)],
                          cliente: str = "", dia: int = 0,
-                         editar: int = 0) -> HTMLResponse:
+                         editar: int = 0, fase: str = "first_15") -> HTMLResponse:
     repos = repos_of(request, session)
     clients = await repos.clients.list()
     if not clients:
@@ -128,15 +156,16 @@ async def generator_page(request: Request,
     if cliente:
         client = await repos.clients.get(UUID(cliente))
     client = client or clients[0]
-    ctx = await _generator_context(request, session, client, dia, bool(editar))
+    ctx = await _generator_context(request, session, client, dia, bool(editar), fase=fase)
     template = ("partials/generator_body.html"
                 if request.headers.get("HX-Request") else "generator.html")
     return render(request, template, active_tab="generador", ctx=ctx)
 
 
 async def _rerender(request: Request, session: AsyncSession, client: Client,
-                    dia: int = 0) -> HTMLResponse:
-    ctx = await _generator_context(request, session, client, dia, editar=False)
+                    dia: int = 0, formula_error: str | None = None) -> HTMLResponse:
+    ctx = await _generator_context(request, session, client, dia, editar=False,
+                                   formula_error=formula_error)
     return render(request, "partials/generator_body.html", active_tab="generador", ctx=ctx)
 
 
@@ -181,7 +210,13 @@ async def set_formula(request: Request, session: Annotated[AsyncSession, Depends
         fat_g_per_kg=num(fat_g_per_kg),
         kcal_override=num(kcal_override),
     )
-    await _fresh_targets(request, session, client, formula=formula)
+    try:
+        await _fresh_targets(request, session, client, formula=formula)
+    except CalculationError as exc:
+        # El carbo cierra el resto: subir proteína o grasa lo puede dejar bajo el
+        # piso. Se muestra el porqué y se conservan los targets anteriores en vez
+        # de tumbar la pantalla.
+        return await _rerender(request, session, client, formula_error=str(exc))
     return await _rerender(request, session, client)
 
 
@@ -233,7 +268,8 @@ async def toggle_restriction(request: Request,
 
 
 async def _run_generation(
-    container: Container, job_id: UUID, client_id: UUID, variant: int, tenant_id: UUID
+    container: Container, job_id: UUID, client_id: UUID, variant: int, tenant_id: UUID,
+    duration_days: int = 15,
 ) -> None:
     """Tarea de fondo: sesión propia, job persistido, commit al final."""
     async with container.session_factory() as session:
@@ -250,6 +286,7 @@ async def _run_generation(
             config=container.config_provider.get_nutrition_config(),
             llm=container.llm_client,
             prompts_dir=container.settings.prompts_dir, model=model, variant=variant,
+            duration_days=duration_days,
         )
         await session.commit()
 
@@ -263,14 +300,19 @@ def _spawn(request: Request, coro: Coroutine[Any, Any, None]) -> None:
 
 
 async def _launch_generation(request: Request, session: AsyncSession,
-                             client: Client, variant: int) -> HTMLResponse:
+                             client: Client, variant: int,
+                             duration_days: int = 15) -> HTMLResponse:
     container = container_of(request)
     repos = repos_of(request, session)
     targets = await _fresh_targets(request, session, client)
     config = container.config_provider.get_nutrition_config()
 
-    allowed = allowed_foods(await repos.foods.get_by_ids(client.liked_food_ids),
-                            client.restrictions)
+    banned = set(await repos.clients.list_banned_food_ids(client.id))
+    allowed = allowed_foods(
+        await repos.foods.get_by_ids(client.liked_food_ids),
+        client.restrictions,
+        banned,
+    )
     if not allowed:
         return render(request, "partials/gen_error.html", client=client,
                       error="El conjunto permitido quedó vacío: marca alimentos que le "
@@ -278,7 +320,8 @@ async def _launch_generation(request: Request, session: AsyncSession,
 
     prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
     input_hash = compute_input_hash(
-        client, targets, config.version, prompt.version, allowed, variant
+        client, targets, config.version, prompt.version, allowed, variant,
+        duration_days=duration_days,
     )
     key = f"gen:{client.id}:{input_hash[:16]}"
     tenant_id = tenant_of(request)
@@ -286,15 +329,26 @@ async def _launch_generation(request: Request, session: AsyncSession,
     job = await repos.jobs.get_by_idempotency_key(key)
     if job is None:
         job = new_job(tenant_id=tenant_id, kind=JobKind.GENERATE, idempotency_key=key)
-        await repos.jobs.add(job)
-        await session.commit()
-        _spawn(request, _run_generation(container, job.id, client.id, variant, tenant_id))
+        try:
+            await repos.jobs.add(job)
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            job = await repos.jobs.get_by_idempotency_key(key)
+            if job is None:
+                raise
+        if job.status in (JobStatus.QUEUED, JobStatus.FAILED):
+            _spawn(request, _run_generation(
+                container, job.id, client.id, variant, tenant_id, duration_days
+            ))
     elif job.status == JobStatus.FAILED:
         job = job.model_copy(update={"status": JobStatus.QUEUED, "error": None,
                                      "updated_at": datetime.now(UTC)})
         await repos.jobs.update(job)
         await session.commit()
-        _spawn(request, _run_generation(container, job.id, client.id, variant, tenant_id))
+        _spawn(request, _run_generation(
+            container, job.id, client.id, variant, tenant_id, duration_days
+        ))
 
     return render(request, "partials/gen_loading.html", client=client,
                   job_id=str(job.id), msg_index=0,
@@ -304,20 +358,28 @@ async def _launch_generation(request: Request, session: AsyncSession,
 @router.post("/generador/{cid}/generar", response_class=HTMLResponse)
 async def start_generation(request: Request,
                            session: Annotated[AsyncSession, Depends(db_session)],
-                           cid: str) -> HTMLResponse:
+                           cid: str,
+                           duracion: Annotated[str, Form()] = "15") -> HTMLResponse:
     client = await _get_client(request, session, cid)
-    return await _launch_generation(request, session, client, variant=0)
+    duration_days = 30 if str(duracion).strip() == "30" else 15
+    return await _launch_generation(
+        request, session, client, variant=0, duration_days=duration_days
+    )
 
 
 @router.post("/generador/{cid}/nueva-version", response_class=HTMLResponse)
 async def new_version(request: Request,
                       session: Annotated[AsyncSession, Depends(db_session)],
-                      cid: str) -> HTMLResponse:
+                      cid: str,
+                      duracion: Annotated[str, Form()] = "15") -> HTMLResponse:
     """Otra versión del plan (mes siguiente): menú distinto al historial."""
     repos = repos_of(request, session)
     client = await _get_client(request, session, cid)
     variant = len(await repos.plans.list_for_client(client.id))
-    return await _launch_generation(request, session, client, variant=variant)
+    duration_days = 30 if str(duracion).strip() == "30" else 15
+    return await _launch_generation(
+        request, session, client, variant=variant, duration_days=duration_days
+    )
 
 
 @router.get("/generador/{cid}/estado", response_class=HTMLResponse)

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.repositories import (
     SqlClientRepository,
     SqlFoodRepository,
@@ -15,7 +16,6 @@ from nutriplan.adapters.db.repositories import (
     SqlTargetsRepository,
 )
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
-from nutriplan.adapters.db.session import Base
 from nutriplan.domain.errors import TenantIsolationError
 from nutriplan.domain.models import (
     ActivityLevel,
@@ -27,6 +27,7 @@ from nutriplan.domain.models import (
     MacroTargets,
     MealEntry,
     MealFoodPortion,
+    MealItem,
     MealSlot,
     PlanCycle,
     PlanPhase,
@@ -41,9 +42,9 @@ OTHER_TENANT = uuid4()
 
 @pytest.fixture
 async def session_factory(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/test.db")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    url = f"sqlite+aiosqlite:///{tmp_path}/test.db"
+    await upgrade_to_head_async(url)
+    engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
     await engine.dispose()
@@ -174,7 +175,6 @@ async def test_targets_and_plan_roundtrip(session) -> None:
         tenant_id=DEFAULT_TENANT_ID,
         client_id=client.id,
         targets_id=targets.id,
-        phase=PlanPhase.FIRST_15,
         days=[
             DayPlan(
                 day_index=i,
@@ -200,7 +200,15 @@ async def test_targets_and_plan_roundtrip(session) -> None:
     await plan_repo.add(plan)
 
     loaded_plan = await plan_repo.get(plan.id)
-    assert loaded_plan == plan
+    assert loaded_plan is not None
+    assert loaded_plan.input_hash == plan.input_hash
+    assert len(loaded_plan.days) == 7
+    meal = loaded_plan.days[0].meals[0]
+    assert meal.slot == MealSlot.LUNCH
+    assert meal.portions[0].food_id == foods[0].id
+    assert meal.portions[0].grams == 120
+    assert meal.free_salad is True
+    assert meal.items[0].id is not None
 
     by_hash = await plan_repo.find_by_input_hash("hash-1")
     assert [p.id for p in by_hash] == [plan.id]
@@ -212,6 +220,185 @@ async def test_targets_and_plan_roundtrip(session) -> None:
 
     # otro tenant no ve el plan
     assert await SqlPlanRepository(session, OTHER_TENANT).get(plan.id) is None
+
+
+async def test_meal_items_persist_with_stable_ids(session) -> None:
+    """Las porciones viven en meal_items, no solo en el JSON legacy."""
+    await seed_local(session, CSV_PATH)
+    client = make_client()
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+
+    from tests.conftest import PROJECT_ROOT
+
+    from nutriplan.adapters.config_yaml import YamlConfigProvider
+    from nutriplan.domain.calculation import compute_targets
+
+    config = YamlConfigProvider(
+        PROJECT_ROOT / "config" / "nutrition.default.yaml"
+    ).get_nutrition_config()
+    targets = compute_targets(client, config)
+    await SqlTargetsRepository(session, DEFAULT_TENANT_ID).add(targets)
+
+    foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
+    macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
+    food_a, food_b = foods[0], foods[1]
+    plan = PlanCycle(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        client_id=client.id,
+        targets_id=targets.id,
+        days=[
+            DayPlan(
+                day_index=0,
+                meals=[
+                    MealEntry(
+                        slot=MealSlot.LUNCH,
+                        items=[
+                            MealItem(food_id=food_a.id, grams=120, position=0),
+                            MealItem(food_id=food_b.id, grams=80, position=1),
+                        ],
+                        computed=macro,
+                    )
+                ],
+                totals=macro,
+            )
+        ],
+        config_version=config.version,
+        prompt_version="plan_generation.v1",
+        model="claude-sonnet-5",
+        input_hash="hash-meal-items",
+        created_at=datetime.now(UTC),
+    )
+    plan_repo = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    await plan_repo.add(plan)
+
+    loaded = await plan_repo.get(plan.id)
+    assert loaded is not None
+    meal = loaded.days[0].meals[0]
+    assert len(meal.items) == 2
+    assert meal.items[0].id is not None
+    assert meal.portions[0].food_id == food_a.id
+    assert meal.portions[1].grams == 80
+
+
+async def test_update_day_preserves_matching_item_ids(session) -> None:
+    """Cambiar gramos de un ítem no rota su id si el alimento es el mismo."""
+    await seed_local(session, CSV_PATH)
+    client = make_client()
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+
+    from tests.conftest import PROJECT_ROOT
+
+    from nutriplan.adapters.config_yaml import YamlConfigProvider
+    from nutriplan.domain.calculation import compute_targets
+
+    config = YamlConfigProvider(
+        PROJECT_ROOT / "config" / "nutrition.default.yaml"
+    ).get_nutrition_config()
+    targets = compute_targets(client, config)
+    await SqlTargetsRepository(session, DEFAULT_TENANT_ID).add(targets)
+
+    foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
+    macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
+    food = foods[0]
+    plan = PlanCycle(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        client_id=client.id,
+        targets_id=targets.id,
+        days=[
+            DayPlan(
+                day_index=0,
+                meals=[
+                    MealEntry(
+                        slot=MealSlot.LUNCH,
+                        items=[MealItem(food_id=food.id, grams=120, position=0)],
+                        computed=macro,
+                    )
+                ],
+                totals=macro,
+            )
+        ],
+        config_version=config.version,
+        prompt_version="plan_generation.v1",
+        model="claude-sonnet-5",
+        input_hash="hash-update-day",
+        created_at=datetime.now(UTC),
+    )
+    plan_repo = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    await plan_repo.add(plan)
+    before = (await plan_repo.get(plan.id)).days[0].meals[0].items[0].id
+
+    updated_day = DayPlan(
+        day_index=0,
+        meals=[
+            MealEntry(
+                slot=MealSlot.LUNCH,
+                items=[MealItem(food_id=food.id, grams=150, position=0, is_locked=True)],
+                computed=macro,
+            )
+        ],
+        totals=macro,
+    )
+    await plan_repo.update_day(plan.id, PlanPhase.FIRST_15, 0, updated_day, mark_edited=True)
+
+    after = await plan_repo.get(plan.id)
+    assert after is not None
+    item = after.days[0].meals[0].items[0]
+    assert item.id == before
+    assert item.grams == 150
+    assert item.is_locked is True
+    assert after.edit_count == 1
+
+
+async def test_edited_plan_not_reused_by_input_hash(session) -> None:
+    """Un plan tocado a mano no debe devolverse al regenerar con el mismo hash."""
+    await seed_local(session, CSV_PATH)
+    client = make_client()
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+
+    from tests.conftest import PROJECT_ROOT
+
+    from nutriplan.adapters.config_yaml import YamlConfigProvider
+    from nutriplan.domain.calculation import compute_targets
+
+    config = YamlConfigProvider(
+        PROJECT_ROOT / "config" / "nutrition.default.yaml"
+    ).get_nutrition_config()
+    targets = compute_targets(client, config)
+    await SqlTargetsRepository(session, DEFAULT_TENANT_ID).add(targets)
+
+    foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
+    macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
+    plan = PlanCycle(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        client_id=client.id,
+        targets_id=targets.id,
+        days=[
+            DayPlan(
+                day_index=0,
+                meals=[
+                    MealEntry(
+                        slot=MealSlot.LUNCH,
+                        portions=[MealFoodPortion(food_id=foods[0].id, grams=120)],
+                        computed=macro,
+                    )
+                ],
+                totals=macro,
+            )
+        ],
+        config_version=config.version,
+        prompt_version="plan_generation.v1",
+        model="claude-sonnet-5",
+        input_hash="hash-edited",
+        created_at=datetime.now(UTC),
+    )
+    plan_repo = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    await plan_repo.add(plan)
+    await plan_repo.mark_edited(plan.id)
+
+    assert await plan_repo.find_by_input_hash("hash-edited") == []
 
 
 async def test_job_repository_idempotency_key(session) -> None:
@@ -240,3 +427,45 @@ async def test_job_repository_idempotency_key(session) -> None:
     # otro tenant no lo encuentra
     other = SqlJobRepository(session, OTHER_TENANT)
     assert await other.get_by_idempotency_key("gen:cliente1:hash-1") is None
+
+
+async def test_thirty_day_plan_persists_both_phases(session) -> None:
+    """30 días = 14 filas day_plans (7 × first_15 + 7 × next_15)."""
+    from nutriplan.domain.models import PlanPhase
+
+    await seed_local(session, CSV_PATH)
+    foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
+    macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
+    meal = MealEntry(
+        slot=MealSlot.LUNCH,
+        portions=[MealFoodPortion(food_id=foods[0].id, grams=120)],
+        computed=macro,
+    )
+    days = [
+        DayPlan(day_index=i, phase=PlanPhase.FIRST_15, totals=macro, meals=[meal])
+        for i in range(7)
+    ] + [
+        DayPlan(day_index=i, phase=PlanPhase.NEXT_15, totals=macro, meals=[meal])
+        for i in range(7)
+    ]
+    plan = PlanCycle(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        client_id=uuid4(),
+        targets_id=uuid4(),
+        duration_days=30,
+        days=days,
+        config_version="test",
+        prompt_version="plan_generation.v1",
+        model="test",
+        input_hash="hash-30d",
+        created_at=datetime.now(UTC),
+    )
+    plan_repo = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    await plan_repo.add(plan)
+
+    loaded = await plan_repo.get(plan.id)
+    assert loaded is not None
+    assert loaded.duration_days == 30
+    assert len(loaded.days) == 14
+    assert sum(1 for d in loaded.days if d.phase is PlanPhase.NEXT_15) == 7

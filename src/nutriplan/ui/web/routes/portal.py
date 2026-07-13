@@ -84,11 +84,13 @@ async def portal_pdf(request: Request,
     if client is None or plan is None:
         return RedirectResponse("/portal", status_code=303)
 
+    targets = await repos.targets.get(plan.targets_id)
     _, content = await export_plan(
         plan_id=plan.id, fmt="pdf",
         plan_repo=repos.plans, food_repo=repos.foods, artifact_repo=repos.artifacts,
         renderer=container.renderer_for("pdf"), branding=container.branding(tenant_of(request)),
         exports_dir=container.settings.exports_dir, client_name=client.name,
+        daily_targets=targets.daily if targets else None,
     )
     who = client.name.replace(" ", "_")
     return Response(

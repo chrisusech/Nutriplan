@@ -64,6 +64,7 @@ async def run_generation_job(
     prompts_dir: Path,
     model: str,
     variant: int = 0,
+    duration_days: int = 15,
 ) -> Job:
     job = await _finish(job, job_repo, status=JobStatus.RUNNING)
     try:
@@ -80,11 +81,13 @@ async def run_generation_job(
             targets=targets,
             food_repo=food_repo,
             plan_repo=plan_repo,
+            client_repo=client_repo,
             config=config,
             llm=llm,
             prompts_dir=prompts_dir,
             model=model,
             variant=variant,
+            duration_days=duration_days,
         )
         return await _finish(
             job,

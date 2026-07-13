@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.repositories import SqlFoodRepository, SqlIntakeRepository
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
-from nutriplan.adapters.db.session import Base
 from nutriplan.adapters.intake.docx_reader import read_docx_text
 from nutriplan.adapters.llm.mock_client import MockLLMClient
 from nutriplan.application.parse_intake import parse_intake
@@ -85,9 +85,9 @@ LAURA = {
 
 @pytest.fixture
 async def ctx(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/t.db")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    url = f"sqlite+aiosqlite:///{tmp_path}/t.db"
+    await upgrade_to_head_async(url)
+    engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         await seed_local(session, CSV_PATH)

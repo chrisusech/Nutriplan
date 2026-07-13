@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import TenantRow, UserRow
 from nutriplan.adapters.db.repositories import SqlFoodRepository
-from nutriplan.adapters.food.usda_importer import load_curated_foods
+from nutriplan.adapters.food.curated_loader import load_curated_foods
 
 DEFAULT_TENANT_ID: UUID = uuid5(NAMESPACE_URL, "nutriplan/default-tenant")
 DEFAULT_USER_ID: UUID = uuid5(NAMESPACE_URL, "nutriplan/default-user")
@@ -29,5 +29,11 @@ async def seed_local(session: AsyncSession, foods_csv: Path) -> None:
         session.add(UserRow(id=DEFAULT_USER_ID, tenant_id=DEFAULT_TENANT_ID, name="Valeria"))
     await session.flush()
 
+    # Se re-siembra SIEMPRE. Antes había un guard por conteo (`if count >=
+    # len(foods): return`) que hacía que corregir un macro, un meal_slot o una
+    # porción en el CSV no llegara nunca a la DB si no cambiaba el NÚMERO de
+    # filas: la base se quedaba con los datos viejos en silencio. `upsert_globals`
+    # ya es idempotente (los ids son uuid5 del nombre) y unos cientos de upserts
+    # al arrancar son milisegundos.
     foods = load_curated_foods(foods_csv)
     await SqlFoodRepository(session, DEFAULT_TENANT_ID).upsert_globals(foods)

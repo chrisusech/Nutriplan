@@ -1,9 +1,6 @@
-"""Filtro determinista de restricciones (sección 10.4).
+"""Filtro determinista de restricciones (sección 10.4)."""
 
-Conjunto permitido = alimentos que le gustan al cliente MENOS los que tengan
-cualquier tag prohibido por sus restricciones. Ese conjunto es el único
-universo que verá la IA en el Módulo 4.
-"""
+from uuid import UUID
 
 from nutriplan.domain.models import FoodItem
 
@@ -58,13 +55,18 @@ def forbidden_tags(restrictions: list[str]) -> tuple[set[str], list[str]]:
     return tags, unrecognized
 
 
-def allowed_foods(liked: list[FoodItem], restrictions: list[str]) -> list[FoodItem]:
-    """Conjunto permitido: preferencias ∩ no-restringidos.
-
-    Restricciones no reconocidas hacen fallar el filtro con claridad — se
-    resuelven antes (revisión humana), no se ignoran en silencio.
-    """
+def allowed_foods(
+    liked: list[FoodItem],
+    restrictions: list[str],
+    banned_ids: set[UUID] | None = None,
+) -> list[FoodItem]:
+    """Conjunto permitido: preferencias ∩ no-restringidos ∩ no-baneados."""
     tags, unrecognized = forbidden_tags(restrictions)
     if unrecognized:
         raise ValueError(f"Restricciones no reconocidas: {unrecognized}")
-    return [food for food in liked if not (set(food.tags) & tags)]
+    banned = banned_ids or set()
+    return [
+        food
+        for food in liked
+        if not (set(food.tags) & tags) and food.id not in banned
+    ]

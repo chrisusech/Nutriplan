@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from nutriplan.adapters.render.view import DAY_LABELS, portion_text
+from nutriplan.adapters.render.view import DAY_LABELS, natural_units, portion_text
 from nutriplan.domain.models import (
     Client,
     DayPlan,
@@ -19,13 +19,59 @@ from nutriplan.domain.models import (
     MealSlot,
     NutritionTargets,
     PlanCycle,
+    PlanPhase,
     PlanStatus,
+    UnitGranularity,
 )
-from nutriplan.domain.nutrition_config import NutritionConfig
+from nutriplan.domain.nutrition_config import (
+    FAT_G_PER_KG_RANGE,
+    PROTEIN_G_PER_KG_RANGE,
+    NutritionConfig,
+)
 from nutriplan.domain.portioning import macros_of
-from nutriplan.domain.validation import validate_day
+from nutriplan.domain.validation import fiber_shortfall, validate_day
 
 DAY_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+PHASE_LABELS: dict[PlanPhase, str] = {
+    PlanPhase.FIRST_15: "Semana 1",
+    PlanPhase.NEXT_15: "Semana 2",
+}
+
+
+def plan_phases(cycle: PlanCycle) -> list[PlanPhase]:
+    from nutriplan.adapters.render.view import plan_phases_in
+
+    return plan_phases_in(cycle)
+
+
+def parse_plan_phase(raw: str | None) -> PlanPhase:
+    if not raw:
+        return PlanPhase.FIRST_15
+    try:
+        return PlanPhase(raw)
+    except ValueError:
+        return PlanPhase.FIRST_15
+
+
+def days_in_phase(cycle: PlanCycle, phase: PlanPhase) -> list[DayPlan]:
+    return sorted(
+        [d for d in cycle.days if d.phase is phase],
+        key=lambda d: d.day_index,
+    )
+
+
+def get_plan_day(cycle: PlanCycle, phase: PlanPhase, day_index: int) -> DayPlan | None:
+    for d in cycle.days:
+        if d.phase is phase and d.day_index == day_index:
+            return d
+    return None
+
+
+def duration_label(cycle: PlanCycle) -> str:
+    if cycle.duration_days >= 30:
+        return "30 días · 2 semanas"
+    return "15 días · 1 semana"
 
 
 def soft_of(hex_color: str, mix: float = 0.87) -> str:
@@ -171,7 +217,9 @@ def macro_tiles(daily: MacroTargets) -> list[dict[str, Any]]:
     ]
 
 
-def formula_view(client: Client, targets: NutritionTargets) -> dict[str, Any]:
+def formula_view(
+    client: Client, targets: NutritionTargets, *, error: str | None = None
+) -> dict[str, Any]:
     """g/kg vigentes (de la fórmula o derivados del resultado) + reparto %."""
     w = client.weight_kg or 1.0
     f = targets.formula
@@ -184,8 +232,11 @@ def formula_view(client: Client, targets: NutritionTargets) -> dict[str, Any]:
     return {
         "protein_g_per_kg": round(ppk, 2),
         "fat_g_per_kg": round(fpk, 2),
+        "protein_range": PROTEIN_G_PER_KG_RANGE,
+        "fat_range": FAT_G_PER_KG_RANGE,
         "kcal": round(targets.daily.kcal),
         "kcal_manual": f.kcal_override is not None,
+        "error": error,
         "pct": {
             "protein": round(p_kcal / total * 100),
             "carb": round(c_kcal / total * 100),
@@ -196,6 +247,43 @@ def formula_view(client: Client, targets: NutritionTargets) -> dict[str, Any]:
 
 def portion_chip(grams: float, food: FoodItem) -> str:
     return portion_text(grams, food)
+
+
+def portion_edit_fields(
+    grams: float,
+    food: FoodItem,
+    *,
+    slot: MealSlot,
+    swap_pool: list[FoodItem] | None = None,
+) -> dict[str, Any]:
+    """Metadatos para el input en línea: unidades naturales + paso de la rejilla."""
+    from nutriplan.domain import meal_affinity
+
+    g = int(grams) if float(grams).is_integer() else grams
+    units = natural_units(grams, food)
+    if food.unit_granularity is not UnitGranularity.GRAMS and food.default_unit_g:
+        unit = food.unit_name or "unidad"
+        unit_hint = f"≈ {units}" if units else f"{food.default_unit_g:.0f} g por {unit}"
+    else:
+        unit_hint = "gramos"
+    swap_options: list[dict[str, str]] = []
+    if swap_pool:
+        swap_options = [
+            {"id": str(f.id), "name": f.name_es.capitalize()}
+            for f in sorted(swap_pool, key=lambda x: x.name_es)
+            if f.id != food.id
+            and f.category == food.category
+            and meal_affinity.allows(f, slot)
+        ]
+    return {
+        "food_id": str(food.id),
+        "name": food.name_es.capitalize(),
+        "display": portion_text(grams, food),
+        "grams": g,
+        "step": food.portion_step_g,
+        "unit_hint": unit_hint,
+        "swap_options": swap_options,
+    }
 
 
 # El cálculo vive en el dominio; el presenter solo lo reexporta para las rutas.
@@ -209,6 +297,7 @@ class MealView:
     time: str
     icon: str
     kcal: str
+    macros: str
     chips: list[str]
     extras: list[str]
     portions: list[dict[str, Any]]  # para el modo edición: food_id, nombre, gramos
@@ -221,6 +310,7 @@ class DayView:
     meals: list[MealView]
     bars: list[dict[str, Any]]
     fits: bool
+    fiber_note: str | None = None  # aviso, no error: ver validation.fiber_shortfall
 
 
 def day_view(
@@ -228,6 +318,8 @@ def day_view(
     targets: NutritionTargets,
     config: NutritionConfig,
     foods: dict[UUID, FoodItem],
+    *,
+    swap_pool: list[FoodItem] | None = None,
 ) -> DayView:
     meals: list[MealView] = []
     for meal in sorted(day.meals, key=lambda m: list(MealSlot).index(m.slot)):
@@ -237,18 +329,21 @@ def day_view(
             food = foods[p.food_id]
             chips.append(portion_chip(p.grams, food))
             portions.append(
-                {"food_id": str(p.food_id), "name": food.name_es.capitalize(),
-                 "grams": int(p.grams) if float(p.grams).is_integer() else p.grams}
+                portion_edit_fields(
+                    p.grams, food, slot=meal.slot, swap_pool=swap_pool
+                )
             )
         extras = []
         if meal.free_protein:
             extras.append("Proteína libre")
         if meal.free_salad:
             extras.append("Ensalada libre")
+        mc = meal.computed
+        macro_str = f"P {round(mc.protein_g)} · C {round(mc.carb_g)} · G {round(mc.fat_g)}"
         meals.append(
             MealView(slot=meal.slot, name=meta["name"], time=meta["time"], icon=meta["icon"],
-                     kcal=fmt_kcal(meal.computed.kcal), chips=chips, extras=extras,
-                     portions=portions)
+                     kcal=fmt_kcal(meal.computed.kcal), macros=macro_str,
+                     chips=chips, extras=extras, portions=portions)
         )
 
     totals, daily = day.totals.model_dump(), targets.daily.model_dump()
@@ -260,8 +355,18 @@ def day_view(
         bars.append({**m, "val": val, "pct": round(pct, 1)})
 
     fits = not validate_day(list(day.meals), targets.daily, config)
+    # La fibra informa, no bloquea: el día puede cuadrar de macros y aun así
+    # quedarse corto de fibra si al cliente no le gustan las fuentes que la traen.
+    short = fiber_shortfall(list(day.meals), targets.daily)
+    note = (
+        f"Fibra {fmt_g(round(day.totals.fiber_g))} g de "
+        f"{fmt_g(round(targets.daily.fiber_g))} g — faltan {fmt_g(short)} g. "
+        f"Añade avena, pan integral, frutos secos o legumbres."
+        if short
+        else None
+    )
     return DayView(index=day.day_index, label=DAY_LABELS[day.day_index], meals=meals,
-                   bars=bars, fits=fits)
+                   bars=bars, fits=fits, fiber_note=note)
 
 
 def latest_plan(cycles: list[PlanCycle]) -> PlanCycle | None:
@@ -273,23 +378,32 @@ def week_grid(
     cycle: PlanCycle,
     targets: NutritionTargets,
     config: NutritionConfig,
+    phase: PlanPhase = PlanPhase.FIRST_15,
 ) -> list[dict[str, Any]]:
-    """Los 7 días de la semana: cada celda marca si el día cuadra."""
+    """Los 7 días de una fase: cada celda marca si el día cuadra."""
     cells = []
-    for day in sorted(cycle.days, key=lambda d: d.day_index):
+    for day in days_in_phase(cycle, phase):
         ok = not validate_day(list(day.meals), targets.daily, config)
         cells.append({
-            "n": day.day_index + 1, "cycle_id": str(cycle.id), "day_index": day.day_index,
-            "label": DAY_SHORT[day.day_index], "fit": ok,
+            "n": day.day_index + 1,
+            "cycle_id": str(cycle.id),
+            "day_index": day.day_index,
+            "fase": phase.value,
+            "label": DAY_SHORT[day.day_index],
+            "fit": ok,
             "color": "#45B37E" if ok else "#E0982E",
             "soft": "#E7F5EE" if ok else "#FBF0DA",
         })
     return cells
 
 
-def adherence(cycle: PlanCycle, targets: NutritionTargets) -> list[dict[str, Any]]:
-    """Cumplimiento promedio por macro (real/objetivo) sobre los 7 días."""
-    days = list(cycle.days)
+def adherence(
+    cycle: PlanCycle,
+    targets: NutritionTargets,
+    phase: PlanPhase = PlanPhase.FIRST_15,
+) -> list[dict[str, Any]]:
+    """Cumplimiento promedio por macro (real/objetivo) sobre los días de la fase."""
+    days = days_in_phase(cycle, phase)
     daily = targets.daily.model_dump()
     rows = []
     for m in MACRO_META:

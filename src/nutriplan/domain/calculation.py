@@ -1,8 +1,21 @@
 """Motor de cálculo determinista (Módulo 2, secciones 9.1–9.4).
 
-Código puro, sin IA, reproducible bit a bit. Fórmulas:
-  BMR (Mifflin-St Jeor), TDEE = BMR * factor, kcal = TDEE * (1 + delta),
-  proteína = g/kg * peso, grasa = kcal * pct / 9, carbo = resto / 4.
+Código puro, sin IA, reproducible bit a bit. El orden importa — no hay
+porcentajes mágicos, las kcal se calculan primero y los macros se estructuran
+por peso corporal:
+
+  1. BMR  = Mifflin-St Jeor
+  2. TDEE = BMR * factor de actividad
+  3. kcal = MAX( TDEE * (1 + ajuste del objetivo),  BMR,  piso por sexo )
+  4. proteína = peso_kg * g/kg      (1.6–2.2, la elige el entrenador)
+  5. grasa    = peso_kg * g/kg      (0.8–1.0, la elige el entrenador)
+  6. carbo    = lo que sobra de las kcal   ← cierra el invariante energético
+
+El paso 3 es un máximo, no un producto: un déficit porcentual sobre un TDEE
+sedentario bajo se hunde por debajo del propio metabolismo basal. La guía
+AHA/ACC/TOS marca 1200–1500 kcal en mujeres y 1500–1800 en hombres.
+
+La fibra sale de las kcal (14 g por 1000 kcal, estándar DRI).
 """
 
 from datetime import UTC, date, datetime
@@ -59,27 +72,50 @@ def compute_daily_macros(
     bmr = bmr_mifflin_st_jeor(client.sex, client.weight_kg, client.height_cm, age)
     tdee = bmr * config.activity_factors[client.activity_level]
 
+    # Piso energético: nadie come por debajo de su BMR ni del mínimo de la guía.
+    # Un déficit porcentual sobre un TDEE sedentario bajo se hunde solo — una
+    # mujer de 80 kg salía en 1496 kcal con un BMR de 1520.
+    floor = max(bmr, config.kcal_floor[client.sex])
+
     if formula.kcal_override is not None:
         kcal = formula.kcal_override
+        if kcal < floor:
+            raise CalculationError(
+                f"Cliente {client.id}: {kcal:.0f} kcal está bajo el piso de {floor:.0f} "
+                f"(BMR {bmr:.0f}, mínimo {config.kcal_floor[client.sex]:.0f} para "
+                f"{client.sex.value}). Ese déficit no es sostenible."
+            )
     else:
-        kcal = tdee * (1.0 + config.goal_adjustments[client.goal])
+        # El máximo de las tres restricciones, no el producto a secas.
+        kcal = max(tdee * (1.0 + config.goal_adjustments[client.goal]), floor)
 
     ppk = formula.protein_g_per_kg
     if ppk is None:
         ppk = config.protein_g_per_kg[client.goal]
     protein_g = ppk * client.weight_kg
 
-    if formula.fat_g_per_kg is not None:
-        fat_g = formula.fat_g_per_kg * client.weight_kg
+    # La grasa se fija por peso, no por porcentaje de kcal. Un % fijo se calcula
+    # sobre unas kcal ya recortadas, así que en déficit deja a la clienta en
+    # ~0.6 g/kg (y en volumen se dispara a 1.3). El g/kg no depende del déficit.
+    fpk = formula.fat_g_per_kg or config.fat_g_per_kg.get(client.goal)
+    if fpk is not None:
+        fat_g = fpk * client.weight_kg
     else:
         fat_g = (kcal * config.fat_pct_of_kcal) / KCAL_PER_G_FAT
 
     carb_g = (kcal - protein_g * KCAL_PER_G_PROTEIN - fat_g * KCAL_PER_G_FAT) / KCAL_PER_G_CARB
 
-    if carb_g < 0:
+    # El carbo cierra, así que absorbe todo lo que se pasen proteína y grasa.
+    # Guarda de imposibilidad, no de opinión: los planes low-carb son legítimos
+    # (hay planes reales sin carbohidrato en almuerzo ni cena), así que el piso
+    # solo ataja lo que no se puede armar de ninguna forma.
+    carb_floor = config.carb_floor_g_per_kg * client.weight_kg
+    if carb_g < carb_floor:
         raise CalculationError(
-            f"Cliente {client.id}: los macros no cierran (carbohidratos negativos: "
-            f"{carb_g:.1f} g). Baja la proteína/grasa g/kg o sube las kcal."
+            f"Cliente {client.id}: los carbohidratos quedan en {carb_g:.0f} g, bajo el piso "
+            f"de {carb_floor:.0f} g ({config.carb_floor_g_per_kg} g/kg). Con {kcal:.0f} kcal, "
+            f"proteína {ppk} g/kg y grasa {fpk} g/kg no hay margen. "
+            f"Baja la proteína o la grasa, o sube las kcal."
         )
 
     return MacroTargets(
@@ -87,6 +123,7 @@ def compute_daily_macros(
         protein_g=round(protein_g, 1),
         carb_g=round(carb_g, 1),
         fat_g=round(fat_g, 1),
+        fiber_g=round(kcal / 1000.0 * config.fiber.g_per_1000_kcal, 1),
     )
 
 
@@ -124,6 +161,7 @@ def split_per_meal(
             protein_g=round(daily.protein_g * pct, 1),
             carb_g=round(daily.carb_g * pct, 1),
             fat_g=round(daily.fat_g * pct, 1),
+            fiber_g=round(daily.fiber_g * pct, 1),
         )
         for slot, pct in distribution.items()
     }

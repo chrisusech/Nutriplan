@@ -19,7 +19,6 @@ from nutriplan.domain.models import (
     MealFoodPortion,
     MealSlot,
     PlanCycle,
-    PlanPhase,
     PlanStatus,
     Sex,
 )
@@ -92,7 +91,6 @@ def test_plan_cycle_roundtrip_serialization() -> None:
         tenant_id=uuid4(),
         client_id=uuid4(),
         targets_id=uuid4(),
-        phase=PlanPhase.FIRST_15,
         days=[DayPlan(day_index=0, meals=[meal], totals=macro)],
         config_version="2026.07.01",
         prompt_version="plan_generation.v1",
