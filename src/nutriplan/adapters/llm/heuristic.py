@@ -20,7 +20,12 @@ from pydantic import BaseModel
 
 from nutriplan.domain import meal_affinity
 from nutriplan.domain.errors import LLMError
-from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot
+from nutriplan.domain.models import (
+    DEFAULT_SLOT_WEIGHT,
+    FoodCategory,
+    FoodItem,
+    MealSlot,
+)
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import fits_protein
 
@@ -162,10 +167,33 @@ class HeuristicSelector:
         # determinista no las usa de carbohidrato principal salvo que no haya
         # nada más.
         carb_led = [f for f in all_carbs if f.protein_100g <= 0.3 * f.carb_100g]
-        self.breakfast_carbs = [f for f in all_carbs if meal_affinity.is_breakfast_carb(f)] \
-            or all_carbs
-        self.main_carbs = [f for f in carb_led if meal_affinity.is_main_carb(f)] \
-            or [f for f in all_carbs if meal_affinity.is_main_carb(f)] or all_carbs
+
+        # La BASE de una comida es un alimento que pertenece a esa comida: el arroz y
+        # la papa al almuerzo, la avena y el pan al desayuno. Lo que solo "cabe"
+        # (`weight_in` por debajo del defecto: la arepa a mediodía, la granola de
+        # desayuno) queda fuera del pool mientras haya algo mejor, y vuelve —con el
+        # `or`— cuando el cliente no tiene otra cosa: quien solo come arepa recibe
+        # arepa, que es preferible a no recibir plan.
+        #
+        # No es cosmética. La granola lleva 13 g de grasa por 100, y de base de un
+        # desayuno tiene que aportar unos 64 g de carbohidrato: se come sola el
+        # presupuesto de grasa de un día en déficit y el día entero deja de cuadrar.
+        # Ordenar es estable a propósito: a igual peso mandan el catálogo y la lista
+        # del cliente, que es la rotación que este motor ya usaba.
+        def base_for(foods: list[FoodItem], slot: MealSlot) -> list[FoodItem]:
+            belongs = [f for f in foods if f.weight_in(slot) >= DEFAULT_SLOT_WEIGHT]
+            return sorted(belongs or foods, key=lambda f: -f.weight_in(slot))
+
+        self.breakfast_carbs = base_for(
+            [f for f in all_carbs if meal_affinity.is_breakfast_carb(f)] or all_carbs,
+            MealSlot.BREAKFAST,
+        )
+        self.main_carbs = base_for(
+            [f for f in carb_led if meal_affinity.is_main_carb(f)]
+            or [f for f in all_carbs if meal_affinity.is_main_carb(f)]
+            or all_carbs,
+            MealSlot.LUNCH,
+        )
         self.fruits = by_cat(FoodCategory.FRUIT)
         # Grasas muy proteicas (maní, almendras) desbalancean el desayuno.
         fats = [f for f in by_cat(FoodCategory.FAT) if f.protein_100g <= 10.0] \

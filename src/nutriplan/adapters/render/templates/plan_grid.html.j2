@@ -19,11 +19,6 @@
   <section class="notes-page">
     <h1 class="notes-title">Anotaciones Importantes</h1>
 
-    <p class="notes-client">
-      Plan de <strong>{{ client_name }}</strong>{% if branding.tenant_name %} ·
-      {{ branding.tenant_name }}{% endif %}{% if duration_note %} · {{ duration_note }}{% endif %}
-    </p>
-
     <ul class="notes-list">
       {% for nota in anotaciones %}
       <li>{{ nota }}</li>
@@ -61,16 +56,34 @@
         </tr>
       </thead>
       <tbody>
+        {# Cada comida son DOS filas: la de arriba lleva la comida (pegada al techo de
+           la celda) y la de abajo los extras y los macros (pegados al suelo). Así los
+           macros quedan alineados en las siete columnas POR CONSTRUCCIÓN —son su propia
+           fila— y el hueco cae donde tiene que caer: entre el final de la comida y el
+           "Ensalada libre". Dentro de UNA celda no se puede: en WeasyPrint no funcionan
+           ni el flex con height:100%, ni position:absolute, ni fijarle la altura a la
+           fila (se probaron los cuatro). Las dos filas se leen como una sola tarjeta
+           porque `border-spacing` no deja hueco vertical: el aire entre comidas lo pone
+           un borde blanco. #}
         {% for row in section.rows %}
-        <tr>
-          <th class="slot">{{ row.label }}<span class="time">{{ row.time }}</span></th>
+        {% set stripe = 'alt' if loop.index0 % 2 else '' %}
+        <tr class="meal {{ stripe }}">
+          <th class="slot" rowspan="2">{{ row.label }}</th>
           {% for cell in row.cells %}
-          {# Los macros van ANCLADOS al pie de la celda (la celda reserva la franja
-             con su padding-bottom), no colgando de la última porción: así quedan a
-             la misma altura en las siete columnas. Y van en dos líneas fijas —kcal
-             arriba, P/C/G abajo— para que la franja mida siempre lo mismo. #}
-          <td>
+          <td class="{% if cell.free_meal %}free-meal{% endif %}">
+            {% if cell.free_meal %}
+            <span class="free-meal-title">COMIDA LIBRE</span>
+            {% endif %}
             {% for p in cell.portions %}<span class="portion">{{ p.text }}</span>{% endfor %}
+          </td>
+          {% endfor %}
+        </tr>
+        <tr class="foot {{ stripe }}">
+          {% for cell in row.cells %}
+          <td class="{% if cell.free_meal %}free-meal{% endif %}">
+            {% if cell.free_meal %}
+            <span class="free-meal-note">Come lo que quieras</span>
+            {% endif %}
             {% for e in cell.extras %}<span class="extra">{{ e }}</span>{% endfor %}
             {% if cell.macro_line %}
             <span class="macros">

@@ -8,6 +8,7 @@ from nutriplan.adapters.render.view import (
     PHASE_SUBTITLES,
     SLOT_LABELS,
     anotaciones,
+    free_meal_cell,
     build_grid,
     day_totals_row,
     macro_line,
@@ -102,7 +103,7 @@ class DocxRenderer:
                 )
 
         doc.add_heading("Anotaciones Importantes", level=2)
-        for nota in anotaciones(slots):
+        for nota in anotaciones(slots, free_meal_cell(plan)):
             doc.add_paragraph(nota, style="List Number")
 
         buffer = BytesIO()

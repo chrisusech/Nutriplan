@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Historial de {{ client.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>{{ client.name }}</h2>
+    <p>Cada versión guarda <b>el peso</b> y <b>los macros</b> con los que se hizo. Así se ve si el déficit está funcionando.</p>
+  </div>
+  <a class="btn btn-outline" href="/generador?cliente={{ client.id }}">
+    <span class="icon" style="font-size:19px">tune</span>Ajustar y generar versión nueva
+  </a>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="history">
+    <thead>
+      <tr>
+        <th>Versión</th>
+        <th>Fecha</th>
+        <th>Peso</th>
+        <th>Objetivo</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="{% if r.active %}is-active{% endif %}">
+        <td>
+          <a href="/planes/{{ r.id }}" class="v-link">v{{ r.version }}</a>
+          {% if r.active %}<span class="badge badge-ok" style="margin-left:7px">Activo</span>{% endif %}
+        </td>
+        <td>
+          <div>{{ r.created }}</div>
+          <div class="sub">{{ r.duration }}</div>
+        </td>
+        <td><b>{{ r.weight }}</b>{% if r.weight != '—' %} kg{% endif %}</td>
+        <td>
+          <div><b>{{ r.kcal }}</b> kcal</div>
+          <div class="sub">{{ r.macros }}</div>
+        </td>
+        <td>
+          {% if r.approved %}
+          <span class="badge badge-ok">Aprobado</span>
+          {% else %}
+          <span class="badge badge-warn">Borrador</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right">
+          {% if not r.active %}
+          {# Volver a la versión del mes pasado: activar es repuntar, nada se pierde. #}
+          <form method="post" action="/planes/{{ r.id }}/activar" style="display:inline">
+            <button class="btn btn-outline" style="padding:7px 12px;font-size:12.5px" type="submit">
+              Hacer definitivo
+            </button>
+          </form>
+          {% endif %}
+          <a class="btn btn-outline" style="padding:7px 12px;font-size:12.5px" href="/planes/{{ r.id }}">Ver</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="sub" style="padding:22px">Este cliente aún no tiene planes.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

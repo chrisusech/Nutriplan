@@ -14,11 +14,14 @@ from uuid import UUID, uuid4
 
 import structlog
 
+from nutriplan.domain.calculation import energy_kcal
 from nutriplan.domain.errors import ValidationError
 from nutriplan.domain.models import (
+    MAX_SLOT_WEIGHT,
     FoodCategory,
     FoodItem,
     MacroTargets,
+    MealSlot,
     Recipe,
     RecipeIngredient,
     RecipeStatus,
@@ -55,6 +58,7 @@ async def create_recipe(
     food_repo: FoodLookup,
     recipe_repo: RecipeRepository,
     created_by: UUID | None = None,
+    meal_slots: list[MealSlot] | None = None,
 ) -> Recipe:
     """Crea una receta pendiente con macros agregados calculados por el dominio."""
     name = name.strip()
@@ -72,6 +76,72 @@ async def create_recipe(
     macros = macros_of(portions)
     total_grams = sum(i.grams for i in ingredients)
 
+    return await _persist(
+        tenant_id=tenant_id,
+        name=name,
+        ingredients=ingredients,
+        macros=macros,
+        total_grams=total_grams,
+        meal_slots=meal_slots or [],
+        created_by=created_by,
+        recipe_repo=recipe_repo,
+    )
+
+
+async def create_recipe_from_macros(
+    *,
+    tenant_id: UUID,
+    name: str,
+    macros: MacroTargets,
+    total_grams: float,
+    meal_slots: list[MealSlot],
+    recipe_repo: RecipeRepository,
+    created_by: UUID | None = None,
+) -> Recipe:
+    """El plato de un restaurante: sin ingredientes, con sus macros exactos.
+
+    Las kcal NO son un campo más: son 4·P + 4·C + 9·G. Si el entrenador las teclea y
+    no cuadran con los macros, mandan los macros y las kcal se recalculan. Un plato
+    que viola la identidad energética envenena el objetivo del día entero — el
+    porcionador mide kcal y macros por separado, y no hay gramaje que satisfaga a
+    los dos a la vez. Es el mismo invariante que sostiene `calculation.apply_overrides`.
+    """
+    name = name.strip()
+    if not name:
+        raise ValidationError("El plato necesita un nombre")
+    if total_grams <= 0:
+        raise ValidationError("El plato necesita el peso de una porción (en gramos)")
+    if not any((macros.protein_g, macros.carb_g, macros.fat_g)):
+        raise ValidationError(
+            "El plato necesita sus macros: proteína, carbohidrato o grasa"
+        )
+
+    macros = macros.model_copy(
+        update={"kcal": energy_kcal(macros.protein_g, macros.carb_g, macros.fat_g)}
+    )
+    return await _persist(
+        tenant_id=tenant_id,
+        name=name,
+        ingredients=[],
+        macros=macros,
+        total_grams=total_grams,
+        meal_slots=meal_slots,
+        created_by=created_by,
+        recipe_repo=recipe_repo,
+    )
+
+
+async def _persist(
+    *,
+    tenant_id: UUID,
+    name: str,
+    ingredients: list[RecipeIngredient],
+    macros: MacroTargets,
+    total_grams: float,
+    meal_slots: list[MealSlot],
+    created_by: UUID | None,
+    recipe_repo: RecipeRepository,
+) -> Recipe:
     recipe = Recipe(
         id=uuid4(),
         tenant_id=tenant_id,
@@ -79,12 +149,18 @@ async def create_recipe(
         ingredients=ingredients,
         macros=macros,
         total_grams=total_grams,
+        meal_slots=meal_slots,
         status=RecipeStatus.PENDING,
         created_by=created_by,
         created_at=datetime.now(UTC),
     )
     await recipe_repo.add(recipe)
-    logger.info("recipe_created", recipe_id=str(recipe.id), tenant_id=str(tenant_id))
+    logger.info(
+        "recipe_created",
+        recipe_id=str(recipe.id),
+        tenant_id=str(tenant_id),
+        from_macros=not ingredients,
+    )
     return recipe
 
 
@@ -120,6 +196,12 @@ def _compound_food(recipe: Recipe) -> FoodItem:
         default_unit_g=round(g, 1),
         unit_granularity=UnitGranularity.WHOLE,
         unit_name="porción",
+        # Las comidas las declara el plato. Sin ellas, FoodItem las derivaría de la
+        # categoría dominante y una hamburguesa (grasa) valdría para desayunar.
+        meal_slots=list(recipe.meal_slots),
+        # Y donde el entrenador dice que va, es SU comida: un plato no es un
+        # ingrediente que "también cabe" — se ha cocinado para esa comida.
+        slot_weights={slot: MAX_SLOT_WEIGHT for slot in recipe.meal_slots},
     )
 
 

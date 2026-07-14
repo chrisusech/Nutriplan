@@ -30,6 +30,7 @@ from nutriplan.domain.models import (
     Branding,
     Client,
     Goal,
+    MealSlot,
     PlanStatus,
     Sex,
 )
@@ -249,3 +250,65 @@ async def test_thirty_day_plan_has_two_phases(ctx) -> None:
     assert job.error and "no existe" in job.error
     stored = await repos.jobs.get(job.id)
     assert stored is not None and stored.status == JobStatus.FAILED
+
+
+async def test_the_free_meal_is_a_cell_with_nothing_in_it_and_the_day_aims_lower(
+    ctx,
+) -> None:
+    """Una comida libre a la semana: el domingo en la cena.
+
+    Esa celda no lleva alimentos ni macros. Las demás comidas del domingo conservan
+    su objetivo de siempre, así que el domingo suma POR DEBAJO del objetivo diario —
+    a propósito: es la cena que el cliente se come donde quiera.
+    """
+    container, repos, _ = ctx
+    foods = await repos.foods.list_universe()
+    client = Client(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        name="Comida libre",
+        sex=Sex.FEMALE,
+        age_years=30,
+        height_cm=165,
+        weight_kg=65,
+        goal=Goal.LOSE_FAT,
+        activity_level=ActivityLevel.MODERATE,
+        liked_food_ids=[f.id for f in foods],
+        restrictions=[],
+        free_meal_day=6,
+        free_meal_slot=MealSlot.DINNER,
+    )
+    await repos.clients.add(client)
+    targets = await compute_and_store_targets(
+        client=client, config_provider=container.config_provider, targets_repo=repos.targets
+    )
+    cycle = await generate_plan_for_client(
+        client=client, targets=targets, food_repo=repos.foods, plan_repo=repos.plans,
+        client_repo=repos.clients,
+        config=container.config_provider.get_nutrition_config(),
+        llm=None, prompts_dir=PROMPTS, model="offline-heuristic", duration_days=30,
+    )
+
+    sundays = [d for d in cycle.days if d.day_index == 6]
+    assert len(sundays) == 2, "una en cada fase: la comida libre es SEMANAL"
+
+    for sunday in sundays:
+        free = [m for m in sunday.meals if m.is_free_meal]
+        assert len(free) == 1
+        assert free[0].slot is MealSlot.DINNER
+        assert free[0].items == []
+        assert free[0].computed.kcal == 0
+        # Las demás comidas del domingo siguen ahí, con sus alimentos.
+        assert all(m.items for m in sunday.meals if not m.is_free_meal)
+        # Y el domingo apunta más bajo que un día normal.
+        assert sunday.totals.kcal < targets.daily.kcal * 0.95
+
+    # Ningún otro día tiene comida libre, y cuadran contra el objetivo completo.
+    others = [d for d in cycle.days if d.day_index != 6]
+    assert not any(m.is_free_meal for d in others for m in d.meals)
+    assert all(len(d.meals) == 5 for d in others)
+
+    # Y sobrevive al round-trip por la base.
+    reloaded = await repos.plans.get(cycle.id)
+    sunday = next(d for d in reloaded.days if d.day_index == 6)
+    assert any(m.is_free_meal for m in sunday.meals)

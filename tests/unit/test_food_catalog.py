@@ -19,7 +19,14 @@ from nutriplan.domain.generation_rules import (
     PROTEIN_GROUP,
     SLOT_STRUCTURE,
 )
-from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot, UnitGranularity
+from nutriplan.domain.models import (
+    DEFAULT_SLOT_WEIGHT,
+    MAX_SLOT_WEIGHT,
+    FoodCategory,
+    FoodItem,
+    MealSlot,
+    UnitGranularity,
+)
 
 CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
 
@@ -129,3 +136,56 @@ def test_a_source_of_a_macro_actually_provides_that_macro(catalog) -> None:
         if attr is None or food.is_free:
             continue
         assert getattr(food, attr) > 0, f"{food.name_es}: {food.category.value} sin {attr}"
+
+
+def test_the_weight_of_a_slot_is_optional_and_bounded(tmp_path) -> None:
+    """`almuerzo:3` declara cuánto encaja; `almuerzo` a secas vale lo de siempre.
+
+    Es lo que permite que las 172 filas del catálogo sigan valiendo sin tocarlas: el
+    peso es opcional y su ausencia significa DEFAULT_SLOT_WEIGHT.
+    """
+    header = (
+        "name_es,name_en,category,kcal_100g,protein_100g,carb_100g,fat_100g,fiber_100g,"
+        "tags,aliases,default_unit_g,unit_granularity,unit_name,portion_step_g,"
+        "portion_min_g,portion_max_g,meal_slots,is_free,free_text,source,source_ref\n"
+    )
+    rows = (
+        "con peso,x,carb,100,1,20,0,0,,,,,,,,,almuerzo:3;cena:1,,,USDA,1\n"
+        "sin peso,x,carb,100,1,20,0,0,,,,,,,,,almuerzo;cena,,,USDA,2\n"
+        "peso absurdo,x,carb,100,1,20,0,0,,,,,,,,,almuerzo:99,,,USDA,3\n"
+    )
+    csv_path = tmp_path / "foods.csv"
+    csv_path.write_text(header + rows, encoding="utf-8")
+    foods = {f.name_es: f for f in load_curated_foods(csv_path)}
+
+    assert foods["con peso"].weight_in(MealSlot.LUNCH) == 3
+    assert foods["con peso"].weight_in(MealSlot.DINNER) == 1
+    # Sin `:n` no hay entrada en el dict, y el default habla por el alimento.
+    assert foods["sin peso"].slot_weights == {}
+    assert foods["sin peso"].weight_in(MealSlot.LUNCH) == DEFAULT_SLOT_WEIGHT
+    # Un dedo torcido no puede dominar el coste de todos los platos de la semana.
+    assert foods["peso absurdo"].weight_in(MealSlot.LUNCH) == MAX_SLOT_WEIGHT
+    # Y lo que no está declarado no vale nada, tenga el peso que tenga.
+    assert foods["con peso"].weight_in(MealSlot.BREAKFAST) == 0
+
+
+def test_the_main_meals_prefer_the_staple_carbs_over_the_bread(catalog) -> None:
+    """El bug que originó todo esto: pan y arepa salían en almuerzos y cenas.
+
+    No se prohíben —quien solo tiene arepa tiene que poder almorzar— pero pesan
+    menos que el arroz, la papa o la quinoa, que es lo que se come a mediodía.
+    """
+    by_name = {f.name_es: f for f in catalog}
+    staples = ["arroz blanco cocido", "papa cocida", "quinoa cocida", "plátano maduro cocido"]
+    breads = ["pan integral", "arepa de maíz", "tortilla de maíz"]
+
+    for main in (MealSlot.LUNCH, MealSlot.DINNER):
+        worst_staple = min(by_name[n].weight_in(main) for n in staples)
+        best_bread = max(by_name[n].weight_in(main) for n in breads)
+        assert worst_staple > best_bread, main.value
+
+    # Y en el desayuno mandan ellos: es su comida.
+    for name in breads:
+        food = by_name[name]
+        assert food.weight_in(MealSlot.BREAKFAST) == MAX_SLOT_WEIGHT
+        assert food.weight_in(MealSlot.BREAKFAST) > food.weight_in(MealSlot.LUNCH)

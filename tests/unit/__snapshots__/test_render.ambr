@@ -19,17 +19,13 @@
     <section class="notes-page">
       <h1 class="notes-title">Anotaciones Importantes</h1>
   
-      <p class="notes-client">
-        Plan de <strong>Cliente Ejemplo</strong> ·
-        Valeria Fit · Plan 15 días (1 semana)    </p>
-  
       <ul class="notes-list">
         <li>El plan consta de 5 comidas: desayuno, snack AM, almuerzo, snack PM y cena.</li>
-        <li>Todos los pesos son del alimento YA COCIDO: pesa la porción lista para comer, no cruda (el pollo, el arroz, la pasta).</li>
+        <li>Todos los pesos son del alimento YA COCIDO: pesa la porción lista para comer, no cruda (el pollo, el arroz, la pasta, etc.).</li>
+        <li>El plan se cuadra sobre el total de la SEMANA, así que hay días que quedan un poco por encima o por debajo del objetivo diario. Es normal: la semana cierra.</li>
         <li>Los huevos van por unidades, y los puedes preparar como gustes, incluso con los vegetales que desees, excepto fritos (evitar exceso de aceite).</li>
         <li>La gelatina sin azúcar la puedes comer cuando quieras.</li>
         <li>Puedes comer 3 cuadritos de chocolate 80% cacao todos los días, MENOS sábado y domingo.</li>
-        <li>La comida libre puedes hacerla el sábado o el domingo, según prefieras.</li>
         <li>Alimentos libres: café sin azúcar, aromática sin azúcar, todos los vegetales que quieras y bebidas sin azúcar ni calorías.</li>
         <li>Las comidas son cada 2 a 3 horas.</li>
       </ul>
@@ -71,226 +67,306 @@
   <th class="day">Lunes</th><th class="day">Martes</th><th class="day">Miércoles</th><th class="day">Jueves</th><th class="day">Viernes</th><th class="day">Sábado</th><th class="day">Domingo</th>        </tr>
         </thead>
         <tbody>
-          <tr>
-            <th class="slot">Desayuno<span class="time">7:00 am</span></th>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+          <tr class="meal ">
+            <th class="slot" rowspan="2">Desayuno</th>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+            <td class="">
+  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>          </td>
+          </tr>
+          <tr class="foot ">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 huevos (100 g)</span><span class="portion">1 arepa (70 g)</span><span class="portion">Aguacate — 50 g</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">376 kcal</span>
                 <span class="m-pcg">P 17 · C 37 · G 18</span>
               </span>
             </td>
           </tr>
-          <tr>
-            <th class="slot">Snack AM<span class="time">10:30 am</span></th>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+          <tr class="meal alt">
+            <th class="slot" rowspan="2">Snack AM</th>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+            <td class="">
+  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>          </td>
+          </tr>
+          <tr class="foot alt">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Yogur griego natural — 170 g</span><span class="portion">1 unidad de banano (120 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">207 kcal</span>
                 <span class="m-pcg">P 19 · C 34 · G 1</span>
               </span>
             </td>
           </tr>
-          <tr>
-            <th class="slot">Almuerzo<span class="time">1:00 pm</span></th>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+          <tr class="meal ">
+            <th class="slot" rowspan="2">Almuerzo</th>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+            <td class="">
+  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span>          </td>
+          </tr>
+          <tr class="foot ">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Pechuga de pollo — 150 g</span><span class="portion">Arroz blanco cocido — 120 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">404 kcal</span>
                 <span class="m-pcg">P 50 · C 34 · G 6</span>
               </span>
             </td>
           </tr>
-          <tr>
-            <th class="slot">Snack PM<span class="time">4:30 pm</span></th>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+          <tr class="meal alt">
+            <th class="slot" rowspan="2">Snack PM</th>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+            <td class="">
+  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>          </td>
+          </tr>
+          <tr class="foot alt">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
-            <td>
-  <span class="portion">2 lonchas de queso fresco (60 g)</span><span class="portion">1 unidad de manzana (180 g)</span>            <span class="macros">
+            <td class="">
+              <span class="macros">
                 <span class="m-kcal">273 kcal</span>
                 <span class="m-pcg">P 11 · C 27 · G 15</span>
               </span>
             </td>
           </tr>
-          <tr>
-            <th class="slot">Cena<span class="time">7:30 pm</span></th>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+          <tr class="meal ">
+            <th class="slot" rowspan="2">Cena</th>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+            <td class="">
+  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span>          </td>
+          </tr>
+          <tr class="foot ">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>
             </td>
-            <td>
-  <span class="portion">Tilapia — 150 g</span><span class="portion">Batata cocida — 60 g</span><span class="extra">Ensalada libre</span>            <span class="macros">
+            <td class="">
+  <span class="extra">Ensalada libre</span>            <span class="macros">
                 <span class="m-kcal">246 kcal</span>
                 <span class="m-pcg">P 40 · C 12 · G 4</span>
               </span>

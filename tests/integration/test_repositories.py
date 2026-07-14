@@ -469,3 +469,65 @@ async def test_thirty_day_plan_persists_both_phases(session) -> None:
     assert loaded.duration_days == 30
     assert len(loaded.days) == 14
     assert sum(1 for d in loaded.days if d.phase is PlanPhase.NEXT_15) == 7
+
+
+async def test_only_one_plan_is_the_active_one_and_the_others_stay(session) -> None:
+    """"Uno solo activo" lo garantiza la cardinalidad de la columna, no el código.
+
+    Archivar es repuntar. Los planes anteriores NO se borran ni se marcan: siguen
+    ahí, con su versión y sus macros, y se puede volver a cualquiera.
+    """
+    await seed_local(session, CSV_PATH)
+    clients = SqlClientRepository(session, DEFAULT_TENANT_ID)
+    client = make_client()
+    await clients.add(client)
+    assert (await clients.get(client.id)).active_plan_id is None
+
+    from tests.conftest import PROJECT_ROOT
+
+    from nutriplan.adapters.config_yaml import YamlConfigProvider
+    from nutriplan.domain.calculation import compute_targets
+
+    config = YamlConfigProvider(
+        PROJECT_ROOT / "config" / "nutrition.default.yaml"
+    ).get_nutrition_config()
+    targets = compute_targets(client, config)
+    await SqlTargetsRepository(session, DEFAULT_TENANT_ID).add(targets)
+
+    # El peso con el que se calcularon viaja con ellos: es el seguimiento.
+    stored = await SqlTargetsRepository(session, DEFAULT_TENANT_ID).get(targets.id)
+    assert stored.weight_kg == client.weight_kg
+
+    plans = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    made = []
+    for version in (1, 2, 3):
+        cycle = PlanCycle(
+            id=uuid4(),
+            tenant_id=DEFAULT_TENANT_ID,
+            client_id=client.id,
+            targets_id=targets.id,
+            days=[],
+            version=version,
+            variant=version - 1,
+            config_version="test",
+            prompt_version="v1",
+            model="test",
+            input_hash=f"hash-{version}",
+            created_at=datetime.now(UTC),
+        )
+        await plans.add(cycle)
+        await clients.set_active_plan(client.id, cycle.id)
+        made.append(cycle)
+
+    # El último activado es EL plan; los otros dos siguen existiendo.
+    reloaded = await clients.get(client.id)
+    assert reloaded.active_plan_id == made[2].id
+    all_cycles = await plans.list_for_client(client.id)
+    assert len(all_cycles) == 3
+    assert sorted(c.version for c in all_cycles) == [1, 2, 3]
+
+    # Y se puede volver a la v2: nada se perdió por el camino.
+    await clients.set_active_plan(client.id, made[1].id)
+    reloaded = await clients.get(client.id)
+    assert reloaded.active_plan_id == made[1].id
+    assert len(await plans.list_for_client(client.id)) == 3

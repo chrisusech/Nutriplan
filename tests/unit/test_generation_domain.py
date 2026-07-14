@@ -10,13 +10,16 @@ from tests.fixtures.plan_builder import catalog_by_name
 from nutriplan.domain.errors import GenerationError
 from nutriplan.domain.generation_rules import (
     check_variety,
+    drop_free_meal,
     slot_availability,
     validate_selection_structure,
 )
-from nutriplan.domain.macro_split import macro_shares
+from nutriplan.domain.macro_split import daily_minus_free_meal, macro_shares
 from nutriplan.domain.models import (
+    DaySelection,
     FoodCategory,
     MacroTargets,
+    MealSelection,
     MealSlot,
     PlanSelection,
 )
@@ -549,3 +552,65 @@ def test_variety_rotated_week_is_clean(foods) -> None:
         ]
         days.append(d)
     assert check_variety(_selection(days), lookup, max_protein_repeats=3, max_carb_repeats=4) == []
+
+
+def test_the_day_with_a_free_meal_aims_lower_and_the_rest_of_it_does_not_move(
+    nutrition_config,
+) -> None:
+    """El corazón de la comida libre.
+
+    Quitar el slot y ya estaría MAL: `macro_shares` renormaliza sobre las comidas
+    que quedan, así que las cuatro restantes se repartirían el día entero y el día
+    cuadraría el objetivo completo — con porciones más grandes. Lo que se descuenta
+    es el PESO de la comida libre, y entonces las demás conservan su objetivo
+    ABSOLUTO de siempre.
+    """
+    daily = MacroTargets(kcal=2000, protein_g=150, carb_g=200, fat_g=60, fiber_g=28)
+    reduced = daily_minus_free_meal(daily, nutrition_config, MealSlot.DINNER)
+
+    dinner = nutrition_config.meal_distribution[MealSlot.DINNER]
+    assert reduced.protein_g == round(daily.protein_g * (1 - dinner.protein_g), 1)
+    assert reduced.kcal < daily.kcal  # el día suma por debajo: eso es una comida libre
+
+    # Y la prueba de fuego: el almuerzo pide lo mismo que pediría un día normal.
+    lunch = nutrition_config.meal_distribution[MealSlot.LUNCH]
+    normal = daily.protein_g * lunch.protein_g
+    with_free = reduced.protein_g * (lunch.protein_g / (1 - dinner.protein_g))
+    assert round(with_free, 1) == round(normal, 1)
+
+    # Sin comida libre no cambia nada.
+    assert daily_minus_free_meal(daily, nutrition_config, None) == daily
+
+
+def test_the_free_meal_is_the_only_slot_allowed_to_be_missing() -> None:
+    """`drop_free_meal` la quita y el validador de estructura no la echa de menos."""
+    foods = catalog_by_name()
+    ids = {str(f.id): f for f in foods.values()}
+    pollo, arroz, huevo, avena, banano, aguacate = (
+        foods["pechuga de pollo"], foods["arroz blanco cocido"], foods["huevo entero"],
+        foods["avena en hojuelas"], foods["banano"], foods["aguacate"],
+    )
+    day_meals = [
+        MealSelection(slot=MealSlot.BREAKFAST, food_ids=[str(huevo.id), str(avena.id)]),
+        MealSelection(slot=MealSlot.SNACK_AM, food_ids=[str(banano.id)]),
+        MealSelection(slot=MealSlot.LUNCH, food_ids=[str(pollo.id), str(arroz.id)]),
+        MealSelection(slot=MealSlot.SNACK_PM, food_ids=[str(banano.id)]),
+        MealSelection(slot=MealSlot.DINNER, food_ids=[str(pollo.id), str(aguacate.id)]),
+    ]
+    selection = PlanSelection(
+        days=[DaySelection(day_index=d, meals=list(day_meals)) for d in range(7)]
+    )
+
+    free_meal = (6, MealSlot.DINNER)
+    dropped = drop_free_meal(selection, free_meal)
+
+    # La celda ya no está — y solo esa.
+    day6 = next(d for d in dropped.days if d.day_index == 6)
+    assert MealSlot.DINNER not in {m.slot for m in day6.meals}
+    assert len(day6.meals) == 4
+    assert all(len(d.meals) == 5 for d in dropped.days if d.day_index != 6)
+
+    # Y el validador no la reporta como "slot faltante".
+    assert validate_selection_structure(dropped, ids, free_meal=free_meal) == []
+    # Sin decirle cuál es la libre, sí protesta: la excepción es explícita.
+    assert validate_selection_structure(dropped, ids) != []

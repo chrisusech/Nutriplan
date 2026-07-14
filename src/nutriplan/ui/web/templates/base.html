@@ -10,9 +10,32 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,0&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
+  <script>
+    // Los controles del generador reemplazan el contenido de #gen-root, que es la
+    // pantalla ENTERA. Al vaciarlo, el documento se encoge, el navegador recorta el
+    // scroll a lo que queda de página, y al reinsertar el contenido ya no vuelve a su
+    // sitio: cambiar un macro te mandaba al fondo. Se guarda dónde estabas y se vuelve.
+    //
+    // Las dos columnas del generador scrollean por su cuenta, y el swap las DESTRUYE:
+    // sus divs son nuevos y nacen con scrollTop 0. Sin restaurarlas, tocar un macro
+    // te devolvía al principio de la lista de alimentos — el mismo salto de antes,
+    // sólo que dentro del panel. Se guardan las dos, no sólo la ventana.
+    const COLS = '.gen-controls, .gen-preview';
+    document.addEventListener('htmx:beforeSwap', () => {
+      window.__scrollY = window.scrollY;
+      window.__cols = [...document.querySelectorAll(COLS)].map(e => e.scrollTop);
+    });
+    document.addEventListener('htmx:afterSettle', () => {
+      if (window.__scrollY !== undefined) window.scrollTo(0, window.__scrollY);
+      const cols = window.__cols || [];
+      document.querySelectorAll(COLS).forEach((e, i) => {
+        if (cols[i] != null) e.scrollTop = cols[i];
+      });
+    });
+  </script>
   <style>:root { --brand: {{ brand }}; --brand-soft: {{ brand_soft }}; }</style>
 </head>
-<body hx-headers='{"X-Requested-With":"htmx"}'>
+<body class="{% block page_class %}{% endblock %}" hx-headers='{"X-Requested-With":"htmx"}'>
   <header class="topbar">
     <a class="logo" href="/">
       <div class="logo-badge"><span class="icon" style="font-size:22px">restaurant</span></div>

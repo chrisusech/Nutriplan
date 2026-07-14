@@ -56,6 +56,45 @@
       </div>
     </div>
 
+    {# Seguimiento: el peso de hoy contra el de la versión anterior. Registrarlo
+       recalcula los macros con la fórmula; los cuadritos de abajo siguen siendo
+       editables a mano, así que el peso es una propuesta, no una imposición. Y es
+       opcional: sin peso nuevo se parte de los macros vigentes y se ajustan. #}
+    <div class="card">
+      <div class="card-title" style="margin-bottom:3px">Peso y seguimiento</div>
+      <div class="card-sub" style="margin-bottom:12px">
+        {% if ctx.weight_history %}
+        Cada versión guarda el peso con el que se calcularon sus macros
+        {% else %}
+        Registra el peso de hoy y los macros se recalculan con él
+        {% endif %}
+      </div>
+
+      <form style="display:flex;gap:8px;align-items:flex-end"
+            hx-post="/generador/{{ ctx.client.id }}/peso"
+            hx-target="#gen-root" hx-swap="innerHTML">
+        <div class="auth-field" style="flex:1;margin:0">
+          <span>Peso actual (kg)</span>
+          <input id="peso" name="peso" type="number" step="0.1" min="25" max="400"
+                 value="{{ ctx.client.weight_kg }}">
+        </div>
+        <button class="btn btn-outline" type="submit" style="padding:11px 14px;white-space:nowrap">
+          <span class="icon" style="font-size:18px">monitor_weight</span>Recalcular
+        </button>
+      </form>
+
+      {% if ctx.weight_history %}
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:5px">
+        {% for h in ctx.weight_history %}
+        <div style="display:flex;justify-content:space-between;font:500 12px Poppins;color:var(--muted-2)">
+          <span>{{ h.label }}</span>
+          <span><b style="color:var(--ink)">{{ h.weight }} kg</b> · {{ h.kcal }} kcal</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div class="card-title">Macros diarios</div>
@@ -74,24 +113,27 @@
         {% endif %}
       </div>
 
+      {# El `id` de cada input no es decorativo: HTMX devuelve el foco tras el swap
+         buscando el elemento con el MISMO id. Sin id, cada cambio te dejaba el foco en
+         el body y había que volver a pinchar el campo. #}
       <form class="formula-grid"
             hx-post="/generador/{{ ctx.client.id }}/formula"
             hx-trigger="change" hx-target="#gen-root" hx-swap="innerHTML">
         <div class="formula-field">
-          <label>Proteína</label>
-          <div class="fin"><input name="protein_g_per_kg" type="number" step="0.1"
+          <label for="f-protein">Proteína</label>
+          <div class="fin"><input id="f-protein" name="protein_g_per_kg" type="number" step="0.1"
                  min="{{ ctx.formula.protein_range[0] }}" max="{{ ctx.formula.protein_range[1] }}"
                  value="{{ ctx.formula.protein_g_per_kg }}"><span>g/kg</span></div>
         </div>
         <div class="formula-field">
-          <label>Grasa</label>
-          <div class="fin"><input name="fat_g_per_kg" type="number" step="0.1"
+          <label for="f-fat">Grasa</label>
+          <div class="fin"><input id="f-fat" name="fat_g_per_kg" type="number" step="0.1"
                  min="{{ ctx.formula.fat_range[0] }}" max="{{ ctx.formula.fat_range[1] }}"
                  value="{{ ctx.formula.fat_g_per_kg }}"><span>g/kg</span></div>
         </div>
         <div class="formula-field">
-          <label>Calorías {% if not ctx.formula.kcal_manual %}· auto{% endif %}</label>
-          <div class="fin"><input name="kcal_override" type="number" step="10" min="800"
+          <label for="f-kcal">Calorías {% if not ctx.formula.kcal_manual %}· auto{% endif %}</label>
+          <div class="fin"><input id="f-kcal" name="kcal_override" type="number" step="10" min="800"
                  placeholder="TDEE"
                  value="{% if ctx.formula.kcal_manual %}{{ ctx.formula.kcal }}{% endif %}"><span>kcal</span></div>
         </div>
@@ -121,9 +163,9 @@
             <span class="icon" style="font-size:20px">{{ m.icon }}</span>
           </div>
           <div style="flex:1">
-            <div class="lbl">{{ m.label }}</div>
+            <label class="lbl" for="m-{{ m.key }}">{{ m.label }}</label>
             <div style="display:flex;align-items:baseline;gap:4px">
-              <input name="{{ m.key }}" type="number" step="1" min="0"
+              <input id="m-{{ m.key }}" name="{{ m.key }}" type="number" step="1" min="0"
                      value="{{ m.raw }}">
               <span class="unit">{{ m.unit }}</span>
             </div>
@@ -181,6 +223,46 @@
         </button>
         {% endfor %}
       </div>
+    </div>
+
+    {# La comida libre: una a la semana, donde el entrenador diga. Sus macros no se
+       cuentan y las demás comidas de ese día no cambian, así que el día suma por
+       debajo a propósito. #}
+    <div class="card">
+      <div class="card-title" style="margin-bottom:3px">Comida libre</div>
+      <div class="card-sub" style="margin-bottom:12px">
+        Una por semana. Esa comida sale en el plan como <b>COMIDA LIBRE</b>, sin pesos: no se cuenta, y el resto del día no cambia
+      </div>
+
+      <div style="font:600 11px Poppins;color:var(--faint);text-transform:uppercase;margin-bottom:7px">Día</div>
+      <div class="chips" style="margin-bottom:13px">
+        {% for d in range(7) %}
+        <button class="chip {% if ctx.client.free_meal_day == d %}on{% endif %}"
+                style="padding:7px 12px;font-size:12.5px"
+                hx-post="/generador/{{ ctx.client.id }}/comida-libre"
+                hx-vals='{"dia":"{{ d }}","slot":"{{ ctx.client.free_meal_slot.value if ctx.client.free_meal_slot else 'almuerzo' }}"}'
+                hx-target="#gen-root" hx-swap="innerHTML">{{ DAY_SHORT[d] }}</button>
+        {% endfor %}
+      </div>
+
+      <div style="font:600 11px Poppins;color:var(--faint);text-transform:uppercase;margin-bottom:7px">Comida</div>
+      <div class="chips">
+        {% for slot in ctx.client.meal_slots %}
+        <button class="chip {% if ctx.client.free_meal_slot == slot %}on{% endif %}"
+                style="padding:7px 12px;font-size:12.5px"
+                hx-post="/generador/{{ ctx.client.id }}/comida-libre"
+                hx-vals='{"dia":"{{ ctx.client.free_meal_day if ctx.client.free_meal_day is not none else 6 }}","slot":"{{ slot.value }}"}'
+                hx-target="#gen-root" hx-swap="innerHTML">{{ SLOT_META[slot].name }}</button>
+        {% endfor %}
+      </div>
+
+      {% if ctx.client.free_meal %}
+      <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:13px;padding:9px;font-size:12.5px"
+              hx-post="/generador/{{ ctx.client.id }}/comida-libre"
+              hx-vals='{"dia":"","slot":""}' hx-target="#gen-root" hx-swap="innerHTML">
+        <span class="icon" style="font-size:17px">close</span>Sin comida libre
+      </button>
+      {% endif %}
     </div>
 
     <div class="card">

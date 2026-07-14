@@ -11,7 +11,7 @@ from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer, render_plan_html
 from nutriplan.adapters.render.view import natural_units, portion_text
 from nutriplan.domain.errors import RenderError
-from nutriplan.domain.models import MealSlot
+from nutriplan.domain.models import MacroTargets, MealSlot
 
 
 @pytest.fixture(scope="module")
@@ -72,9 +72,25 @@ def test_html_contains_business_format(fixed_plan) -> None:
     assert "2 huevos (100 g)" in html
     assert "Totales día" in html
     assert "Tu objetivo diario" in html
-    assert "Plan 15 días (1 semana)" in html
     assert "<table" in html
-    assert "Cliente Ejemplo" in html
+
+
+def test_the_grid_carries_no_clock_and_no_cover_line(fixed_plan) -> None:
+    """El plan dice QUÉ come, no a qué hora; y no se abre con una ficha del cliente."""
+    plan, foods, branding = fixed_plan
+    html = render_plan_html(plan, branding, foods, client_name="Cliente Ejemplo")
+    for hora in ("7:00 am", "10:30 am", "1:00 pm", "4:30 pm", "7:30 pm"):
+        assert hora not in html
+    assert "Plan de" not in html
+    assert "Plan 15 días" not in html
+
+
+def test_the_notes_explain_that_the_week_is_what_closes(fixed_plan) -> None:
+    """Un día puede quedar un poco arriba o abajo; lo que cuadra es la semana."""
+    plan, foods, branding = fixed_plan
+    html = render_plan_html(plan, branding, foods)
+    assert "SEMANA" in html
+    assert "la pasta, etc.)" in html
 
 
 def test_thirty_day_pdf_has_two_week_grids(fixed_plan) -> None:
@@ -95,7 +111,6 @@ def test_thirty_day_pdf_has_two_week_grids(fixed_plan) -> None:
     assert html.count('<table class="grid">') == 2
     assert "primeros 15 días" in html
     assert "próximos 15 días" in html
-    assert "Plan 30 días (2 semanas)" in html
 
 
 async def test_pdf_renders(fixed_plan) -> None:
@@ -187,3 +202,40 @@ def test_portion_text_units_first() -> None:
     assert portion_text(150, foods["huevo entero"]) == "3 huevos (150 g)"
     assert portion_text(100, foods["atún en agua"]) == "1 lata de atún en agua (100 g)"
     assert portion_text(120, foods["pechuga de pollo"]) == "Pechuga de pollo — 120 g"
+
+
+def test_the_free_meal_is_a_cell_and_the_note_names_its_day() -> None:
+    """La frase de la comida libre salía en TODOS los planes, tuvieran una o no.
+
+    Era texto fijo ("puedes hacerla el sábado o el domingo, según prefieras") porque
+    la comida libre no existía como dato. Ahora la celda está en la rejilla y la
+    anotación dice el día y la comida de verdad — o no dice nada.
+    """
+    plan, foods, branding = build_fixed_plan()
+
+    # Sin comida libre no se promete ninguna.
+    html = render_plan_html(plan, branding, foods, client_name="Cliente Ejemplo")
+    assert "COMIDA LIBRE" not in html
+    assert "comida libre" not in html.lower()
+
+    # Con ella: la celda en la rejilla, y la anotación con su día y su comida.
+    sunday = plan.days[6]
+    freed = [
+        m.model_copy(update={
+            "items": [],
+            "computed": MacroTargets(kcal=0, protein_g=0, carb_g=0, fat_g=0),
+            "is_free_meal": True,
+        })
+        if m.slot is MealSlot.DINNER else m
+        for m in sunday.meals
+    ]
+    plan = plan.model_copy(update={
+        "days": [*plan.days[:6], sunday.model_copy(update={"meals": freed})]
+    })
+
+    html = render_plan_html(plan, branding, foods, client_name="Cliente Ejemplo")
+    assert "COMIDA LIBRE" in html
+    assert "free-meal" in html  # la celda lleva su propio estilo
+    assert "Tu comida libre es el domingo en el cena" in html or (
+        "comida libre es el domingo" in html
+    )

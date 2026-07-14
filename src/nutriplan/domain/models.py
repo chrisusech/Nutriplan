@@ -82,6 +82,20 @@ class Client(BaseModel):
     # las cinco (planes ya guardados siguen deserializando).
     meal_slots: list[MealSlot] = []
 
+    # Cuál de sus planes es EL plan: el definitivo, el que el cliente sigue. Un
+    # puntero y no una bandera por plan, porque "uno solo activo" queda garantizado
+    # por la cardinalidad de la columna y no por código que haya que recordar.
+    active_plan_id: UUID | None = None
+
+    # La comida libre de la semana: qué día (0-6) y cuál. Una, o ninguna.
+    #
+    # Vive en el CLIENTE y no en el plan porque se elige ANTES de generar, tiene que
+    # sobrevivir a los re-render del generador y tiene que entrar en el hash de
+    # entrada (si no, activarla devolvería el plan cacheado). Lo que queda dentro del
+    # plan es el reflejo: `MealEntry.is_free_meal`.
+    free_meal_day: int | None = Field(default=None, ge=0, le=6)
+    free_meal_slot: MealSlot | None = None
+
     @model_validator(mode="after")
     def _default_meal_slots(self) -> "Client":
         chosen = set(self.meal_slots) or set(MealSlot)
@@ -94,11 +108,45 @@ class Client(BaseModel):
         self.meal_slots = [s for s in MealSlot if s in chosen]  # orden del día
         return self
 
+    @model_validator(mode="after")
+    def _coherent_free_meal(self) -> "Client":
+        """O día y comida, o ninguno de los dos. Y ha de ser una comida que hace.
+
+        El entrenador puede apagar el snack de la tarde DESPUÉS de haber puesto ahí
+        la comida libre. Se limpia en vez de romper: una comida libre en una comida
+        que no existe no significa nada.
+        """
+        if self.free_meal_slot is not None and self.free_meal_slot not in self.meal_slots:
+            self.free_meal_day = None
+            self.free_meal_slot = None
+        elif (self.free_meal_day is None) != (self.free_meal_slot is None):
+            self.free_meal_day = None
+            self.free_meal_slot = None
+        return self
+
+    @property
+    def free_meal(self) -> tuple[int, MealSlot] | None:
+        """La celda libre de la semana, si la hay."""
+        if self.free_meal_day is None or self.free_meal_slot is None:
+            return None
+        return (self.free_meal_day, self.free_meal_slot)
+
 
 # Paso de redondeo por defecto para lo que se pesa a granel. 10 g y no 5 porque
 # es más fácil pesar 120 o 150 g que 137: la báscula la usa una persona, no el
 # solver.
 BULK_PORTION_STEP_G = 10.0
+
+# Cuánto ENCAJA un alimento en una comida. La afinidad era binaria —va o no va— y
+# eso no describe una cocina: el arroz y la arepa "van" los dos en un almuerzo, y
+# el motor los tomaba por equivalentes. La arepa es de desayuno; el arroz es de
+# almuerzo. Sin un orden, salía pan en la cena y arepa a mediodía.
+#   3 = es SU comida · 2 = va bien · 1 = va, pero no es su sitio
+# El peso ORDENA, no prohíbe: quien solo tiene arepa sigue comiendo arepa al
+# mediodía (lo contrario sería no poder generarle plan). Prohibir es cosa de
+# `meal_slots`.
+DEFAULT_SLOT_WEIGHT = 2
+MAX_SLOT_WEIGHT = 3
 
 # Con qué comidas encaja cada categoría cuando el catálogo no lo dice. Es solo
 # el fallback (un alimento custom del entrenador, p.ej.): el CSV curado declara
@@ -148,6 +196,10 @@ class FoodItem(BaseModel):
     # ahora es un dato del alimento y viaja desde la base.
     meal_slots: list[MealSlot] = []
 
+    # CUÁNTO encaja en cada una (ver DEFAULT_SLOT_WEIGHT). Ausente = 2: los
+    # alimentos que no lo declaran se comportan exactamente como antes.
+    slot_weights: dict[MealSlot, int] = {}
+
     # Alimentos libres (ensalada, café, gelatina): no aportan macros y el solver
     # ni los mira. `free_text` es cómo se imprimen en el plan.
     is_free: bool = False
@@ -162,6 +214,12 @@ class FoodItem(BaseModel):
                 self.unit_granularity, self.default_unit_g
             )
         return self
+
+    def weight_in(self, slot: MealSlot) -> int:
+        """Cuánto encaja este alimento en esta comida. 0 si no va."""
+        if slot not in self.meal_slots:
+            return 0
+        return self.slot_weights.get(slot, DEFAULT_SLOT_WEIGHT)
 
 
 def _derive_portion_step(granularity: UnitGranularity, unit_g: float | None) -> float:
@@ -211,6 +269,11 @@ class NutritionTargets(BaseModel):
     config_version: str  # procedencia
     overrides: dict[str, float] = {}  # ajustes manuales del entrenador (gramos sueltos)
     formula: MacroFormula = Field(default_factory=MacroFormula)  # g/kg y kcal elegidos
+    # CON QUÉ PESO se calcularon estos macros. `Client.weight_kg` es mutable: al
+    # registrar el peso del mes siguiente se perdía el del mes anterior, y con él la
+    # única forma de saber si el déficit estaba funcionando. `| None` para que los
+    # objetivos ya guardados sigan deserializando.
+    weight_kg: float | None = Field(default=None, gt=0)
     computed_at: datetime
 
 
@@ -258,6 +321,16 @@ class MealEntry(BaseModel):
     computed: MacroTargets  # recalculado por el código, nunca por la IA
     free_salad: bool = False
     free_protein: bool = False  # "proteína libre" del formato
+
+    # LA comida libre de la semana: sin alimentos, sin gramos y sin macros. Sus
+    # calorías no se cuentan, y las demás comidas de ese día conservan su objetivo
+    # de siempre — el día suma por debajo a propósito, que es lo que significa
+    # comerse una pizza el domingo.
+    #
+    # Es el reflejo, dentro del plan, de `Client.free_meal`. Está aquí y no en el
+    # PlanCycle porque un plan ya exportado tiene que seguir diciendo lo que decía
+    # aunque el cliente cambie de preferencia mañana.
+    is_free_meal: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -319,6 +392,14 @@ class PlanCycle(BaseModel):
     days: list[DayPlan]  # 7 días por bloque de fase
     duration_days: int = Field(default=15, ge=15, le=30)
     variant: int = Field(default=0, ge=0)
+    # El número humano del plan ("Plan nutricional v3"). `variant` es su gemelo
+    # técnico: entra en el input_hash para que dos versiones no colisionen en la
+    # caché. Éste es el que el entrenador y el cliente leen.
+    version: int = Field(default=1, ge=1)
+    # OJO: `status` y "cuál es EL plan" son ejes distintos. `status` dice en qué punto
+    # del flujo está ESTE plan (borrador/aprobado); cuál de todos es el definitivo lo
+    # dice `Client.active_plan_id`. Un v3 recién generado puede ser borrador y ya ser
+    # el activo.
     status: PlanStatus = PlanStatus.DRAFT
     # Procedencia (reproducibilidad):
     config_version: str
@@ -441,20 +522,43 @@ class RecipeIngredient(BaseModel):
 
 
 class Recipe(BaseModel):
-    """Receta = nombre + ingredientes con macros agregados por el dominio.
+    """Un plato con sus macros. De dos maneras, porque hay dos clases de plato.
 
-    El entrenador la sube (pending); un admin verifica los macros (verified).
-    Una receta verificada se materializa como 'alimento compuesto' del tenant
-    y queda disponible para armar planes (aporta sus macros a un slot).
+    POR INGREDIENTES: el entrenador lista qué lleva y cuánto, y los macros los
+    calcula el DOMINIO (`portioning.macros_of`). Es la receta que se cocina en casa.
+
+    POR MACROS: el plato de un restaurante, del que no se conoce la receta pero sí
+    los números exactos. `ingredients` va vacío y los macros son el DATO, no el
+    derivado. Antes esto no se podía registrar —`create_recipe` exigía al menos un
+    ingrediente— y un cliente que come fuera se quedaba sin poder contarlo.
+
+    En ambos casos: el entrenador la sube (pending), un admin la verifica
+    (verified), y al verificarla se materializa como 'alimento compuesto' del
+    tenant, disponible para armar planes.
     """
 
     id: UUID
     tenant_id: UUID
     name: str
-    ingredients: list[RecipeIngredient]
-    macros: MacroTargets  # totales de la receta, calculados por el dominio
-    total_grams: float = Field(gt=0)
+    ingredients: list[RecipeIngredient] = []  # vacío = declarada por macros
+    macros: MacroTargets  # totales del plato: calculados, o declarados a mano
+    total_grams: float = Field(gt=0)  # lo que pesa una porción
+    # En qué comidas encaja el plato. Sin esto, el alimento compuesto derivaría sus
+    # comidas de la CATEGORÍA dominante y una hamburguesa saldría en un desayuno.
+    meal_slots: list[MealSlot] = []
     status: RecipeStatus = RecipeStatus.PENDING
     created_by: UUID | None = None  # cuenta de entrenador que la subió
     created_at: datetime
     compound_food_id: UUID | None = None  # alimento generado al verificar
+
+    @model_validator(mode="after")
+    def _carries_energy(self) -> "Recipe":
+        """Un plato sin ingredientes NI macros no es nada: no aporta al plan."""
+        if not self.ingredients and not any(
+            (self.macros.protein_g, self.macros.carb_g, self.macros.fat_g)
+        ):
+            raise ValueError(
+                "La receta necesita ingredientes, o los macros del plato (proteína, "
+                "carbohidrato o grasa)"
+            )
+        return self

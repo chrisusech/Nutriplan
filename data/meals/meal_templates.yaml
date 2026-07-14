@@ -9,7 +9,11 @@
 #
 # `version` entra en compute_input_hash: si añades un plato, los planes se
 # regeneran en vez de servirse de la caché.
-version: "2026.07.14"
+# 2026.07.15: los carbos ganan peso por comida (`FoodItem.slot_weights`). El hash
+# de entrada mira la versión del catálogo, no los datos del alimento: sin subirla,
+# los planes ya generados se servirían de caché y parecería que el motor sigue
+# poniendo arepa en los almuerzos.
+version: "2026.07.15"
 
 templates:
   # ---------------------------------------------------------------- DESAYUNO --

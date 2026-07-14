@@ -11,6 +11,7 @@
 {% if rows %}
 <div class="client-grid">
   {% for r in rows %}
+  <div class="client-cell">
   <a class="client-card" href="/planes/{{ r.cycle_id }}">
     <div class="top">
       <div class="avatar-lg" style="background:{{ r.avatar_bg }};color:{{ r.avatar_fg }}">{{ r.initials }}</div>
@@ -24,9 +25,17 @@
       <span class="badge" style="color:{{ r.status.color }};background:{{ r.status.soft }}">
         <span class="icon fill" style="font-size:15px">{{ r.status.icon }}</span>{{ r.status.label }}
       </span>
-      <span class="kcal">{{ r.kcal }}</span>
+      <span class="kcal">v{{ r.version }} · {{ r.kcal }}</span>
     </div>
   </a>
+  {# El historial cuelga de la tarjeta, no de dentro: los planes viejos dejan de ser
+     inalcanzables. Fuera del <a> porque un enlace no puede anidar otro. #}
+  {% if r.n_versions > 1 %}
+  <a class="history-link" href="/planes/cliente/{{ r.client_id }}">
+    <span class="icon" style="font-size:15px">history</span>{{ r.n_versions }} versiones · ver historial
+  </a>
+  {% endif %}
+  </div>
   {% endfor %}
 </div>
 {% else %}

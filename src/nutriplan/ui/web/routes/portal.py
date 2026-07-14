@@ -41,8 +41,22 @@ def _attachment(filename: str) -> str:
 async def _approved_plan(
     request: Request, session: AsyncSession, client_id: UUID
 ) -> PlanCycle | None:
+    """El plan que el cliente ve: el ACTIVO, si está aprobado.
+
+    "El aprobado más reciente" no basta desde que hay versiones: si el entrenador
+    vuelve a la v2 porque la v3 no funcionó, el cliente tiene que ver la v2 — y con
+    la regla vieja seguiría viendo la v3.
+    """
     repos = repos_of(request, session)
+    client = await repos.clients.get(client_id)
     cycles = await repos.plans.list_for_client(client_id)
+
+    if client is not None and client.active_plan_id is not None:
+        active = next((c for c in cycles if c.id == client.active_plan_id), None)
+        if active is not None and active.status == PlanStatus.APPROVED:
+            return active
+
+    # Sin activo (o con un activo aún en borrador): el último aprobado, como siempre.
     for cycle in cycles:  # list_for_client viene DESC por created_at
         if cycle.status == PlanStatus.APPROVED:
             return cycle
@@ -92,10 +106,14 @@ async def portal_pdf(request: Request,
         exports_dir=container.settings.exports_dir, client_name=client.name,
         daily_targets=targets.daily if targets else None,
     )
-    who = client.name.replace(" ", "_")
+    # El nombre con el que aterriza en el escritorio del CLIENTE — que es quien
+    # descarga por aquí. Se quedó con el nombre viejo (`plan_semanal_Ana_Perez.pdf`)
+    # cuando el otro export ya usaba éste. `_attachment` resuelve tildes y espacios.
     return Response(
         content=content, media_type="application/pdf",
-        headers={"Content-Disposition": _attachment(f"plan_semanal_{who}.pdf")},
+        headers={
+            "Content-Disposition": _attachment(f"Plan nutricional {client.name}.pdf")
+        },
     )
 
 

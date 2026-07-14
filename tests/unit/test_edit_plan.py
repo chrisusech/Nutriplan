@@ -183,3 +183,81 @@ async def test_validate_swap_rejects_wrong_slot(client, plan_bundle, foods) -> N
             new_food=oil,
             slot=MealSlot.BREAKFAST,
         )
+
+
+@pytest.mark.asyncio
+async def test_editing_a_day_does_not_swallow_its_free_meal(
+    plan_bundle, targets, nutrition_config
+) -> None:
+    """`_solved_to_day` reconstruye el día desde el solver, y la comida libre NO
+    está en el solver: no tiene alimentos que porcionar.
+
+    Sin preservarla explícitamente, tocar los gramos de cualquier otra comida se la
+    llevaba por delante — en silencio, y el plan perdía la única celda que el
+    cliente busca al abrirlo.
+    """
+    plan, foods, _ = plan_bundle
+    day = plan.days[0]
+
+    # La cena de ese día pasa a ser comida libre.
+    freed = [
+        m.model_copy(update={
+            "items": [],
+            "computed": MacroTargets(kcal=0, protein_g=0, carb_g=0, fat_g=0),
+            "is_free_meal": True,
+        })
+        if m.slot is MealSlot.DINNER else m
+        for m in day.meals
+    ]
+    day = day.model_copy(update={"meals": freed})
+    assert any(m.is_free_meal for m in day.meals)
+
+    # Se edita OTRA comida (el desayuno): se re-porciona el día entero.
+    resolved = await resolve_day(day, foods, targets, nutrition_config,
+                                 edited_slot=MealSlot.BREAKFAST)
+
+    free = [m for m in resolved.meals if m.is_free_meal]
+    assert len(free) == 1, "la comida libre sigue ahí"
+    assert free[0].slot is MealSlot.DINNER
+    assert free[0].items == []
+    # Y en su sitio del día, no al final.
+    assert [m.slot for m in resolved.meals] == sorted(
+        [m.slot for m in resolved.meals], key=lambda s: list(MealSlot).index(s)
+    )
+    # Las demás comidas siguen con sus alimentos.
+    assert all(m.items for m in resolved.meals if not m.is_free_meal)
+
+
+@pytest.mark.asyncio
+async def test_the_free_meal_has_nothing_to_swap_or_remove(
+    plan_bundle, targets, nutrition_config, foods
+) -> None:
+    """En la pantalla esa celda no ofrece controles, pero el endpoint es público."""
+    plan, food_map, _ = plan_bundle
+    day = plan.days[0]
+    freed = [
+        m.model_copy(update={
+            "items": [],
+            "computed": MacroTargets(kcal=0, protein_g=0, carb_g=0, fat_g=0),
+            "is_free_meal": True,
+        })
+        if m.slot is MealSlot.DINNER else m
+        for m in day.meals
+    ]
+    cycle = plan.model_copy(update={
+        "days": [day.model_copy(update={"meals": freed}), *plan.days[1:]]
+    })
+    arroz = foods["arroz blanco cocido"]
+
+    with pytest.raises(GenerationError, match="comida libre"):
+        await swap_food_in_slot(
+            cycle=cycle, phase=cycle.days[0].phase, day_index=0, slot=MealSlot.DINNER,
+            old_food_id=arroz.id, new_food=arroz, foods=food_map,
+            targets=targets, config=nutrition_config,
+        )
+
+    with pytest.raises(GenerationError, match="comida libre"):
+        await remove_food_from_slot(
+            cycle=cycle, phase=cycle.days[0].phase, day_index=0, slot=MealSlot.DINNER,
+            food_id=arroz.id, foods=food_map, targets=targets, config=nutrition_config,
+        )

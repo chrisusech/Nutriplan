@@ -20,18 +20,34 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from nutriplan.domain.errors import LLMError
-from nutriplan.domain.generation_rules import slot_availability
+from nutriplan.domain.generation_rules import (
+    CARB_GROUP,
+    PROTEIN_GROUP,
+    slot_availability,
+)
 from nutriplan.domain.meal_template import (
     Dish,
     MealCatalog,
     expand,
     pool_health,
 )
-from nutriplan.domain.models import FoodCategory, FoodItem, MacroTargets, MealSlot
+from nutriplan.domain.models import (
+    DEFAULT_SLOT_WEIGHT,
+    FoodCategory,
+    FoodItem,
+    MacroTargets,
+    MealSlot,
+    UnitGranularity,
+)
+
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import fits_protein, usable_in_slot
 
 T = TypeVar("T", bound=BaseModel)
+
+# El suelo de porción de un acompañante que no declara el suyo. Coincide con
+# `portioning.min_portion_g` de la config: por debajo, el solver no baja.
+MIN_CO_PORTION_G = 20.0
 
 # Peso de cada comida en la PROTEÍNA del día. Solo se usa si no hay config.
 _FALLBACK_PROTEIN_SHARE = {
@@ -65,6 +81,49 @@ W_FOOD_WEEK = 40.0   # repetir el mismo alimento en la semana, CRUZANDO SLOTS
 W_ANCHOR_DAY = 80.0  # el ancla proteica del día, repetida en otro slot
 W_RECENCY = 25.0     # comer hoy lo de ayer o anteayer
 
+# La afinidad por comida (`FoodItem.weight_in`) son DOS ideas distintas, y cobrarlas
+# igual fue el primer error de calibración:
+#
+# W_PREFERRED — "es su sitio". Entre el arroz y la papa en un almuerzo no hay drama:
+#   una caricia basta para ordenarlos, y la variedad puede pasarle por encima.
+#
+# W_OFF_MEAL — "no es su comida": el pan y la arepa en una cena. Esto NO es una
+#   preferencia, es un error de cocina, y tiene que ganarle a la variedad. Con la
+#   lista corta de un cliente real (tres carbos para catorce comidas principales)
+#   repetir es inevitable, y repetir arroz cuatro veces es lo que haría cualquier
+#   nutricionista antes que mandar pan a la cena. Por eso 2.500 y no 30: el coste de
+#   repetir un alimento es 40·n² (40, 160, 360... 1.960 a la séptima), así que el
+#   motor agota los carbos buenos —hasta el techo de variedad— antes de tocar el pan.
+#   Se queda por debajo de W_OVER_CAP a propósito: cuando repetir más ROMPERÍA la
+#   regla de variedad, el pan vuelve a ser la salida buena.
+#
+# El que no declara peso (el catálogo entero, hasta ahora) paga 0. Un plato sin datos
+# de afinidad cuesta lo mismo lleve dos alimentos o tres.
+W_PREFERRED = 30.0
+W_OFF_MEAL = 2_500.0
+
+# Servir un plato sin su componente opcional (el almuerzo sin aguacate). Flojo a
+# propósito: la versión completa es la buena y gana por defecto, pero cuando la
+# alternativa es repetir un alimento el mismo día (W_SAME_DAY, 10.000) el motor
+# prefiere quitar la grasa a poner el mismo aguacate dos veces —que era lo que
+# reventaba el presupuesto de grasa del día—.
+W_DROPPED = 60.0
+
+# Pasarse del presupuesto de GRASA del día. Por gramo, y caro: un día que se pasa de
+# grasa no se puede arreglar porcionando —los ítems de grasa ya están en su mínimo—,
+# así que el reparador recorta la proteína para bajar las kcal y la comida se queda
+# sin ella. Es una restricción, no una preferencia: 400 por gramo deja que un solo
+# gramo de más pese más que cualquier consideración de variedad, pero se queda por
+# debajo de W_SAME_DAY para no forzar un alimento repetido en el mismo día.
+W_FAT_OVER = 400.0
+
+
+def _affinity_cost(food: FoodItem, slot: MealSlot) -> float:
+    weight = food.weight_in(slot)
+    if weight < DEFAULT_SLOT_WEIGHT:
+        return W_OFF_MEAL * (DEFAULT_SLOT_WEIGHT - weight)
+    return -W_PREFERRED * (weight - DEFAULT_SLOT_WEIGHT)
+
 # Las grasas son condimento: que el aceite de oliva salga todos los almuerzos no
 # es falta de variedad. Lo que define la comida son la proteína, el carbo y la fruta.
 VARIETY_CATEGORIES = frozenset(
@@ -96,11 +155,75 @@ class TemplateSelector:
         # Las comidas del cliente: las que su reparto declara, en el orden del día.
         self.slots = [s for s in SLOT_ORDER if s in share]
         targets = {slot: daily.protein_g * share[slot] for slot in self.slots}
+        # El objetivo de carbohidrato manda el gramaje del carbo del plato, y ese
+        # gramaje arrastra proteína (300 g de arroz son 8 g). Hace falta para saber
+        # si un ancla de unidad entera aterriza (ver `dish_admissible`).
+        carb_targets = (
+            {s: daily.carb_g * sh.carb_g for s, sh in config.meal_distribution.items()}
+            if config
+            else {}
+        )
+        protein_tolerance = config.tolerances.protein_g if config else 0.10
 
         def admissible(food: FoodItem, slot: MealSlot) -> bool:
             return fits_protein(food, targets.get(slot, 0.0))
 
-        self.pools = expand(catalog, allowed, admissible=admissible)
+        def dish_admissible(dish: Dish) -> bool:
+            """¿Puede el ancla de este plato cuadrar la proteína del slot AQUÍ?
+
+            Un alimento que va por unidades no se afina: la lata de atún son 25.5 g
+            de proteína, o 51, o 76.5 — no hay puntos intermedios. Mirada SOLA, la
+            lata "cabe" en un almuerzo de 42 g (dos latas son 51, dentro de
+            tolerancia). Pero un plato no es su ancla: el arroz que lo acompaña pesa
+            lo que haga falta para cubrir el carbohidrato del slot —unos 300 g— y eso
+            son otros 5-7 g de proteína. El total se va a 57.6 g contra un objetivo de
+            46.7, el día no cuadra, y el motor emitía ese plato igualmente: la
+            generación moría cuatro intentos después sin decir de dónde venía el
+            problema.
+
+            Lo que el ancla tiene que cubrir es el objetivo MENOS lo que aportan sus
+            acompañantes. El carbohidrato se estima por su propio objetivo (que es lo
+            que va a decidir su gramaje); del resto basta su porción mínima.
+            """
+            anchor = dish.anchor
+            if anchor.unit_granularity is UnitGranularity.GRAMS:
+                return True  # se porciona fino: siempre aterriza donde haga falta
+            target = targets.get(dish.slot, 0.0)
+            unit_protein = anchor.protein_100g * (anchor.default_unit_g or 0.0) / 100.0
+            if target <= 0 or unit_protein <= 0:
+                return True  # su papel en el plato no es la proteína
+
+            carb_target = carb_targets.get(dish.slot, 0.0)
+            co_protein = 0.0
+            for food in dish.foods:
+                if food.id == anchor.id:
+                    continue
+                if food.category in CARB_GROUP and food.carb_100g > 0 and carb_target > 0:
+                    # El carbo pesa lo que su objetivo mande, no su mínimo.
+                    grams = carb_target / (food.carb_100g / 100.0)
+                else:
+                    grams = food.portion_min_g or MIN_CO_PORTION_G
+                co_protein += food.protein_100g * grams / 100.0
+
+            # El mejor número ENTERO (o medio) de unidades del ancla, y con él, lo
+            # máximo que este plato puede acercarse al objetivo del slot.
+            step = 1.0 if anchor.unit_granularity is UnitGranularity.WHOLE else 0.5
+            count = max(
+                round((target - co_protein) / unit_protein / step) * step, step
+            )
+            best_total = count * unit_protein + co_protein
+
+            # Se juzga con la tolerancia RELATIVA del validador y sin su suelo de
+            # ruido: aquí no estamos midiendo si un plan cuadra, sino decidiendo si
+            # emitir un plato que quizá no pueda cuadrar nunca. El suelo de 10 g es
+            # un umbral de RUIDO para comidas pequeñas; usarlo aquí ensancha a ±10 g
+            # el margen de un almuerzo de 42 g y deja pasar justo lo que hay que
+            # frenar — la lata de atún, que solo sabe dar 25.5 g o 51.
+            return abs(best_total - target) <= target * protein_tolerance
+
+        self.pools = expand(
+            catalog, allowed, admissible=admissible, dish_admissible=dish_admissible
+        )
         empty = [s.value for s in self.slots if not self.pools[s]]
         if empty:
             raise InsufficientDishes(
@@ -128,6 +251,22 @@ class TemplateSelector:
             allowed, usable_in_slot(daily, config) if config else None
         )
 
+        # El PRESUPUESTO DE GRASA del día, y cuánta arrastra cada plato sin remedio.
+        #
+        # El motor elegía por variedad y por afinidad, y no tenía ni idea de que la
+        # grasa del día es finita. Así se armaban días imposibles: una carne grasa al
+        # almuerzo con aguacate, y una crema de frutos secos al desayuno, ya se comen
+        # los 50 g de grasa de un día en déficit — y entonces el reparador recorta la
+        # PROTEÍNA para bajar las kcal, y la comida se queda sin ella. El fallo salía
+        # como "al almuerzo le faltan 11 g de proteína", que no es donde está el
+        # problema, y solo después de agotar los cuatro intentos.
+        self._fat_budget = daily.fat_g
+        self._dish_fat = {
+            id(dish): self._floor_fat(dish, targets, carb_targets)
+            for pool in self.pools.values()
+            for dish in pool
+        }
+
     async def extract(self, *, system: str, text: str, schema: type[T], model: str) -> T:
         raise LLMError(
             "La ingesta de documentos Word necesita el LLM real: configura "
@@ -136,6 +275,40 @@ class TemplateSelector:
 
     def pop_usage(self) -> dict[str, int]:
         return {"input_tokens": 0, "output_tokens": 0, "calls": self.calls}
+
+    @staticmethod
+    def _floor_fat(
+        dish: Dish,
+        protein_targets: dict[MealSlot, float],
+        carb_targets: dict[MealSlot, float],
+    ) -> float:
+        """La grasa que este plato mete en el día SÍ O SÍ.
+
+        No es la grasa que tendrá al final —eso lo decide el porcionador— sino la que
+        arrastra por debajo: la carne pesa lo que su proteína mande, el arroz lo que
+        mande su carbohidrato, y esa grasa entra en el día quiera o no.
+
+        El ítem de grasa cuenta por su porción MÍNIMA, que es su suelo de verdad: el
+        solver lo usa para cerrar el presupuesto y puede bajarlo, pero no a cero.
+        Medio aguacate son 7 g de grasa, y tres platos con aguacate ya son 22 de los
+        50 que tiene un día en déficit.
+        """
+        fat = 0.0
+        for food in dish.foods:
+            if food.category is FoodCategory.FAT:
+                grams = food.portion_min_g or MIN_CO_PORTION_G
+                fat += food.fat_100g * grams / 100.0
+                continue
+            if food.category in PROTEIN_GROUP and food.protein_100g > 0:
+                target = protein_targets.get(dish.slot, 0.0)
+                grams = target / (food.protein_100g / 100.0) if target else 0.0
+            elif food.category in CARB_GROUP and food.carb_100g > 0:
+                target = carb_targets.get(dish.slot, 0.0)
+                grams = target / (food.carb_100g / 100.0) if target else 0.0
+            else:
+                grams = food.portion_min_g or MIN_CO_PORTION_G
+            fat += food.fat_100g * grams / 100.0
+        return fat
 
     def _cap_for(self, slot: MealSlot, category: FoodCategory, ndays: int) -> int:
         """El techo que `check_variety` va a aplicar a este alimento en este slot.
@@ -157,19 +330,32 @@ class TemplateSelector:
         for day in range(ndays):
             today_foods: set[str] = set()
             today_anchors: set[str] = set()
+            today_fat = 0.0  # la grasa que los platos de hoy ya arrastran
             chosen: dict[MealSlot, Dish] = {}
 
             for slot in self.slots:
                 pool = self.pools[slot]
 
                 def cost(dish: Dish, *, _today=today_foods, _anchors=today_anchors,
-                         _day=day, _slot=slot) -> float:
+                         _day=day, _slot=slot, _fat=lambda: today_fat) -> float:
                     ids = {str(fid) for fid in dish.food_ids}
                     total = W_SAME_DAY * len(ids & _today)
+                    total += W_DROPPED * dish.dropped
+                    # Lo que este plato haría al presupuesto de grasa del día. Solo
+                    # se cobra lo que se PASA: mientras quepa, la grasa no opina.
+                    over_fat = (
+                        _fat() + self._dish_fat.get(id(dish), 0.0) - self._fat_budget
+                    )
+                    if over_fat > 0:
+                        total += W_FAT_OVER * over_fat
                     total += W_TEMPLATE * used_template[dish.template_id] ** 2
                     if str(dish.anchor.id) in _anchors:
                         total += W_ANCHOR_DAY
                     for food in dish.foods:
+                        # La afinidad se cobra a TODOS los alimentos, no sólo a los
+                        # que cuentan para variedad: si alguien declara que un
+                        # aceite es de cocina y no de desayuno, hay que hacerle caso.
+                        total += _affinity_cost(food, _slot)
                         if food.category not in VARIETY_CATEGORIES:
                             continue
                         fid = str(food.id)
@@ -196,6 +382,7 @@ class TemplateSelector:
                 )[1]
 
                 chosen[slot] = best
+                today_fat += self._dish_fat.get(id(best), 0.0)
                 used_template[best.template_id] += 1
                 today_anchors.add(str(best.anchor.id))
                 for food in best.foods:

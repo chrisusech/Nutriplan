@@ -86,6 +86,22 @@
 
   <div class="meals">
     {% for ml in ctx.dv.meals %}
+    {# La comida libre no tiene alimentos, ni gramos, ni macros: no hay nada que
+       editar ni que pesar. Se pinta como lo que es y se acaba la fila. #}
+    {% if ml.is_free_meal %}
+    <div class="meal-row free-meal-row">
+      <div class="meal-ico"><span class="icon" style="font-size:20px">celebration</span></div>
+      <div style="flex:1;min-width:0">
+        <div class="head">
+          <div><span class="nm">{{ ml.name }}</span> <span class="tm">· {{ ml.time }}</span></div>
+          <div class="meal-stats"><span class="kc">Comida libre</span></div>
+        </div>
+        <div class="meal-chips">
+          <span class="meal-chip extra">Come lo que quieras — no se cuenta</span>
+        </div>
+      </div>
+    </div>
+    {% else %}
     <div class="meal-row">
       <div class="meal-ico"><span class="icon" style="font-size:20px">{{ ml.icon }}</span></div>
       <div style="flex:1;min-width:0">
@@ -165,6 +181,7 @@
         {% endif %}
       </div>
     </div>
+    {% endif %}
     {% endfor %}
   </div>
 

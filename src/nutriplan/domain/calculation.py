@@ -58,6 +58,38 @@ def bmr_mifflin_st_jeor(sex: Sex, weight_kg: float, height_cm: float, age_years:
     return base + 5.0 if sex == Sex.MALE else base - 161.0
 
 
+def kcal_floor_for(client: Client, config: NutritionConfig) -> float:
+    """El suelo energético del cliente: ni bajo su basal, ni bajo el mínimo de la guía."""
+    age = resolve_age_years(client)
+    bmr = bmr_mifflin_st_jeor(client.sex, client.weight_kg, client.height_cm, age)
+    return max(bmr, config.kcal_floor[client.sex])
+
+
+def validate_daily(daily: MacroTargets, client: Client, config: NutritionConfig) -> None:
+    """Los mismos pisos que la fórmula, para un objetivo VENGA DE DONDE VENGA.
+
+    `compute_daily_macros` los comprueba sobre lo que calcula; esto los comprueba
+    sobre lo que se va a guardar. Sin ello, los ajustes manuales del entrenador —que
+    se aplican después— entraban sin pasar por ninguna guarda.
+    """
+    floor = kcal_floor_for(client, config)
+    if daily.kcal < floor:
+        raise CalculationError(
+            f"{daily.kcal:.0f} kcal está bajo el piso de {floor:.0f} (metabolismo basal y "
+            f"mínimo de la guía para {client.sex.value}). Ese déficit no es sostenible: "
+            f"sube las kcal o baja menos los macros."
+        )
+    carb_floor = config.carb_floor_g_per_kg * client.weight_kg
+    if daily.carb_g < carb_floor:
+        raise CalculationError(
+            f"Los carbohidratos quedan en {daily.carb_g:.0f} g, bajo el piso de "
+            f"{carb_floor:.0f} g ({config.carb_floor_g_per_kg} g/kg). Baja la proteína o la "
+            f"grasa, o sube las kcal."
+        )
+    if daily.protein_g <= 0 or daily.fat_g <= 0:
+        raise CalculationError("La proteína y la grasa tienen que ser mayores que cero.")
+
+
 def compute_daily_macros(
     client: Client, config: NutritionConfig, formula: MacroFormula | None = None
 ) -> MacroTargets:
@@ -127,11 +159,31 @@ def compute_daily_macros(
     )
 
 
-def apply_overrides(daily: MacroTargets, overrides: dict[str, float]) -> MacroTargets:
-    """Aplica overrides manuales del entrenador campo a campo.
+def energy_kcal(protein_g: float, carb_g: float, fat_g: float) -> float:
+    """Las kcal de unos macros. La identidad que todo plato real cumple."""
+    return round(
+        protein_g * KCAL_PER_G_PROTEIN
+        + carb_g * KCAL_PER_G_CARB
+        + fat_g * KCAL_PER_G_FAT,
+        1,
+    )
 
-    Si se fijan los tres macros pero no las kcal, las kcal se recomputan para
-    mantener el invariante energético.
+
+def apply_overrides(daily: MacroTargets, overrides: dict[str, float]) -> MacroTargets:
+    """Aplica los ajustes manuales del entrenador MANTENIENDO el invariante energético.
+
+    Las kcal no son un cuarto campo suelto: son el RESULTADO de los macros
+    (4·P + 4·C + 9·G). Antes se recomputaban solo si las kcal no venían en los
+    ajustes, y ahí murió un plan: la pantalla mandaba los cuatro campos, las kcal
+    entraban como ajuste sin que nadie las hubiera tocado, y entonces se congelaban
+    mientras los macros cambiaban. El objetivo quedaba con unas kcal que no eran las
+    de sus propios macros, y como `validate_day` mide las kcal Y los tres macros por
+    separado, cuadrar los cuatro a la vez era imposible: el motor agotaba los
+    reintentos y el cliente se quedaba sin plan.
+
+    Las dos direcciones, sin excepciones:
+      · se toca un macro  → las kcal se recalculan (son su consecuencia);
+      · se tocan las kcal → el carbohidrato cierra, igual que en la fórmula.
     """
     unknown = set(overrides) - set(OVERRIDABLE_FIELDS)
     if unknown:
@@ -140,12 +192,18 @@ def apply_overrides(daily: MacroTargets, overrides: dict[str, float]) -> MacroTa
     values = daily.model_dump()
     values.update({k: float(v) for k, v in overrides.items()})
 
-    macros_overridden = {"protein_g", "carb_g", "fat_g"} & set(overrides)
-    if macros_overridden and "kcal" not in overrides:
-        values["kcal"] = round(
-            values["protein_g"] * KCAL_PER_G_PROTEIN
-            + values["carb_g"] * KCAL_PER_G_CARB
-            + values["fat_g"] * KCAL_PER_G_FAT,
+    if {"protein_g", "carb_g", "fat_g"} & set(overrides):
+        values["kcal"] = energy_kcal(
+            values["protein_g"], values["carb_g"], values["fat_g"]
+        )
+    elif "kcal" in overrides:
+        values["carb_g"] = round(
+            (
+                values["kcal"]
+                - values["protein_g"] * KCAL_PER_G_PROTEIN
+                - values["fat_g"] * KCAL_PER_G_FAT
+            )
+            / KCAL_PER_G_CARB,
             1,
         )
     return MacroTargets(**values)
@@ -189,6 +247,11 @@ def compute_targets(
     daily = compute_daily_macros(client, config, formula)
     if overrides:
         daily = apply_overrides(daily, overrides)
+        # Los ajustes manuales se aplican DESPUÉS de las guardas de
+        # `compute_daily_macros`, así que hasta ahora no los validaba nadie: por los
+        # cuadritos de la pantalla se podía persistir un carbo negativo o un día
+        # bajo el metabolismo basal.
+        validate_daily(daily, client, config)
     per_meal = split_per_meal(daily, config.meal_distribution)
 
     return NutritionTargets(
@@ -200,5 +263,9 @@ def compute_targets(
         config_version=config.version,
         overrides=overrides or {},
         formula=formula,
+        # El peso con el que se calcularon. `Client.weight_kg` cambia el mes que
+        # viene; estos macros no, y sin el peso de entonces no hay forma de saber si
+        # el déficit funcionó.
+        weight_kg=client.weight_kg,
         computed_at=now or datetime.now(UTC),
     )

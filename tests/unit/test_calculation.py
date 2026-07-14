@@ -9,6 +9,7 @@ from nutriplan.domain.calculation import (
     apply_overrides,
     bmr_mifflin_st_jeor,
     compute_targets,
+    energy_kcal,
 )
 from nutriplan.domain.errors import CalculationError
 from nutriplan.domain.models import (
@@ -162,19 +163,55 @@ def test_missing_age_raises(nutrition_config) -> None:
 
 def test_overrides_replace_and_are_recorded(nutrition_config) -> None:
     targets = compute_targets(
-        make_client(), nutrition_config, overrides={"protein_g": 130.0, "kcal": 1600.0}
+        make_client(), nutrition_config, overrides={"protein_g": 130.0}
     )
     assert targets.daily.protein_g == 130.0
-    assert targets.daily.kcal == 1600.0
-    assert targets.overrides == {"protein_g": 130.0, "kcal": 1600.0}
+    assert targets.overrides == {"protein_g": 130.0}
     # el reparto por comida se recalcula sobre los macros finales
     assert sum(m.protein_g for m in targets.per_meal.values()) == pytest.approx(130.0, abs=1.0)
 
 
-def test_overrides_all_macros_recompute_kcal() -> None:
+def test_the_kcal_are_the_result_of_the_macros_never_a_field_apart() -> None:
+    """Tocar un macro mueve las kcal. Aunque las kcal viajen en el mismo ajuste.
+
+    Aquí murió un plan: la pantalla mandaba los cuatro campos, las kcal entraban como
+    ajuste sin que nadie las tocara, y se congelaban mientras los macros cambiaban. El
+    objetivo dejaba de cumplir kcal = 4·P + 4·C + 9·G, y como `validate_day` mide las kcal
+    y los tres macros por separado, cuadrarlo era imposible: el cliente se quedaba sin plan.
+    """
     daily = MacroTargets(kcal=2000, protein_g=100, carb_g=200, fat_g=60)
+
     result = apply_overrides(daily, {"protein_g": 120.0, "carb_g": 180.0, "fat_g": 50.0})
     assert result.kcal == pytest.approx(120 * 4 + 180 * 4 + 50 * 9, abs=0.1)
+
+    # Y con las kcal viejas viajando de acompañantes: mandan los macros.
+    con_kcal = apply_overrides(daily, {"protein_g": 120.0, "kcal": 2000.0})
+    assert con_kcal.kcal == pytest.approx(120 * 4 + 200 * 4 + 60 * 9, abs=0.1)
+    assert con_kcal.kcal == energy_kcal(
+        con_kcal.protein_g, con_kcal.carb_g, con_kcal.fat_g
+    )
+
+
+def test_editing_only_the_kcal_closes_with_the_carb() -> None:
+    """Es la misma regla que la fórmula: proteína y grasa las manda el g/kg."""
+    daily = MacroTargets(kcal=1740, protein_g=100, carb_g=200, fat_g=60)  # 400+800+540
+    result = apply_overrides(daily, {"kcal": 1940.0})
+    assert result.protein_g == 100  # intacta
+    assert result.fat_g == 60  # intacta
+    assert result.carb_g == pytest.approx(250.0, abs=0.1)  # +200 kcal = +50 g de carbo
+    assert energy_kcal(result.protein_g, result.carb_g, result.fat_g) == pytest.approx(
+        1940.0, abs=0.5
+    )
+
+
+def test_a_manual_edit_below_the_floor_is_refused(nutrition_config) -> None:
+    """Los ajustes manuales pasan por los mismos pisos que la fórmula.
+
+    Antes no los miraba nadie: se aplicaban DESPUÉS de las guardas, así que por los
+    cuadritos de la pantalla se podía persistir un carbo negativo.
+    """
+    with pytest.raises(CalculationError, match="bajo el piso"):
+        compute_targets(make_client(), nutrition_config, overrides={"carb_g": 5.0})
 
 
 def test_unknown_override_rejected() -> None:

@@ -111,6 +111,10 @@ class Dish:
     slot: MealSlot
     foods: tuple[FoodItem, ...]
     free_salad: bool = False
+    # Componentes opcionales que este plato NO lleva (la cena sin aguacate). El
+    # selector lo penaliza flojito: la versión completa es la buena salvo que
+    # servirla implique repetir un alimento del día.
+    dropped: int = 0
 
     @property
     def food_ids(self) -> tuple[UUID, ...]:
@@ -157,7 +161,14 @@ def candidates_for(
     allowed: Sequence[FoodItem],
     slot: MealSlot,
 ) -> list[FoodItem]:
-    """Los alimentos permitidos que satisfacen un componente en un slot."""
+    """Los alimentos permitidos que satisfacen un componente en un slot.
+
+    Ordenados por AFINIDAD primero (`FoodItem.weight_in`), y el nombre solo
+    desempata. Importa porque `expand` trunca esta lista a `per_component`: con un
+    orden alfabético, "arepa de maíz" entraba en el almuerzo por la A y echaba del
+    corte a un carbo que sí es de almuerzo. Si solo caben seis, que sean los seis
+    que mejor encajan en esa comida — no los seis primeros del diccionario.
+    """
     selector = component.selector
     if selector.startswith("#"):
         name = selector[1:]
@@ -167,7 +178,8 @@ def candidates_for(
         found = [f for f in allowed if food_class.matches(f, slot)]
     valid = ROLE_CATEGORIES[component.role]
     return sorted(
-        (f for f in found if f.category in valid), key=lambda f: (f.name_es, str(f.id))
+        (f for f in found if f.category in valid),
+        key=lambda f: (-f.weight_in(slot), f.name_es, str(f.id)),
     )
 
 
@@ -183,13 +195,25 @@ def expand(
     allowed: Sequence[FoodItem],
     *,
     admissible: object = None,
+    dish_admissible: object = None,
     per_component: int = 6,
 ) -> dict[MealSlot, list[Dish]]:
     """Todas las versiones concretas de cada plato que el cliente puede comer.
 
-    `admissible(food, slot) -> bool` es un filtro opcional sobre el ancla proteica
-    (lo usa el motor para descartar lo que no cuadra el objetivo del slot: media
-    lata de atún en un snack).
+    `admissible(food, slot) -> bool` filtra el ancla proteica por sí sola (media
+    lata de atún no cuadra un snack).
+
+    `dish_admissible(dish) -> bool` la filtra DENTRO DE SU PLATO, que es donde de
+    verdad se juega. Un alimento que va por unidades no se puede afinar, así que la
+    proteína que aportan sus acompañantes decide si aterriza o no: la lata de atún
+    (25.5 g por lata) "cabe" en un almuerzo de 46.7 g mirándola sola —dos latas son
+    51, dentro de tolerancia—, pero con el arroz y el aguacate del plato el total
+    sube a 57.6 y el día entero deja de cuadrar. Mirando el ancla en aislamiento,
+    ese plato se emitía igual y la generación fallaba cuatro intentos después, sin
+    decir por qué.
+
+    Si el filtro deja un slot sin platos, se ignora: más vale un plan difícil de
+    cuadrar que ningún plan.
 
     El truncado (`per_component`) se aplica POR COMPONENTE, no sobre el producto
     ya generado: un plato de 3 componentes con clases de 20 alimentos son 8.000
@@ -197,6 +221,7 @@ def expand(
     saliera siempre y "tahini" nunca.
     """
     pools: dict[MealSlot, list[Dish]] = {slot: [] for slot in MealSlot}
+    rejected: dict[MealSlot, list[Dish]] = {slot: [] for slot in MealSlot}
 
     for template in catalog.templates:
         for slot in template.slots:
@@ -213,7 +238,16 @@ def expand(
                         continue
                     satisfiable = False
                     break
-                choices.append(list(found[:per_component]))
+                options: list[FoodItem | None] = list(found[:per_component])
+                # "Opcional" significaba "si no hay nada que lo cubra, se sirve sin
+                # él" — o sea, nunca: en cuanto había UN candidato, el componente
+                # era obligatorio. El plato quedaba sin la versión que la plantilla
+                # promete ("+ grasa opcional"), y con ella la única salida de un
+                # cliente cuya única grasa de cena es el aguacate: se lo comía en el
+                # almuerzo Y en la cena, y el día se pasaba de grasa sin remedio.
+                if component.optional:
+                    options.append(None)
+                choices.append(options)
             if not satisfiable:
                 continue
 
@@ -225,17 +259,25 @@ def expand(
                 # (aguacate de grasa Y de fruta: el solver le pediría dos gramajes).
                 if len({f.id for f in foods}) != len(foods):
                     continue
-                pools[slot].append(
-                    Dish(
-                        template_id=template.id,
-                        name=template.name,
-                        slot=slot,
-                        foods=foods,
-                        free_salad=template.free_salad,
-                    )
+                dish = Dish(
+                    template_id=template.id,
+                    name=template.name,
+                    slot=slot,
+                    foods=foods,
+                    free_salad=template.free_salad,
+                    dropped=len(template.components) - len(foods),
                 )
+                if callable(dish_admissible) and not dish_admissible(dish):
+                    rejected[slot].append(dish)
+                    continue
+                pools[slot].append(dish)
 
     for slot in pools:
+        # Si de este slot no sobrevivió ningún plato, el filtro se rinde: el
+        # cliente come lo que tiene, y un plan que cuesta cuadrar es mejor que
+        # `InsufficientDishes`.
+        if not pools[slot] and rejected[slot]:
+            pools[slot] = rejected[slot]
         pools[slot].sort(key=lambda d: d.key)
     return pools
 

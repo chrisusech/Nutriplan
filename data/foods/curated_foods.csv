@@ -15,27 +15,27 @@ jamón de pavo,turkey ham slice,protein,106,14.8,2.2,3.8,0,,,30,whole,loncha,30,
 proteína en polvo whey,whey protein powder,protein,352,78.1,6.2,1.6,3.1,lacteo;batido,whey;proteína en polvo;batido de proteína,30,grams,,10,20,,desayuno;snack_am;snack_pm,,,USDA,173180
 tofu firme,tofu firm,protein,144,17.3,2.8,8.7,2.3,soya;vegano,,100,grams,,10,50,,almuerzo;cena,,,USDA,172475
 lentejas cocidas,lentils cooked,protein,116,9,20.1,0.4,7.9,vegano,lentejas,100,grams,,10,40,,almuerzo;cena,,,USDA,172421
-arroz blanco cocido,white rice cooked,carb,130,2.7,28.2,0.3,0.4,,arroz,120,grams,,10,40,,almuerzo;cena,,,USDA,168878
-arroz integral cocido,brown rice cooked,carb,123,2.7,25.6,1,1.6,,,120,grams,,10,40,,almuerzo;cena,,,USDA,169704
-avena en hojuelas,rolled oats dry,carb,379,13.2,67.7,6.5,10.1,,avena,40,grams,,10,20,,desayuno,,,USDA,173904
-granola,granola,carb,420,9.8,67.3,13,7.4,frutos_secos,,30,grams,,10,15,,desayuno;snack_am;snack_pm,,,USDA,2708461
-papa cocida,potato boiled,carb,86,1.7,20,0.1,1.8,,papa;papas,150,grams,,10,40,,almuerzo;cena,,,USDA,170440
-batata cocida,sweet potato baked,carb,90,2,20.7,0.1,3.3,,batata;camote,150,grams,,10,40,,almuerzo;cena,,,USDA,168483
-yuca cocida,cassava boiled,carb,191,1.4,39.6,3,1.9,,yuca,100,grams,,10,40,,almuerzo;cena,,,USDA,2709564
-plátano maduro cocido,plantain cooked,carb,122.8,1.2,31,0.9,2.1,,plátano;platano;plátano maduro,100,grams,,10,40,,almuerzo;cena,,,USDA,2710817
-pasta cocida,pasta cooked,carb,157,5.8,30.7,0.9,1.8,gluten,pasta,120,grams,,10,40,,almuerzo;cena,,,USDA,2708357
-cuscús cocido,couscous cooked,carb,112,3.8,23.2,0.2,1.4,gluten,,100,grams,,10,40,,almuerzo;cena,,,USDA,169700
-pan integral,whole wheat bread,carb,252,12.4,42.7,3.5,6,gluten,pan,30,half,rebanada,15,15,,desayuno;cena,,,USDA,172688
-pan de masa madre,sourdough bread,carb,272,10.8,51.9,2.4,2.2,gluten,,40,half,rebanada,20,20,,desayuno;cena,,,USDA,172675
-pan de arroz,rice bread,carb,248,4.3,45.8,5.2,4.3,,,40,half,rebanada,20,20,,desayuno;cena,,,USDA,2707794
-arepa de maíz,corn arepa,carb,219,4.7,46,1.8,2.8,,arepa,70,half,arepa,35,35,,desayuno;almuerzo;cena,,,USDA,
-tortilla de maíz,corn tortilla,carb,218,5.7,44.6,2.9,6.3,,tortilla,30,whole,tortilla,30,30,,desayuno;almuerzo;cena,,,USDA,2707823
-quinoa cocida,quinoa cooked,carb,120,4.4,21.3,1.9,2.8,vegano,quinoa;quinua,100,grams,,10,40,,almuerzo;cena,,,USDA,168917
-maíz dulce,sweet corn,carb,86,3.3,18.7,1.4,2,,,100,grams,,10,40,,almuerzo;cena,,,USDA,169998
+arroz blanco cocido,white rice cooked,carb,130,2.7,28.2,0.3,0.4,,arroz,120,grams,,10,40,,almuerzo:3;cena:3,,,USDA,168878
+arroz integral cocido,brown rice cooked,carb,123,2.7,25.6,1,1.6,,,120,grams,,10,40,,almuerzo:3;cena:3,,,USDA,169704
+avena en hojuelas,rolled oats dry,carb,379,13.2,67.7,6.5,10.1,,avena,40,grams,,10,20,,desayuno:3,,,USDA,173904
+granola,granola,carb,420,9.8,67.3,13,7.4,frutos_secos,,30,grams,,10,15,,desayuno:1;snack_am:2;snack_pm:2,,,USDA,2708461
+papa cocida,potato boiled,carb,86,1.7,20,0.1,1.8,,papa;papas,150,grams,,10,40,,almuerzo:3;cena:3,,,USDA,170440
+batata cocida,sweet potato baked,carb,90,2,20.7,0.1,3.3,,batata;camote,150,grams,,10,40,,almuerzo:3;cena:3,,,USDA,168483
+yuca cocida,cassava boiled,carb,191,1.4,39.6,3,1.9,,yuca,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,2709564
+plátano maduro cocido,plantain cooked,carb,122.8,1.2,31,0.9,2.1,,plátano;platano;plátano maduro,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,2710817
+pasta cocida,pasta cooked,carb,157,5.8,30.7,0.9,1.8,gluten,pasta,120,grams,,10,40,,almuerzo:3;cena:3,,,USDA,2708357
+cuscús cocido,couscous cooked,carb,112,3.8,23.2,0.2,1.4,gluten,,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,169700
+pan integral,whole wheat bread,carb,252,12.4,42.7,3.5,6,gluten,pan,30,half,rebanada,15,15,,desayuno:3;almuerzo:1;cena:1,,,USDA,172688
+pan de masa madre,sourdough bread,carb,272,10.8,51.9,2.4,2.2,gluten,,40,half,rebanada,20,20,,desayuno:3;almuerzo:1;cena:1,,,USDA,172675
+pan de arroz,rice bread,carb,248,4.3,45.8,5.2,4.3,,,40,half,rebanada,20,20,,desayuno:3;almuerzo:1;cena:1,,,USDA,2707794
+arepa de maíz,corn arepa,carb,219,4.7,46,1.8,2.8,,arepa,70,half,arepa,35,35,,desayuno:3;almuerzo:1;cena:1,,,USDA,
+tortilla de maíz,corn tortilla,carb,218,5.7,44.6,2.9,6.3,,tortilla,30,whole,tortilla,30,30,,desayuno:3;almuerzo:1;cena:1,,,USDA,2707823
+quinoa cocida,quinoa cooked,carb,120,4.4,21.3,1.9,2.8,vegano,quinoa;quinua,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,168917
+maíz dulce,sweet corn,carb,86,3.3,18.7,1.4,2,,,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,169998
 maíz pira,air-popped popcorn,carb,387,12.9,77.8,4.5,14.5,,palomitas;crispetas,25,grams,,5,10,,snack_pm,,,USDA,167959
-frijoles negros cocidos,black beans cooked,carb,132,8.9,23.7,0.5,8.7,vegano,frijoles;fríjoles;frijol,100,grams,,10,40,,almuerzo;cena,,,USDA,173735
-garbanzos cocidos,chickpeas cooked,carb,163,8.8,27.3,2.6,7.6,vegano,garbanzos,100,grams,,10,40,,almuerzo;cena,,,USDA,2707416
-miel,honey,carb,304,0.3,82.4,0,0.2,,,21,grams,,5,5,,desayuno,,,USDA,169640
+frijoles negros cocidos,black beans cooked,carb,132,8.9,23.7,0.5,8.7,vegano,frijoles;fríjoles;frijol,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,173735
+garbanzos cocidos,chickpeas cooked,carb,163,8.8,27.3,2.6,7.6,vegano,garbanzos,100,grams,,10,40,,almuerzo:3;cena:3,,,USDA,2707416
+miel,honey,carb,304,0.3,82.4,0,0.2,,,21,grams,,5,5,,desayuno:1,,,USDA,169640
 aguacate,avocado,fat,160,2,8.5,14.7,6.7,vegano,,50,grams,,25,50,,desayuno;almuerzo;cena,,,USDA,2709223
 aceite de oliva,olive oil,fat,884,0,0,100,0,vegano,aceite,10,grams,,5,10,,almuerzo;cena,,,USDA,171413
 aceite de coco,coconut oil,fat,892,0,0,99.1,0,vegano,,10,grams,,5,10,,almuerzo;cena,,,USDA,171412

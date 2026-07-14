@@ -27,6 +27,7 @@ templates.env.globals.update(
     ACTIVITY_LABELS=presenter.ACTIVITY_LABELS,
     SEX_LABELS=presenter.SEX_LABELS,
     DAY_SHORT=presenter.DAY_SHORT,
+    SLOT_META=presenter.SLOT_META,
     PHASE_LABELS=presenter.PHASE_LABELS,
 )
 

@@ -6,6 +6,7 @@ import pytest
 from tests.fixtures.plan_builder import catalog_by_name
 
 from nutriplan.domain import meal_affinity
+from nutriplan.domain.models import DEFAULT_SLOT_WEIGHT, MealSlot
 
 CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
 
@@ -45,8 +46,31 @@ def test_breakfast_vs_main_carbs(foods) -> None:
     assert meal_affinity.is_breakfast_carb(foods["avena en hojuelas"])
     assert meal_affinity.is_breakfast_carb(foods["arepa de maíz"])
     assert not meal_affinity.is_breakfast_carb(foods["arroz blanco cocido"])
-    # avena/pan NO van en almuerzo/cena; arroz/papa/arepa sí
+    # La avena no va en almuerzo ni cena. El pan y la arepa SÍ pueden: quien solo
+    # tiene arepa tiene que poder almorzar. Lo que decide es el peso, no el permiso.
     assert not meal_affinity.is_main_carb(foods["avena en hojuelas"])
-    assert not meal_affinity.is_main_carb(foods["pan integral"])
     assert meal_affinity.is_main_carb(foods["arroz blanco cocido"])
-    assert meal_affinity.is_main_carb(foods["arepa de maíz"])  # sirve en ambos
+    assert meal_affinity.is_main_carb(foods["arepa de maíz"])
+
+
+def test_the_weight_says_whose_meal_it_is(foods) -> None:
+    """La afinidad ordena: el arroz ES el almuerzo, la arepa solo cabe en él.
+
+    Antes esto era un sí/no y el motor tomaba arroz y arepa por equivalentes en un
+    almuerzo. De ahí salía la arepa a mediodía y el pan en la cena.
+    """
+    arroz, arepa, pan = (
+        foods["arroz blanco cocido"], foods["arepa de maíz"], foods["pan integral"]
+    )
+    for main in (MealSlot.LUNCH, MealSlot.DINNER):
+        assert arroz.weight_in(main) > arepa.weight_in(main)
+        assert arroz.weight_in(main) > pan.weight_in(main)
+    # Y al revés en el desayuno, que es de donde son.
+    assert arepa.weight_in(MealSlot.BREAKFAST) > arepa.weight_in(MealSlot.LUNCH)
+    assert pan.weight_in(MealSlot.BREAKFAST) > pan.weight_in(MealSlot.DINNER)
+    # El arroz no desayuna: no es que pese poco, es que no está.
+    assert arroz.weight_in(MealSlot.BREAKFAST) == 0
+
+    # Un alimento que no declara pesos vale lo de siempre — el catálogo entero se
+    # comportaba así antes de que esto existiera.
+    assert foods["lentejas cocidas"].weight_in(MealSlot.LUNCH) == DEFAULT_SLOT_WEIGHT

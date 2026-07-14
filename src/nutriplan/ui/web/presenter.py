@@ -10,7 +10,11 @@ from uuid import UUID
 
 from nutriplan.adapters.render.color import MACRO_COLORS
 from nutriplan.adapters.render.view import DAY_LABELS, natural_units, portion_text
-from nutriplan.domain.macro_split import macro_shares
+from nutriplan.domain.macro_split import (
+    daily_minus_free_meal,
+    free_meal_slot_of,
+    macro_shares,
+)
 from nutriplan.domain.meal_template import MealCatalog, expand, pool_health
 from nutriplan.domain.models import (
     CORE_MEAL_SLOTS,
@@ -286,9 +290,12 @@ def portion_edit_fields(
         unit_hint = "gramos"
     swap_options: list[dict[str, str]] = []
     if swap_pool:
+        # Primero lo que MEJOR encaja en esta comida: cambiar el arroz de un almuerzo
+        # debe ofrecer papa y quinoa antes que pan, no un alfabético donde la arepa
+        # sale la primera por la A.
         swap_options = [
             {"id": str(f.id), "name": f.name_es.capitalize()}
-            for f in sorted(swap_pool, key=lambda x: x.name_es)
+            for f in sorted(swap_pool, key=lambda x: (-x.weight_in(slot), x.name_es))
             if f.id != food.id
             and f.category == food.category
             and meal_affinity.allows(f, slot)
@@ -338,6 +345,7 @@ class MealView:
     chips: list[str]
     extras: list[str]
     portions: list[dict[str, Any]]  # para el modo edición: food_id, nombre, gramos
+    is_free_meal: bool = False  # sin alimentos, sin gramos, sin macros que contar
 
 
 @dataclass
@@ -371,6 +379,8 @@ def day_view(
                 )
             )
         extras = []
+        if meal.is_free_meal:
+            extras.append("Come lo que quieras")
         if meal.free_protein:
             extras.append("Proteína libre")
         if meal.free_salad:
@@ -380,10 +390,16 @@ def day_view(
         meals.append(
             MealView(slot=meal.slot, name=meta["name"], time=meta["time"], icon=meta["icon"],
                      kcal=fmt_kcal(meal.computed.kcal), macros=macro_str,
-                     chips=chips, extras=extras, portions=portions)
+                     chips=chips, extras=extras, portions=portions,
+                     is_free_meal=meal.is_free_meal)
         )
 
-    totals, daily = day.totals.model_dump(), targets.daily.model_dump()
+    # El día con comida libre se juzga contra SU objetivo: el del día menos lo que
+    # pesaba esa comida. Con el objetivo completo se pintaría en naranja ("no
+    # cuadra") un día que está exactamente como se diseñó.
+    day_daily = daily_minus_free_meal(targets.daily, config, free_meal_slot_of(day))
+
+    totals, daily = day.totals.model_dump(), day_daily.model_dump()
     bars = []
     for m in MACRO_META:
         actual, target = totals[m["key"]], daily[m["key"]]
@@ -392,14 +408,14 @@ def day_view(
         bars.append({**m, "val": val, "pct": round(pct, 1)})
 
     fits = not validate_day(
-        list(day.meals), targets.daily, config, shares=day_shares(day, foods, config)
+        list(day.meals), day_daily, config, shares=day_shares(day, foods, config)
     )
     # La fibra informa, no bloquea: el día puede cuadrar de macros y aun así
     # quedarse corto de fibra si al cliente no le gustan las fuentes que la traen.
-    short = fiber_shortfall(list(day.meals), targets.daily)
+    short = fiber_shortfall(list(day.meals), day_daily)
     note = (
         f"Fibra {fmt_g(round(day.totals.fiber_g))} g de "
-        f"{fmt_g(round(targets.daily.fiber_g))} g — faltan {fmt_g(short)} g. "
+        f"{fmt_g(round(day_daily.fiber_g))} g — faltan {fmt_g(short)} g. "
         f"Añade avena, pan integral, frutos secos o legumbres."
         if short
         else None
@@ -413,6 +429,42 @@ def latest_plan(cycles: list[PlanCycle]) -> PlanCycle | None:
     return cycles[0] if cycles else None
 
 
+def active_plan(client: Client, cycles: list[PlanCycle]) -> PlanCycle | None:
+    """EL plan del cliente: el definitivo, el que está siguiendo.
+
+    Antes era, implícitamente, "el más nuevo". Con eso no se puede volver a la v2
+    cuando la v3 no funcionó, ni mirar el mes pasado. Ahora lo dice el cliente
+    (`active_plan_id`), y el más nuevo es solo el fallback para los planes que
+    existían antes de que esto se pudiera elegir.
+    """
+    if client.active_plan_id is not None:
+        for cycle in cycles:
+            if cycle.id == client.active_plan_id:
+                return cycle
+    return latest_plan(cycles)
+
+
+def weight_history(
+    targets_by_plan: list[tuple[PlanCycle, NutritionTargets | None]],
+) -> list[dict[str, Any]]:
+    """El peso y las kcal de cada versión: el seguimiento del déficit, en una línea.
+
+    Los targets son append-only y ahora guardan CON QUÉ PESO se calcularon, así que
+    esto es leer lo que ya estaba pasando — y no se podía ver.
+    """
+    rows = []
+    for cycle, targets in targets_by_plan:
+        if targets is None or targets.weight_kg is None:
+            continue
+        rows.append({
+            "version": cycle.version,
+            "label": f"v{cycle.version} · {cycle.created_at.strftime('%d %b')}",
+            "weight": f"{targets.weight_kg:g}",
+            "kcal": fmt_kcal(targets.daily.kcal),
+        })
+    return rows
+
+
 def week_grid(
     cycle: PlanCycle,
     targets: NutritionTargets,
@@ -424,7 +476,9 @@ def week_grid(
     cells = []
     for day in days_in_phase(cycle, phase):
         shares = day_shares(day, foods, config) if foods else None
-        ok = not validate_day(list(day.meals), targets.daily, config, shares=shares)
+        # Contra el objetivo del día, que en el de la comida libre es menor.
+        day_daily = daily_minus_free_meal(targets.daily, config, free_meal_slot_of(day))
+        ok = not validate_day(list(day.meals), day_daily, config, shares=shares)
         cells.append({
             "n": day.day_index + 1,
             "cycle_id": str(cycle.id),
@@ -442,15 +496,28 @@ def adherence(
     cycle: PlanCycle,
     targets: NutritionTargets,
     phase: PlanPhase = PlanPhase.FIRST_15,
+    config: NutritionConfig | None = None,
 ) -> list[dict[str, Any]]:
-    """Cumplimiento promedio por macro (real/objetivo) sobre los días de la fase."""
+    """Cumplimiento promedio por macro sobre los días de la fase.
+
+    Cada día se mide contra SU objetivo, no contra el diario: el día de la comida
+    libre apunta más bajo a propósito, y compararlo con el objetivo completo lo
+    contaría como un incumplimiento del 26% cuando está exactamente como se diseñó.
+    """
     days = days_in_phase(cycle, phase)
-    daily = targets.daily.model_dump()
     rows = []
     for m in MACRO_META:
-        target = daily[m["key"]]
-        avg = sum(d.totals.model_dump()[m["key"]] for d in days) / max(len(days), 1)
-        pct = avg / target * 100 if target > 0 else 0
+        ratios = []
+        for day in days:
+            day_daily = (
+                daily_minus_free_meal(targets.daily, config, free_meal_slot_of(day))
+                if config
+                else targets.daily
+            )
+            target = day_daily.model_dump()[m["key"]]
+            if target > 0:
+                ratios.append(day.totals.model_dump()[m["key"]] / target)
+        pct = (sum(ratios) / len(ratios) * 100) if ratios else 0
         rows.append({**m, "pct": f"{pct:.0f}%", "w": f"{min(pct, 100):.0f}%"})
     return rows
 

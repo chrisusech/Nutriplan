@@ -222,23 +222,81 @@ def test_the_trainer_can_take_a_snack_out_and_the_plan_has_four_meals(offline) -
     assert "Cena" in page
 
 
-def test_macro_override_marks_targets_as_overridden(offline) -> None:
+def _macros(html: str) -> dict[str, float]:
+    """Los cuatro cuadritos de macros tal y como los ve el entrenador."""
+    out = {}
+    for key in ("kcal", "protein_g", "carb_g", "fat_g"):
+        match = re.search(rf'name="{key}"[^>]*value="([\d.]+)"', html)
+        assert match is not None, f"no se pinta el cuadrito de {key}"
+        out[key] = float(match.group(1))
+    return out
+
+
+def _energy(m: dict[str, float]) -> float:
+    return m["protein_g"] * 4 + m["carb_g"] * 4 + m["fat_g"] * 9
+
+
+# Los cuadritos se pintan en gramos redondos, así que la identidad energética solo se puede
+# comprobar con el margen de ese redondeo (medio gramo de cada macro son ~8 kcal). De sobra:
+# lo que se busca es que las kcal no se queden CONGELADAS, y eso son cientos de kcal.
+_ROUNDING_KCAL = 10.0
+
+
+def test_editing_a_macro_moves_the_kcal_and_the_target_stays_coherent(offline) -> None:
+    """Las kcal son el RESULTADO de los macros, edición tras edición.
+
+    La regresión: la pantalla manda los cuatro campos, así que en la SEGUNDA edición las
+    kcal —ya recalculadas en la primera— parecían un ajuste manual que nadie había hecho.
+    Se congelaban, el objetivo dejaba de cumplir kcal = 4·P + 4·C + 9·G, y como el motor
+    valida las kcal y los tres macros por separado, no había plan que lo cuadrara: el
+    entrenador se comía un "No se pudo generar el plan".
+    """
     client, _ = offline
     cid = _create_client(client)
 
     page = client.get("/generador", params={"cliente": cid}).text
     assert "Calculado, editable" in page
+    shown = _macros(page)
 
-    response = client.post(
-        f"/generador/{cid}/macros",
-        data={"kcal": 2000, "protein_g": 150, "carb_g": 200, "fat_g": 60},
-    )
+    # Primera edición: sube la proteína.
+    first = _macros(client.post(f"/generador/{cid}/macros",
+                                data={**shown, "protein_g": 150}).text)
+    assert first["protein_g"] == 150
+    assert first["kcal"] == pytest.approx(_energy(first), abs=_ROUNDING_KCAL)
+
+    # Segunda edición: baja la grasa. Aquí es donde se rompía.
+    second = _macros(client.post(f"/generador/{cid}/macros",
+                                 data={**first, "fat_g": 40}).text)
+    assert second["fat_g"] == 40
+    assert second["protein_g"] == 150  # lo de antes no se pierde
+    assert second["kcal"] == pytest.approx(_energy(second), abs=_ROUNDING_KCAL)
+    assert second["kcal"] < first["kcal"]  # menos grasa, menos kcal
+    assert "Ajustado a mano" in client.get("/generador", params={"cliente": cid}).text
+
+
+def test_editing_only_the_kcal_moves_the_carb(offline) -> None:
+    """Es la regla de la fórmula: proteína y grasa las manda el g/kg, el carbo cierra."""
+    client, _ = offline
+    cid = _create_client(client)
+    shown = _macros(client.get("/generador", params={"cliente": cid}).text)
+
+    after = _macros(client.post(f"/generador/{cid}/macros",
+                                data={**shown, "kcal": shown["kcal"] + 200}).text)
+    assert after["protein_g"] == shown["protein_g"]
+    assert after["fat_g"] == shown["fat_g"]
+    assert after["carb_g"] == pytest.approx(shown["carb_g"] + 50, abs=1.0)
+
+
+def test_an_impossible_macro_edit_explains_itself_instead_of_a_500(offline) -> None:
+    """Los ajustes manuales pasan por los mismos pisos que la fórmula, y si no cuadran
+    lo dicen en pantalla — un 500 lo único que hace es dejar la pantalla congelada."""
+    client, _ = offline
+    cid = _create_client(client)
+    shown = _macros(client.get("/generador", params={"cliente": cid}).text)
+
+    response = client.post(f"/generador/{cid}/macros", data={**shown, "carb_g": 5})
     assert response.status_code == 200
-    assert 'name="kcal" type="number" step="1" min="0"\n                     value="2000"' in (
-        response.text
-    )
-    # solo lo que difiere del cálculo es override, y la UI lo dice
-    assert "Ajustado a mano" in response.text
+    assert "bajo el piso" in response.text
 
 
 def test_formula_g_per_kg_moves_kcal_live(offline) -> None:
@@ -361,10 +419,11 @@ def test_draft_cannot_be_exported_until_approved(offline) -> None:
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content[:5] == b"%PDF-"
-    # "Ana Pérez" no cabe cruda en un header HTTP: ASCII + parámetro RFC 6266
+    # El nombre con el que aterriza en el escritorio del cliente. "Ana Pérez" no cabe
+    # cruda en un header HTTP: ASCII + parámetro RFC 6266.
     disposition = pdf.headers["content-disposition"]
-    assert 'filename="plan_15d_Ana_Perez.pdf"' in disposition
-    assert "filename*=UTF-8''plan_15d_Ana_P%C3%A9rez.pdf" in disposition
+    assert 'filename="Plan nutricional Ana Perez.pdf"' in disposition
+    assert "filename*=UTF-8''Plan%20nutricional%20Ana%20P%C3%A9rez.pdf" in disposition
 
     docx = client.get(f"/planes/{cycle}/export.docx")
     assert docx.status_code == 200
@@ -503,6 +562,56 @@ def test_recipe_upload_pending_then_admin_verifies_and_it_becomes_a_food(offline
     # ahora la receta figura verificada y aparece como alimento del entrenador
     assert "Verificada" in trainer.get("/recetas").text
     assert "Bowl de prueba" in trainer.get("/clientes/nuevo").text
+
+
+def test_a_restaurant_dish_is_registered_by_its_macros_with_no_ingredients(offline) -> None:
+    """El plato del que no sabes la receta, pero sí los macros exactos.
+
+    Antes esto no se podía registrar: `create_recipe` exigía al menos un
+    ingrediente, así que un cliente que come fuera no tenía forma de contarlo.
+    """
+    trainer, _ = offline
+
+    created = trainer.post("/recetas", data={
+        "modo": "macros",
+        "name": "Hamburguesa del restaurante",
+        "protein_g": "42", "carb_g": "55", "fat_g": "18",
+        "total_grams": "350",
+        "meal_slot": ["almuerzo", "cena"],
+    }, follow_redirects=False)
+    assert created.status_code == 303
+
+    page = trainer.get("/recetas").text
+    assert "Hamburguesa del restaurante" in page
+    # No son "0 ingredientes": son macros declarados.
+    assert "Macros declarados" in page
+    # Las kcal no se piden: 4·42 + 4·55 + 9·18 = 550.
+    assert "550 kcal" in page
+
+    admin = TestClient(trainer.app)
+    admin.post("/signup", data={
+        "name": "Admin", "business_name": "Plataforma",
+        "email": "admin@nutriplan.test", "password": "clave-admin-1",
+    }, follow_redirects=False)
+    queue = admin.get("/admin/recetas").text
+    rid = re.search(r"/admin/recetas/([0-9a-f-]{36})/verificar", queue).group(1)
+    admin.post(f"/admin/recetas/{rid}/verificar", follow_redirects=False)
+
+    # Verificada, se vuelve un alimento del entrenador y se puede poner en un plan.
+    assert "Verificada" in trainer.get("/recetas").text
+    assert "Hamburguesa del restaurante" in trainer.get("/clientes/nuevo").text
+
+
+def test_a_dish_with_neither_ingredients_nor_macros_says_so(offline) -> None:
+    """Y el error se ve. Antes un `pass` se lo tragaba y el plato desaparecía."""
+    trainer, _ = offline
+    resp = trainer.post("/recetas", data={
+        "modo": "macros", "name": "Aire", "total_grams": "100",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "macros" in trainer.get(resp.headers["location"]).text
+    assert "Aire" not in trainer.get("/recetas").text
 
 
 def test_client_portal_shows_plan_read_only_and_blocks_trainer_routes(offline) -> None:
@@ -694,3 +803,51 @@ def test_taking_a_snack_out_after_the_plan_exists_does_not_break_the_page(offlin
     response = client.post(f"/generador/{cid}/comidas", data={"slot": "snack_pm"})
     assert response.status_code == 200
     assert client.get("/generador", params={"cliente": cid}).status_code == 200
+
+
+def test_a_second_month_is_a_new_version_and_the_first_one_stays(offline) -> None:
+    """El seguimiento: cerrar el mes, registrar el peso, ajustar y generar la v2.
+
+    Antes se podían generar varios planes pero no decir cuál era el bueno, y los
+    anteriores quedaban huérfanos: `/planes` solo pintaba el más reciente. Sin eso no
+    se puede seguir el déficit de nadie.
+    """
+    trainer, _ = offline
+    cid = _create_client(trainer)
+    _generate_and_wait(trainer, cid)
+    v1 = _cycle_id(trainer)
+
+    # Mes 2: el cliente bajó de peso. Los macros se recalculan con el peso nuevo.
+    before = _macros(trainer.get(f"/generador?cliente={cid}").text)
+    resp = trainer.post(f"/generador/{cid}/peso", data={"peso": "58.5"})
+    assert resp.status_code == 200
+    after = _macros(resp.text)
+    assert after != before, "el peso nuevo mueve los macros"
+
+    # Y se genera la versión siguiente.
+    started = trainer.post(f"/generador/{cid}/nueva-version")
+    job = re.search(r"job=([0-9a-f-]{36})", started.text).group(1)
+    deadline = time.monotonic() + GENERATION_TIMEOUT_S
+    while time.monotonic() < deadline:
+        html = trainer.get(f"/generador/{cid}/estado", params={"job": job, "n": 0}).text
+        if "Todo listo" in html:
+            break
+        assert FAILURE_MARKER not in html, f"la v2 falló: {_failure_reason(html)}"
+        time.sleep(0.05)
+
+    # La v2 es la activa; la v1 NO desapareció.
+    history = trainer.get(f"/planes/cliente/{cid}")
+    assert history.status_code == 200
+    assert "v1" in history.text and "v2" in history.text
+    assert "Activo" in history.text
+    # Cada versión conserva SU peso: eso es el seguimiento.
+    assert "58.5" in history.text
+    assert "62" in history.text  # el peso con el que se hizo la v1
+
+    # La v1 sigue abriéndose, con sus macros de entonces.
+    assert trainer.get(f"/planes/{v1}").status_code == 200
+
+    # Y se puede volver a ella: activar es repuntar, nada se pierde.
+    back = trainer.post(f"/planes/{v1}/activar", follow_redirects=False)
+    assert back.status_code == 303
+    assert "Plan definitivo" in trainer.get(f"/planes/{v1}").text

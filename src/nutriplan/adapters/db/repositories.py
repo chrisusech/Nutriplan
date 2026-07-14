@@ -87,6 +87,9 @@ class SqlClientRepository:
             restrictions=list(c.restrictions),
             notes=c.notes,
             meal_slots=[s.value for s in c.meal_slots],
+            free_meal_day=c.free_meal_day,
+            free_meal_slot=c.free_meal_slot.value if c.free_meal_slot else None,
+            active_plan_id=c.active_plan_id,
             preferences=[
                 ClientFoodPreferenceRow(tenant_id=self._tenant, client_id=c.id, food_id=fid)
                 for fid in c.liked_food_ids
@@ -111,6 +114,11 @@ class SqlClientRepository:
             notes=row.notes,
             # NULL = cliente de antes de que esto se pudiera elegir: las cinco.
             meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
+            free_meal_day=row.free_meal_day,
+            free_meal_slot=(
+                MealSlot(row.free_meal_slot) if row.free_meal_slot else None
+            ),
+            active_plan_id=row.active_plan_id,
         )
 
     async def add(self, client: Client) -> None:
@@ -151,6 +159,10 @@ class SqlClientRepository:
         row.restrictions = list(client.restrictions)
         row.notes = client.notes
         row.meal_slots = [s.value for s in client.meal_slots]
+        row.free_meal_day = client.free_meal_day
+        row.free_meal_slot = (
+            client.free_meal_slot.value if client.free_meal_slot else None
+        )
         # borrar preferencias viejas antes de insertar (unique client_id+food_id)
         row.preferences.clear()
         await self._s.flush()
@@ -158,6 +170,22 @@ class SqlClientRepository:
             ClientFoodPreferenceRow(tenant_id=self._tenant, client_id=client.id, food_id=fid)
             for fid in client.liked_food_ids
         ]
+        await self._s.flush()
+
+    async def set_active_plan(self, client_id: UUID, plan_id: UUID | None) -> None:
+        """Cuál de sus planes es EL plan. Activar uno archiva al anterior.
+
+        No pasa por `update()` a propósito: aquello reescribe las preferencias del
+        cliente enteras, y activar un plan no tiene por qué tocar lo que le gusta
+        comer.
+        """
+        stmt = select(ClientRow).where(
+            ClientRow.id == client_id, ClientRow.tenant_id == self._tenant
+        )
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise TenantIsolationError("Cliente inexistente para este tenant")
+        row.active_plan_id = plan_id
         await self._s.flush()
 
     async def list_banned_food_ids(self, client_id: UUID) -> list[UUID]:
@@ -212,6 +240,9 @@ class SqlFoodRepository:
             portion_min_g=row.portion_min_g,
             portion_max_g=row.portion_max_g,
             meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
+            slot_weights={
+                MealSlot(s): int(w) for s, w in (row.slot_weights or {}).items()
+            },
             is_free=bool(row.is_free),
             free_text=row.free_text,
         )
@@ -238,6 +269,7 @@ class SqlFoodRepository:
         row.portion_min_g = food.portion_min_g
         row.portion_max_g = food.portion_max_g
         row.meal_slots = [s.value for s in food.meal_slots]
+        row.slot_weights = {s.value: w for s, w in food.slot_weights.items()}
         row.is_free = food.is_free
         row.free_text = food.free_text
         return row
@@ -369,6 +401,7 @@ class SqlTargetsRepository:
             config_version=row.config_version,
             overrides=dict(row.overrides or {}),
             formula=MacroFormula(**(row.formula or {})),
+            weight_kg=row.weight_kg,
             computed_at=_aware(row.computed_at),
         )
 
@@ -384,6 +417,7 @@ class SqlTargetsRepository:
                 config_version=targets.config_version,
                 overrides=targets.overrides,
                 formula=targets.formula.model_dump(exclude_none=True),
+                weight_kg=targets.weight_kg,
                 computed_at=targets.computed_at,
             )
         )
@@ -458,6 +492,7 @@ class SqlPlanRepository:
             computed=MacroTargets(**row.computed),
             free_salad=row.free_salad,
             free_protein=row.free_protein,
+            is_free_meal=bool(row.is_free_meal),
         )
 
     def _item_rows(
@@ -502,6 +537,7 @@ class SqlPlanRepository:
                 computed=meal.computed.model_dump(),
                 free_salad=meal.free_salad,
                 free_protein=meal.free_protein,
+                is_free_meal=meal.is_free_meal,
                 items=self._item_rows(meal.items),
             )
             for i, meal in enumerate(meals)
@@ -528,6 +564,7 @@ class SqlPlanRepository:
             targets_id=row.targets_id,
             duration_days=row.duration_days,
             variant=row.variant,
+            version=row.version,
             days=sorted(
                 (
                     DayPlan(
@@ -562,6 +599,7 @@ class SqlPlanRepository:
                 targets_id=plan.targets_id,
                 duration_days=plan.duration_days,
                 variant=plan.variant,
+                version=plan.version,
                 status=plan.status.value,
                 config_version=plan.config_version,
                 prompt_version=plan.prompt_version,
@@ -655,6 +693,7 @@ class SqlPlanRepository:
                 computed=day_meal.computed.model_dump(),
                 free_salad=day_meal.free_salad,
                 free_protein=day_meal.free_protein,
+                is_free_meal=day_meal.is_free_meal,
                 items=self._item_rows(
                     day_meal.items,
                     preserve_ids=preserve_items.get(day_meal.slot, {}),
@@ -879,6 +918,7 @@ class SqlRecipeRepository:
             ],
             macros=MacroTargets(**row.macros),
             total_grams=row.total_grams,
+            meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
             status=RecipeStatus(row.status),
             created_by=row.created_by,
             created_at=_aware(row.created_at),
@@ -896,6 +936,7 @@ class SqlRecipeRepository:
                 ],
                 macros=recipe.macros.model_dump(),
                 total_grams=recipe.total_grams,
+                meal_slots=[s.value for s in recipe.meal_slots],
                 status=recipe.status.value,
                 created_by=recipe.created_by,
                 created_at=recipe.created_at,

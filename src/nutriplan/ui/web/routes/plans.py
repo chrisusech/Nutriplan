@@ -97,14 +97,73 @@ async def plans_index(request: Request,
     rows = []
     for client in await repos.clients.list():
         cycles = await repos.plans.list_for_client(client.id)
-        plan = presenter.latest_plan(cycles)
+        # El plan ACTIVO, no "el último": es el que el cliente está siguiendo.
+        plan = presenter.active_plan(client, cycles)
         if plan is None:
             continue
         targets = await repos.targets.get(plan.targets_id)
         card = presenter.client_card(client, cycles, targets)
         rows.append({**card, "cycle_id": str(plan.id),
+                     "client_id": str(client.id),
+                     "version": plan.version,
+                     "n_versions": len(cycles),
                      "created": presenter.time_ago(plan.created_at)})
     return render(request, "plans.html", active_tab="planes", rows=rows)
+
+
+@router.get("/planes/cliente/{client_id}", response_model=None)
+async def plan_history(request: Request,
+                       session: Annotated[AsyncSession, Depends(db_session)],
+                       client_id: str) -> Response:
+    """El historial de versiones de un cliente: la puerta que no existía.
+
+    Los planes viejos siempre estuvieron en la base, con su fecha y sus macros; lo
+    que no había era forma de llegar a ellos — `/planes` solo pintaba el más nuevo y
+    el resto quedaban huérfanos. `/planes/{id}` ya sabía renderizar cualquier ciclo:
+    no faltaba capacidad, faltaba un enlace.
+    """
+    repos = repos_of(request, session)
+    client = await repos.clients.get(UUID(client_id))
+    if client is None:
+        return RedirectResponse("/planes", status_code=303)
+
+    cycles = await repos.plans.list_for_client(client.id)
+    rows = []
+    for cycle in cycles:  # DESC: la versión más nueva primero
+        targets = await repos.targets.get(cycle.targets_id)
+        rows.append({
+            "id": str(cycle.id),
+            "version": cycle.version,
+            "active": cycle.id == client.active_plan_id,
+            "created": cycle.created_at.strftime("%d %b %Y"),
+            "ago": presenter.time_ago(cycle.created_at),
+            "status": cycle.status.value,
+            "approved": cycle.status == PlanStatus.APPROVED,
+            "duration": presenter.duration_label(cycle),
+            # El peso y los macros DE ENTONCES, no los de hoy: es el seguimiento.
+            "weight": f"{targets.weight_kg:g}" if targets and targets.weight_kg else "—",
+            "kcal": presenter.fmt_kcal(targets.daily.kcal) if targets else "—",
+            "macros": (
+                f"P {round(targets.daily.protein_g)} · C {round(targets.daily.carb_g)} · "
+                f"G {round(targets.daily.fat_g)}"
+                if targets else "—"
+            ),
+        })
+    return render(request, "plan_history.html", active_tab="planes",
+                  client=client, rows=rows)
+
+
+@router.post("/planes/{cycle_id}/activar")
+async def activate(request: Request,
+                   session: Annotated[AsyncSession, Depends(db_session)],
+                   cycle_id: str) -> RedirectResponse:
+    """Marca este plan como EL definitivo. Activar uno archiva al anterior."""
+    repos = repos_of(request, session)
+    cycle = await repos.plans.get(UUID(cycle_id))
+    if cycle is None:
+        return RedirectResponse("/planes", status_code=303)
+    await repos.clients.set_active_plan(cycle.client_id, cycle.id)
+    return RedirectResponse(f"/planes/cliente/{cycle.client_id}", status_code=303)
 
 
 @router.get("/planes/{cycle_id}", response_model=None)
@@ -147,8 +206,9 @@ async def review_plan(request: Request,
     return render(
         request, "review.html", active_tab="planes",
         client=client, cycle=cycle, grid=grid, fit_days=fit_days,
-        adh=presenter.adherence(cycle, targets, phase),
+        adh=presenter.adherence(cycle, targets, phase, config),
         approved=approved, phases=phases, fase=phase.value,
+        is_active=client.active_plan_id == cycle.id,
         subtitle=(f"{goal_meta['label']} · {presenter.fmt_kcal(targets.daily.kcal)} kcal · "
                   f"{presenter.duration_label(cycle)} · generado {presenter.time_ago(cycle.created_at)}"),
     )
@@ -200,11 +260,13 @@ async def export(request: Request,
         client_name=client.name if client else None,
         daily_targets=targets.daily if targets else None,
     )
-    who = (client.name if client else "cliente").replace(" ", "_")
-    dur = "30d" if cycle.duration_days >= 30 else "15d"
+    # El nombre con el que aterriza en el escritorio del cliente: "Plan nutricional Ana
+    # Pérez.pdf". `_attachment` ya resuelve tildes y espacios (manda un nombre ASCII y
+    # otro UTF-8).
+    who = client.name if client else "cliente"
     return Response(
         content=content, media_type=MEDIA_TYPES[fmt],
-        headers={"Content-Disposition": _attachment(f"plan_{dur}_{who}.{fmt}")},
+        headers={"Content-Disposition": _attachment(f"Plan nutricional {who}.{fmt}")},
     )
 
 

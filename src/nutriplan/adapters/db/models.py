@@ -68,6 +68,14 @@ class ClientRow(Base):
     # Las comidas que hace al día. NULL = las cinco de siempre (clientes de antes
     # de que esto se pudiera elegir).
     meal_slots: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # LA comida libre de la semana: qué día (0-6) y cuál. NULL = no tiene.
+    free_meal_day: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    free_meal_slot: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # CUAL de sus planes es EL plan. Un puntero, no una bandera por fila: "uno solo
+    # activo" queda garantizado por la cardinalidad de la columna y no por codigo.
+    # Archivar es repuntar; volver a la v2, tambien. Sin FK a proposito: seria un
+    # ciclo clients <-> plan_cycles y las dos tablas se bloquearian al crear.
+    active_plan_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 
     preferences: Mapped[list["ClientFoodPreferenceRow"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
@@ -124,6 +132,11 @@ class FoodRow(Base):
     portion_max_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Afinidad por comida: antes era una lista de nombres hardcodeada en Python.
     meal_slots: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    # Y CUÁNTO encaja en cada una ({"almuerzo": 3}). Vacío = todo al peso por
+    # defecto, que es como se comportaba el catálogo entero antes de existir esto.
+    slot_weights: Mapped[dict[str, int]] = mapped_column(
+        JSON, default=dict, server_default="{}"
+    )
     # Alimentos libres (ensalada, café, gelatina): el solver los ignora.
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     free_text: Mapped[str | None] = mapped_column(String(60), nullable=True)
@@ -155,6 +168,11 @@ class NutritionTargetsRow(Base):
     config_version: Mapped[str] = mapped_column(String(40))
     overrides: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
     formula: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # CON QUE PESO se calcularon estos macros. `clients.weight_kg` es mutable: al
+    # registrar el peso del mes siguiente se perdia el del mes anterior, y con el la
+    # unica forma de saber si el deficit estaba funcionando. La tabla ya era
+    # append-only; el historial de macros existia, solo le faltaba el peso.
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -168,6 +186,10 @@ class PlanCycleRow(Base):
     targets_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("nutrition_targets.id"))
     duration_days: Mapped[int] = mapped_column(SmallInteger, default=15, server_default="15")
     variant: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # El numero humano del plan: "Plan nutricional v3". `variant` es su gemelo tecnico
+    # (entra en el input_hash para que dos versiones no colisionen); esto es lo que el
+    # entrenador lee.
+    version: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
     status: Mapped[str] = mapped_column(String(20), index=True)
     config_version: Mapped[str] = mapped_column(String(40))
     prompt_version: Mapped[str] = mapped_column(String(60))
@@ -216,6 +238,11 @@ class MealEntryRow(Base):
     )  # legacy; vacío con meal_items
     computed: Mapped[dict[str, float]] = mapped_column(JSON)
     free_salad: Mapped[bool] = mapped_column(Boolean, default=False)
+    # LA comida libre: sin alimentos y sin macros. Sus calorías no se cuentan, y el
+    # día suma por debajo del objetivo a propósito.
+    is_free_meal: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     free_protein: Mapped[bool] = mapped_column(Boolean, default=False)
 
     items: Mapped[list["MealItemRow"]] = relationship(
@@ -284,9 +311,15 @@ class RecipeRow(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    # Vacío = receta declarada POR MACROS (un plato de restaurante con sus números
+    # exactos), no por ingredientes. Los macros son entonces el dato, no el derivado.
     ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # [{food_id, grams}]
     macros: Mapped[dict[str, float]] = mapped_column(JSON)
     total_grams: Mapped[float] = mapped_column(Float)
+    # En qué comidas encaja el plato. Sin esto, el alimento compuesto que sale al
+    # verificarla deriva sus comidas de la CATEGORÍA: una hamburguesa acababa siendo
+    # apta para desayuno.
+    meal_slots: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     status: Mapped[str] = mapped_column(String(20), index=True, default="pending")
     created_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

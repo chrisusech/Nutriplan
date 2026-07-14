@@ -70,14 +70,7 @@ body {
   display: inline-block;
 }
 
-.notes-client {
-  margin: 22px 0 18px;
-  font-size: 10pt;
-  color: var(--muted);
-}
-.notes-client strong { color: var(--ink); font-weight: 600; }
-
-.notes-list { margin: 0; padding: 0; list-style: none; }
+.notes-list { margin: 22px 0 0; padding: 0; list-style: none; }
 .notes-list li {
   position: relative;
   padding-left: 18px;
@@ -166,7 +159,10 @@ body {
 table.grid {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 2px;
+  /* Sin hueco VERTICAL: cada comida son dos filas (la comida y sus macros) y tienen que
+   * tocarse para leerse como una sola tarjeta. El aire entre comidas lo pone el borde
+   * blanco de `tr.meal`. El hueco horizontal (2px) separa los días. */
+  border-spacing: 2px 0;
   table-layout: fixed;
 }
 
@@ -190,25 +186,11 @@ table.grid th.slot {
   vertical-align: top;
   border-radius: 5px;
 }
-table.grid th.slot .time {
-  display: block;
-  font-weight: 400;
-  font-size: 6.5pt;
-  color: var(--muted);
-  margin-top: 1px;
-}
 table.grid th.corner { width: 54px; background: transparent; }
 
 table.grid td {
   background: var(--brand-soft);
-  /* Al FONDO, y no por gusto: es lo ÚNICO que alinea los macros entre columnas en
-   * WeasyPrint. Ni el flex con `height: 100%`, ni `position: absolute` contra la
-   * celda, ni fijarle la altura a la fila funcionan dentro de una tabla — se
-   * probaron los cuatro. Alineando el contenido abajo, la última línea de cada
-   * celda (los macros) cae a la misma altura en los siete días. */
-  vertical-align: bottom;
   padding: 6px 3px;
-  border-radius: 5px;
   text-align: center;
   /* Las columnas son estrechas y los nombres largos ("Mantequilla de
    * almendras"): sin partir palabras, la celda se desborda. */
@@ -219,9 +201,55 @@ table.grid td {
    * para ese carácter. El guion-menos (U+002D) sí está. */
   hyphenate-character: "-";
 }
-/* Rayado: las filas impares llevan el tinte más claro. Con border-collapse el
- * border-radius no se aplica, por eso la rejilla usa border-spacing. */
-table.grid tr:nth-child(even) td { background: var(--brand-wash); }
+
+/* Una comida = dos filas. Arriba la comida, pegada al techo; abajo los extras y los
+ * macros, pegados al suelo. El hueco cae en medio, que es donde tiene que caer. */
+table.grid tr.meal td {
+  vertical-align: top;
+  border-radius: 5px 5px 0 0;
+  padding-bottom: 0;
+}
+table.grid tr.foot td {
+  vertical-align: bottom;
+  border-radius: 0 0 5px 5px;
+  padding-top: 0;
+}
+/* El aire entre comidas: lo pone el borde de la primera fila de cada una, porque
+ * `border-spacing` ya no deja hueco vertical (si lo dejara, la comida y sus macros se
+ * verían como dos tarjetas sueltas). */
+table.grid tr.meal td, table.grid tr.meal th { border-top: 3px solid #fff; }
+
+/* Rayado: las comidas impares llevan el tinte más claro. Va por CLASE y no por
+ * `nth-child`, porque con dos filas por comida el contador de filas ya no coincide con
+ * el de comidas. */
+table.grid tr.alt td { background: var(--brand-wash); }
+
+/* LA comida libre. No lleva alimentos ni macros, así que la celda no tiene nada que
+ * enseñar salvo lo que es — y tiene que verse desde el otro lado de la mesa, porque es
+ * la casilla que el cliente busca al abrir el plan. El tinte de marca la separa de las
+ * comidas pesadas sin sacarla de la rejilla. Gana al rayado (`tr.alt`) por
+ * especificidad: la comida libre no se ralla. */
+table.grid td.free-meal { background: var(--brand-soft); }
+.free-meal-title {
+  display: block;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: .3px;
+  color: var(--brand);
+  text-align: center;
+  padding-top: 6px;
+}
+.free-meal-note {
+  display: block;
+  font-size: 6.5pt;
+  font-style: italic;
+  color: var(--brand);
+  text-align: center;
+  padding-bottom: 4px;
+  /* La celda hereda `hyphens: auto` de la rejilla y partía la frase en
+     "Come lo que quie-ras". Aquí no: son cuatro palabras. */
+  hyphens: none;
+}
 
 .portion {
   display: block;
@@ -237,8 +265,8 @@ table.grid tr:nth-child(even) td { background: var(--brand-wash); }
   font-style: italic;
   margin-bottom: 2px;
 }
-/* La última línea de la celda. Con el contenido alineado abajo, los macros de las
- * siete columnas quedan a la misma altura y el plan se lee de un vistazo. */
+/* La última línea de la comida: alineada entre las siete columnas porque vive en su
+ * propia fila, no colgando de la última porción. */
 .macros {
   display: block;
   font-size: 6pt;
@@ -253,10 +281,13 @@ table.grid tr:nth-child(even) td { background: var(--brand-wash); }
  * otra no, volverían a desalinearse por una línea. */
 .m-kcal, .m-pcg { display: block; white-space: nowrap; }
 
-tr.day-totals th.slot { background: transparent; }
+tr.day-totals th.slot { background: transparent; border-top: 3px solid #fff; }
 tr.day-totals td {
   background: var(--wash);
   border: 1px solid var(--line);
+  border-top: 3px solid #fff;  /* el mismo aire que separa las comidas */
+  border-radius: 5px;
+  vertical-align: top;
 }
 .total-kcal {
   display: block;

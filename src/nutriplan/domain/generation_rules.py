@@ -10,7 +10,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from math import ceil
 
-from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot, PlanSelection
+from nutriplan.domain.models import (
+    DaySelection,
+    FoodCategory,
+    FoodItem,
+    MealSlot,
+    PlanSelection,
+)
 
 PROTEIN_GROUP = {FoodCategory.PROTEIN, FoodCategory.DAIRY}
 CARB_GROUP = {FoodCategory.CARB, FoodCategory.FRUIT}
@@ -89,15 +95,48 @@ class VarietyViolation:
     slots: list[tuple[int, MealSlot]] = field(default_factory=list)
 
 
+def drop_free_meal(
+    selection: PlanSelection, free_meal: tuple[int, MealSlot] | None
+) -> PlanSelection:
+    """Quita de la selección la celda que es comida libre.
+
+    El selector (y desde luego el LLM real) emite las cinco comidas de cada día:
+    no sabe nada de comidas libres, ni tiene por qué. La celda se quita AQUÍ, en la
+    frontera, y a partir de este punto el pipeline entero —estructura, variedad,
+    porcionado, validación— trabaja con un día de cuatro comidas y no necesita
+    enterarse de nada.
+    """
+    if free_meal is None:
+        return selection
+    day_index, slot = free_meal
+    return PlanSelection(
+        days=[
+            DaySelection(
+                day_index=day.day_index,
+                meals=[
+                    meal
+                    for meal in day.meals
+                    if not (day.day_index == day_index and meal.slot is slot)
+                ],
+            )
+            for day in selection.days
+        ]
+    )
+
+
 def validate_selection_structure(
     selection: PlanSelection,
     foods_by_id: dict[str, FoodItem],
     slots: Sequence[MealSlot] | None = None,
+    free_meal: tuple[int, MealSlot] | None = None,
 ) -> list[StructureViolation]:
     """La selección de la IA debe cubrir los roles de cada slot. Determinista.
 
     `slots` son las comidas que come este cliente (5 si no se dice otra cosa): un
     plan de cuatro comidas no tiene un "snack PM faltante".
+
+    `free_meal` es la única comida de la semana que PUEDE faltar: la libre. No se
+    la juzga porque no tiene nada que juzgar — ni alimentos, ni roles, ni macros.
     """
     expected = list(slots) if slots else list(MealSlot)
     violations: list[StructureViolation] = []
@@ -110,7 +149,7 @@ def validate_selection_structure(
     for day in selection.days:
         seen_slots = {m.slot for m in day.meals}
         for slot in expected:
-            if slot not in seen_slots:
+            if slot not in seen_slots and (day.day_index, slot) != free_meal:
                 violations.append(StructureViolation(day.day_index, slot, "slot faltante"))
         for slot in seen_slots - set(expected):
             violations.append(

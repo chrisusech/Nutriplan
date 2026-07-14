@@ -17,6 +17,7 @@ from nutriplan.application.compute_targets import compute_and_store_targets
 from nutriplan.application.generate_plan import compute_input_hash
 from nutriplan.application.jobs import new_job, run_generation_job
 from nutriplan.container import Container
+from nutriplan.domain.calculation import apply_overrides, validate_daily
 from nutriplan.domain.calculation import compute_targets as compute_targets_domain
 from nutriplan.domain.errors import CalculationError
 from nutriplan.domain.food_filter import allowed_foods, forbidden_tags
@@ -87,7 +88,13 @@ async def _generator_context(request: Request, session: AsyncSession,
             groups.append({**meta, "items": items})
 
     cycles = await repos.plans.list_for_client(client.id)
-    plan = presenter.latest_plan(cycles)
+    # EL plan del cliente es el que él marca como activo, no "el último que salió":
+    # sin esto no se puede volver a la versión del mes pasado.
+    plan = presenter.active_plan(client, cycles)
+    # El peso de cada versión, para ver si el déficit está funcionando.
+    history = presenter.weight_history(
+        [(c, await repos.targets.get(c.targets_id)) for c in cycles]
+    )
     stale = False
     day_view = None
     phases: list[PlanPhase] = []
@@ -147,6 +154,7 @@ async def _generator_context(request: Request, session: AsyncSession,
         "pool_warnings": pool_warnings,
         "plan": plan,
         "history_count": len(cycles),
+        "weight_history": history,
         "stale": stale,
         "dia": max(0, min(dia, 6)),
         "fase": phase.value,
@@ -199,7 +207,15 @@ async def set_goal(request: Request, session: Annotated[AsyncSession, Depends(db
     client = await _get_client(request, session, cid)
     client = client.model_copy(update={"goal": Goal(goal)})
     await repos.clients.update(client)
-    await _fresh_targets(request, session, client, overrides={})  # recalcular sin overrides
+    try:
+        # Sin overrides: cambiar de objetivo (y el botón de "restablecer") vuelve al
+        # cálculo limpio.
+        await _fresh_targets(request, session, client, overrides={})
+    except CalculationError as exc:
+        # Con una fórmula agresiva, el objetivo nuevo puede dejar el carbo bajo el piso.
+        # Se explica en pantalla en vez de devolver un 500 que HTMX no pinta —y que deja
+        # la pantalla congelada sin decir nada.
+        return await _rerender(request, session, client, formula_error=str(exc))
     return await _rerender(request, session, client)
 
 
@@ -243,17 +259,46 @@ async def set_macros(request: Request, session: Annotated[AsyncSession, Depends(
                      protein_g: Annotated[float, Form()],
                      carb_g: Annotated[float, Form()],
                      fat_g: Annotated[float, Form()]) -> HTMLResponse:
-    """El entrenador edita un tile: solo lo que difiere de la fórmula es override."""
+    """El entrenador edita un cuadrito. Cada macro es independiente; las kcal, el resultado.
+
+    Lo que tocó de verdad se sabe comparando con lo que la pantalla MOSTRABA, no con la
+    fórmula. Comparando con la fórmula, en la segunda edición las kcal —que ya se habían
+    recalculado— parecían un ajuste manual que nadie había hecho: se congelaban, y el
+    objetivo dejaba de cumplir kcal = 4·P + 4·C + 9·G. Un objetivo así no lo puede cuadrar
+    ningún plato real, y el cliente se quedaba sin plan.
+    """
     container = container_of(request)
     repos = repos_of(request, session)
     client = await _get_client(request, session, cid)
     config = container.nutrition_config(client)
     existing = await repos.targets.latest_for_client(client.id)
     formula = existing.formula if existing else None
-    base = compute_targets_domain(client, config, formula=formula).daily.model_dump()
+    base = compute_targets_domain(client, config, formula=formula).daily
+    current = existing.daily if existing else base
+
     submitted = {"kcal": kcal, "protein_g": protein_g, "carb_g": carb_g, "fat_g": fat_g}
-    overrides = {k: v for k, v in submitted.items() if abs(v - base[k]) > 0.5}
-    await _fresh_targets(request, session, client, overrides=overrides)
+    # Los cuadritos se pintan redondeados: se compara contra lo que se veía.
+    shown = current.model_dump()
+    touched = {k: v for k, v in submitted.items() if abs(v - round(shown[k])) > 0.5}
+    if not touched:
+        return await _rerender(request, session, client)
+    # Si se tocó un macro, las kcal son su consecuencia: mandan los macros.
+    if {"protein_g", "carb_g", "fat_g"} & set(touched):
+        touched.pop("kcal", None)
+
+    try:
+        daily = apply_overrides(current, touched)
+        validate_daily(daily, client, config)
+        # Se guarda como ajuste todo lo que se aparte de la fórmula (incluido lo que el
+        # invariante haya movido solo): es lo que enciende el badge de "Ajustado a mano".
+        overrides = {
+            field: getattr(daily, field)
+            for field in OVERRIDABLE
+            if abs(getattr(daily, field) - getattr(base, field)) > 0.5
+        }
+        await _fresh_targets(request, session, client, overrides=overrides)
+    except CalculationError as exc:
+        return await _rerender(request, session, client, formula_error=str(exc))
     return await _rerender(request, session, client)
 
 
@@ -290,6 +335,77 @@ async def toggle_meal(request: Request,
     await repos.clients.update(client)
     # Los objetivos por comida cambian con el número de comidas: se recalculan ya.
     await _fresh_targets(request, session, client)
+    return await _rerender(request, session, client)
+
+
+@router.post("/generador/{cid}/peso", response_class=HTMLResponse)
+async def set_weight(request: Request,
+                     session: Annotated[AsyncSession, Depends(db_session)],
+                     cid: str, peso: Annotated[str, Form()]) -> HTMLResponse:
+    """Registra el peso de hoy y recalcula los macros con él.
+
+    Es el seguimiento entero, y casi todo estaba ya escrito: `compute_and_store_targets`
+    INSERTA una fila nueva en `nutrition_targets` (la tabla es append-only), así que
+    los macros del mes pasado —y desde ahora, el peso con el que se calcularon— quedan
+    intactos y consultables. Los cuadritos de macros siguen siendo editables a mano con
+    el endpoint de siempre: quien no quiera la propuesta de la fórmula, la pisa.
+
+    El peso es OPCIONAL. Si no lo tocas, se parte de los macros vigentes (los de la
+    versión anterior) y se ajustan a mano. Las dos puertas llevan al mismo sitio.
+    """
+    repos = repos_of(request, session)
+    client = await _get_client(request, session, cid)
+    try:
+        weight = float(str(peso).strip().replace(",", "."))
+    except ValueError:
+        return await _rerender(request, session, client)
+    if not 25.0 <= weight <= 400.0:  # un dedo torcido no puede reventar la fórmula
+        return await _rerender(request, session, client)
+
+    client = client.model_copy(update={"weight_kg": weight})
+    await repos.clients.update(client)
+
+    existing = await repos.targets.latest_for_client(client.id)
+    try:
+        # Con `formula=` se fuerza el recálculo (si no, `_fresh_targets` devolvería los
+        # targets viejos y el peso nuevo no movería nada).
+        await _fresh_targets(
+            request, session, client,
+            formula=existing.formula if existing else MacroFormula(),
+        )
+    except CalculationError as exc:
+        return await _rerender(request, session, client, formula_error=str(exc))
+    return await _rerender(request, session, client)
+
+
+@router.post("/generador/{cid}/comida-libre", response_class=HTMLResponse)
+async def set_free_meal(request: Request,
+                        session: Annotated[AsyncSession, Depends(db_session)],
+                        cid: str,
+                        dia: Annotated[str, Form()] = "",
+                        slot: Annotated[str, Form()] = "") -> HTMLResponse:
+    """La comida libre de la semana: un día y una comida, o ninguna.
+
+    No recalcula los objetivos: la comida libre no cambia los macros del cliente,
+    solo dice qué celda del plan no se pesa. Lo que sí cambia es el hash de entrada
+    (`compute_input_hash`), así que el plan sale marcado como desactualizado y hay
+    que regenerarlo — que es exactamente lo que debe pasar.
+    """
+    repos = repos_of(request, session)
+    client = await _get_client(request, session, cid)
+
+    day: int | None = None
+    chosen: MealSlot | None = None
+    if dia and slot:
+        try:
+            day, chosen = int(dia), MealSlot(slot)
+        except ValueError:
+            day, chosen = None, None
+    # Vacío = quitar la comida libre. El validador del Client limpia el par a medias.
+    client = client.model_copy(
+        update={"free_meal_day": day, "free_meal_slot": chosen}
+    )
+    await repos.clients.update(client)
     return await _rerender(request, session, client)
 
 

@@ -59,13 +59,19 @@ SLOT_TIMES: dict[MealSlot, str] = {
 # la que el plan le prometía. El texto ahora dice lo que los números hacen.
 _ANOTACIONES_BASE = [
     "Todos los pesos son del alimento YA COCIDO: pesa la porción lista para comer, "
-    "no cruda (el pollo, el arroz, la pasta).",
+    "no cruda (el pollo, el arroz, la pasta, etc.).",
+    "El plan se cuadra sobre el total de la SEMANA, así que hay días que quedan un "
+    "poco por encima o por debajo del objetivo diario. Es normal: la semana cierra.",
     "Los huevos van por unidades, y los puedes preparar como gustes, incluso con "
     "los vegetales que desees, excepto fritos (evitar exceso de aceite).",
     "La gelatina sin azúcar la puedes comer cuando quieras.",
     "Puedes comer 3 cuadritos de chocolate 80% cacao todos los días, MENOS sábado "
     "y domingo.",
-    "La comida libre puedes hacerla el sábado o el domingo, según prefieras.",
+    # Aquí vivía "La comida libre puedes hacerla el sábado o el domingo, según
+    # prefieras." — en TODOS los planes, tuvieran comida libre o no, porque la
+    # comida libre no existía como dato y esto era lo más parecido a tenerla. Ahora
+    # la frase la escribe `anotaciones()` con el día y la comida de verdad, y si el
+    # plan no tiene comida libre no promete ninguna.
     "Alimentos libres: café sin azúcar, aromática sin azúcar, todos los vegetales "
     "que quieras y bebidas sin azúcar ni calorías.",
     "Las comidas son cada 2 a 3 horas.",
@@ -81,23 +87,61 @@ SLOT_NAMES: dict[MealSlot, str] = {
     MealSlot.DINNER: "cena",
 }
 
+# Con su artículo, para las frases. La cena es LA cena: "tu comida libre es el
+# domingo en el cena" es lo que sale de concatenar un artículo fijo con el nombre.
+SLOT_NAMES_ARTICLE: dict[MealSlot, str] = {
+    MealSlot.BREAKFAST: "el desayuno",
+    MealSlot.SNACK_AM: "el snack AM",
+    MealSlot.LUNCH: "el almuerzo",
+    MealSlot.SNACK_PM: "el snack PM",
+    MealSlot.DINNER: "la cena",
+}
 
-def anotaciones(slots: Sequence[MealSlot]) -> list[str]:
+
+def anotaciones(
+    slots: Sequence[MealSlot], free_meal: tuple[int, MealSlot] | None = None
+) -> list[str]:
     """Las anotaciones del plan. La primera cuenta las comidas que de verdad tiene.
 
     No todos los clientes comen cinco veces: prometerle cinco comidas a quien
     recibió cuatro es la clase de detalle por la que el plan deja de parecer suyo.
+
+    Y la comida libre se nombra por su día y su comida, o no se nombra. Antes se
+    prometía "el sábado o el domingo" en todos los planes, incluidos los que no
+    tenían ninguna.
     """
     chosen = set(slots)
     names = [SLOT_NAMES[s] for s in SLOT_NAMES if s in chosen]
     listed = f"{', '.join(names[:-1])} y {names[-1]}" if len(names) > 1 else names[0]
-    return [f"El plan consta de {len(names)} comidas: {listed}.", *_ANOTACIONES_BASE]
+    notes = [f"El plan consta de {len(names)} comidas: {listed}.", *_ANOTACIONES_BASE]
+    if free_meal is not None:
+        day, slot = free_meal
+        notes.append(
+            f"Tu comida libre es el {DAY_LABELS[day].lower()} en "
+            f"{SLOT_NAMES_ARTICLE[slot]}: come lo que quieras, sin pesar nada. Las "
+            "demás comidas de ese día siguen igual."
+        )
+    return notes
 
 
 def slots_in(plan: PlanCycle) -> list[MealSlot]:
     """Las comidas que este plan tiene, en el orden del día."""
     present = {meal.slot for day in plan.days for meal in day.meals}
     return [slot for slot in SLOT_LABELS if slot in present]
+
+
+def free_meal_cell(plan: PlanCycle) -> tuple[int, MealSlot] | None:
+    """La comida libre de este plan (día, comida), leída del propio plan.
+
+    El PDF no necesita al cliente: la verdad de un plan ya generado está en sus
+    filas. Si mañana el entrenador mueve la comida libre, este plan sigue diciendo
+    lo que decía cuando se firmó.
+    """
+    for day in sorted(plan.days, key=lambda d: d.day_index):
+        for meal in day.meals:
+            if meal.is_free_meal:
+                return (day.day_index, meal.slot)
+    return None
 
 # Encabezado de cada rejilla, con el tono de los planes reales.
 PHASE_INTRO: dict[PlanPhase, str] = {
@@ -122,6 +166,7 @@ class CellView:
     carb_g: float = 0.0
     fat_g: float = 0.0
     macro_line: str = ""  # preformateado para Jinja/PDF
+    free_meal: bool = False  # LA comida libre: sin porciones y sin macros
 
 
 def cell_for_template(cell: CellView) -> dict[str, object]:
@@ -134,6 +179,7 @@ def cell_for_template(cell: CellView) -> dict[str, object]:
         "carb_g": cell.carb_g,
         "fat_g": cell.fat_g,
         "macro_line": cell.macro_line,
+        "free_meal": cell.free_meal,
     }
 
 
@@ -195,6 +241,12 @@ def build_week(
         for slot in SLOT_LABELS:
             meal = by_slot.get(slot)
             if meal is None:
+                continue
+            if meal.is_free_meal:
+                meals.append(MealCard(
+                    slot_label=SLOT_LABELS[slot], time=SLOT_TIMES[slot],
+                    kcal=0, items=["COMIDA LIBRE — come lo que quieras"],
+                ))
                 continue
             items = []
             for p in meal.portions:
@@ -274,6 +326,12 @@ def build_grid(
             meal = by_slot.get(slot)
             if meal is None:
                 grid[slot].append(CellView(portions=[], extras=["—"], kcal=0.0))
+                continue
+            if meal.is_free_meal:
+                # Sin porciones, sin macros y sin línea de kcal: la columna de
+                # totales de ese día sale más baja, y eso es exactamente la verdad.
+                grid[slot].append(CellView(portions=[], extras=[], kcal=0.0,
+                                           free_meal=True))
                 continue
             portions = []
             for p in meal.portions:

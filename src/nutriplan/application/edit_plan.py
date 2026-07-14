@@ -7,6 +7,7 @@ from nutriplan.domain import meal_affinity
 from nutriplan.domain.errors import GenerationError
 from nutriplan.domain.food_filter import allowed_foods
 from nutriplan.domain.generation_rules import SLOT_STRUCTURE
+from nutriplan.domain.macro_split import daily_minus_free_meal, free_meal_slot_of
 from nutriplan.domain.models import (
     Client,
     DayPlan,
@@ -130,6 +131,15 @@ def _solved_to_day(
                 or SLOT_STRUCTURE[m.slot].free_salad_default,
             )
         )
+
+    # La comida libre no está en `solved` —no tiene alimentos que porcionar— así que
+    # reconstruir el día desde el solver la BORRARÍA: cualquier ajuste de gramos en
+    # otra comida se la llevaría por delante, en silencio. Se reinserta en su sitio.
+    free_meal = next((m for m in preserve_meals.values() if m.is_free_meal), None)
+    if free_meal is not None:
+        meals.append(free_meal)
+        meals.sort(key=lambda m: _SLOT_ORDER.index(m.slot))
+
     return DayPlan(day_index=day_index, phase=phase, meals=meals, totals=day_totals(solved))
 
 
@@ -148,17 +158,23 @@ async def resolve_day(
 
     free_flags = {m.slot: m.free_salad for m in day.meals}
 
+    # Si el día tiene comida libre, el objetivo contra el que se re-porciona es el
+    # reducido — el mismo con el que se generó. Con el objetivo completo, las cuatro
+    # comidas restantes tendrían que cargar con el día entero y editar un gramo
+    # engordaría el resto del día.
+    day_daily = daily_minus_free_meal(targets.daily, config, free_meal_slot_of(day))
+
     # Un slot sin fuente de proteína (un snack de solo fruta) ya no debe proteína:
     # `macro_split.macro_shares` le da cuota 0 y la reparte entre las comidas que
     # sí la llevan. Antes había que decirle al reparador que la relajara a mano.
     if _needs_full_solve(day):
-        solved = solve_day_portions(meals_input, targets.daily, config)
+        solved = solve_day_portions(meals_input, day_daily, config)
     else:
         locked = _locked_keys(day, edited_slot)
         grams = rebalance_day_after_edit(
             meals_input,
             _grams_map(day),
-            targets.daily,
+            day_daily,
             config,
             locked=locked,
         )
@@ -202,6 +218,9 @@ async def swap_food_in_slot(
     meal = next((m for m in day.meals if m.slot is slot), None)
     if meal is None:
         raise GenerationError(f"Slot {slot.value} no existe en el día")
+    if meal.is_free_meal:
+        # En la pantalla esa celda no ofrece controles, pero el endpoint es público.
+        raise GenerationError("La comida libre no tiene alimentos que cambiar")
 
     replaced = False
     new_items: list[MealItem] = []
@@ -242,6 +261,8 @@ async def remove_food_from_slot(
     meal = next((m for m in day.meals if m.slot is slot), None)
     if meal is None:
         raise GenerationError(f"Slot {slot.value} no existe en el día")
+    if meal.is_free_meal:
+        raise GenerationError("La comida libre no tiene alimentos que quitar")
 
     remaining = [item for item in meal.items if item.food_id != food_id]
     if len(remaining) == len(meal.items):

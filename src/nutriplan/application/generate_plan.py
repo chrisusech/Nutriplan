@@ -20,15 +20,17 @@ from nutriplan.domain.food_filter import allowed_foods
 from nutriplan.domain.generation_rules import (
     SLOT_STRUCTURE,
     check_variety,
+    drop_free_meal,
     slot_availability,
     validate_selection_structure,
 )
-from nutriplan.domain.macro_split import macro_shares
+from nutriplan.domain.macro_split import daily_minus_free_meal, macro_shares
 from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import (
     Client,
     DayPlan,
     FoodItem,
+    MacroTargets,
     MealEntry,
     MealItem,
     MealSlot,
@@ -94,6 +96,13 @@ def compute_input_hash(
             # Sin esto, cambiar a un cliente de 4 comidas le devolvería el plan de
             # 5 servido de la caché.
             "meal_slots": [s.value for s in client.meal_slots],
+            # Y sin esto, poner (o mover) la comida libre devolvería el plan viejo
+            # de la caché: parecería que el botón no hace nada.
+            "free_meal": (
+                [client.free_meal_day, client.free_meal_slot.value]
+                if client.free_meal_slot is not None
+                else None
+            ),
             "sex": client.sex.value,
             "age": client.age_years,
             "birthdate": client.birthdate.isoformat() if client.birthdate else None,
@@ -163,6 +172,16 @@ def build_selection_prompt(
     return "\n".join(parts)
 
 
+def _free_meal_entry(slot: MealSlot) -> MealEntry:
+    """La celda libre: sin alimentos, sin gramos y sin macros que contar."""
+    return MealEntry(
+        slot=slot,
+        items=[],
+        computed=MacroTargets(kcal=0.0, protein_g=0.0, carb_g=0.0, fat_g=0.0),
+        is_free_meal=True,
+    )
+
+
 def _selection_to_days(
     selection: PlanSelection,
     *,
@@ -170,6 +189,7 @@ def _selection_to_days(
     foods_by_id: dict[str, FoodItem],
     targets: NutritionTargets,
     config: NutritionConfig,
+    free_meal: tuple[int, MealSlot] | None = None,
 ) -> tuple[list[DayPlan], list[str]]:
     problems: list[str] = []
     days: list[DayPlan] = []
@@ -181,14 +201,21 @@ def _selection_to_days(
             (m.slot, [foods_by_id[fid] for fid in m.food_ids])
             for m in sorted(day_sel.meals, key=lambda m: _SLOT_ORDER.index(m.slot))
         ]
+        # El día de la comida libre se porciona y se juzga contra un objetivo MENOR:
+        # el suyo menos lo que pesaba esa comida. Así las que quedan conservan su
+        # objetivo de siempre y el día suma por debajo — que es lo que significa
+        # comerse una pizza. Sin esto, `macro_shares` renormalizaría y las cuatro
+        # comidas restantes cargarían con el día entero.
+        free_slot = free_meal[1] if free_meal and free_meal[0] == day_sel.day_index else None
+        day_daily = daily_minus_free_meal(targets.daily, config, free_slot)
         try:
-            solved = solve_day_portions(meals_input, targets.daily, config)
+            solved = solve_day_portions(meals_input, day_daily, config)
         except GenerationError as exc:
             problems.append(f"fase {phase.value}, día {day_sel.day_index}: {exc}")
             continue
         deviations = validate_day(
             solved,
-            targets.daily,
+            day_daily,
             config,
             shares=macro_shares(meals_input, config),
         )
@@ -197,25 +224,31 @@ def _selection_to_days(
                 f"fase {phase.value}, día {day_sel.day_index}, {d}" for d in deviations
             ]
             continue
+        meals = [
+            MealEntry(
+                slot=m.slot,
+                items=[
+                    MealItem(food_id=p.food_id, grams=p.grams, position=i)
+                    for i, p in enumerate(m.portions)
+                ],
+                computed=m.computed,
+                free_salad=(
+                    free_salad_of.get((day_sel.day_index, m.slot), False)
+                    or SLOT_STRUCTURE[m.slot].free_salad_default
+                ),
+            )
+            for m in solved
+        ]
+        if free_slot is not None:
+            meals.append(_free_meal_entry(free_slot))
+            meals.sort(key=lambda m: _SLOT_ORDER.index(m.slot))  # el orden del día
         days.append(
             DayPlan(
                 day_index=day_sel.day_index,
                 phase=phase,
-                meals=[
-                    MealEntry(
-                        slot=m.slot,
-                        items=[
-                            MealItem(food_id=p.food_id, grams=p.grams, position=i)
-                            for i, p in enumerate(m.portions)
-                        ],
-                        computed=m.computed,
-                        free_salad=(
-                            free_salad_of.get((day_sel.day_index, m.slot), False)
-                            or SLOT_STRUCTURE[m.slot].free_salad_default
-                        ),
-                    )
-                    for m in solved
-                ],
+                meals=meals,
+                # La comida libre no suma: los totales del día son los de lo que se
+                # pesa, y por eso el día sale por debajo del objetivo. Es la verdad.
                 totals=day_totals(solved),
             )
         )
@@ -283,10 +316,17 @@ async def _generate_phase_week(
         system=prompt.text, prompt=user_prompt, schema=schema, model=model
     )
     selection = PlanSelection.model_validate(raw.model_dump())
+    # El selector emite las cinco comidas del día: no sabe de comidas libres, ni
+    # tiene por qué. La celda se quita aquí, en la frontera, y de aquí para adentro
+    # todo el pipeline trabaja con un día de cuatro comidas sin enterarse de nada.
+    free_meal = client.free_meal
+    selection = drop_free_meal(selection, free_meal)
 
     problems = [
         f"fase {phase.value}, día {v.day_index}, {v.slot.value}: {v.reason}"
-        for v in validate_selection_structure(selection, foods_by_id, slots)
+        for v in validate_selection_structure(
+            selection, foods_by_id, slots, free_meal=free_meal
+        )
     ]
     problems += [
         f"fase {phase.value}, variedad: {v.food_name} usado {v.times_used} veces "
@@ -308,6 +348,7 @@ async def _generate_phase_week(
         foods_by_id=foods_by_id,
         targets=targets,
         config=config,
+        free_meal=free_meal,
     )
     problems += solve_problems
     if len(days) != 7:
@@ -448,8 +489,17 @@ async def generate_plan_for_client(
     )
     existing = await plan_repo.find_by_input_hash(input_hash)
     if existing:
+        # El mismo insumo devuelve el mismo plan. Se activa igualmente (el entrenador
+        # pidió ESTE plan), pero no sube de versión: no hay plan nuevo que numerar.
         logger.info("plan_reused_by_hash", input_hash=input_hash[:12])
+        await client_repo.set_active_plan(client.id, existing[0].id)
         return existing[0]
+
+    # La versión siguiente del cliente. `variant` es su gemelo técnico y entra en el
+    # input_hash, así que dos versiones nunca colisionan en la caché aunque los
+    # macros no hayan cambiado.
+    previous = await plan_repo.list_for_client(client.id)
+    version = 1 + max((p.version for p in previous), default=0)
 
     cycle = await generate_cycle(
         client=client,
@@ -463,5 +513,8 @@ async def generate_plan_for_client(
         duration_days=duration_days,
         catalog=catalog,
     )
+    cycle = cycle.model_copy(update={"version": version})
     await plan_repo.add(cycle)
+    # El plan recién hecho es EL plan; el anterior queda archivado y consultable.
+    await client_repo.set_active_plan(client.id, cycle.id)
     return cycle

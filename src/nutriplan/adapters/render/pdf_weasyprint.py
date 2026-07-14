@@ -17,8 +17,8 @@ from nutriplan.adapters.render.view import (
     DAY_LABELS,
     PHASE_INTRO,
     SLOT_LABELS,
-    SLOT_TIMES,
     anotaciones,
+    free_meal_cell,
     build_grid,
     cell_for_template,
     day_totals_row,
@@ -80,10 +80,11 @@ def _grid_sections(plan: PlanCycle, foods: dict[UUID, FoodItem]) -> list[dict]:
     sections: list[dict] = []
     for phase in plan_phases_in(plan):
         grid = build_grid(plan, foods, phase=phase)
+        # Sin horarios: el plan dice QUÉ come, no a qué hora. Las horas siguen en la UI
+        # web (`presenter.SLOT_META`), que es donde el entrenador las mira.
         rows = [
             {
                 "label": SLOT_LABELS[slot],
-                "time": SLOT_TIMES[slot],
                 "cells": [cell_for_template(c) for c in cells],
             }
             for slot, cells in grid.items()
@@ -115,12 +116,6 @@ def render_plan_html(
 ) -> str:
     """HTML del PDF: anotaciones + una rejilla por fase."""
     daily = daily_totals or _average_daily(plan)
-    if plan.duration_days >= 30:
-        duration_note = "Plan 30 días (2 semanas)"
-    elif plan.duration_days >= 15:
-        duration_note = "Plan 15 días (1 semana)"
-    else:
-        duration_note = ""
     brand = branding.primary_color
     template = _jinja_env().get_template("plan_grid.html.j2")
     return template.render(
@@ -132,11 +127,10 @@ def render_plan_html(
         brand_wash=mix_white(brand, 0.95),
         logo_data_uri=_logo_data_uri(branding),
         client_name=client_name or "Cliente",
-        duration_note=duration_note,
         target_tiles=_target_tiles(daily),
         sections=_grid_sections(plan, foods),
         daily=daily,
-        anotaciones=anotaciones(slots_in(plan)),
+        anotaciones=anotaciones(slots_in(plan), free_meal_cell(plan)),
     )
 
 

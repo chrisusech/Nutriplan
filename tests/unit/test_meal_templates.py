@@ -212,3 +212,89 @@ def test_the_selection_fits_the_schema_the_engine_expects(catalog, foods) -> Non
         assert len(day.meals) == 5
         for meal in day.meals:
             assert 1 <= len(meal.food_ids) <= 4  # el tope del schema
+
+
+def test_lunch_and_dinner_are_rice_and_potato_not_bread_and_arepa(
+    catalog, testing_allowed
+) -> None:
+    """El bug reportado: "en muchos almuerzos o cenas colocas pan o arepa".
+
+    La lista de Testing tiene arepa y pan integral (que son de desayuno) junto a
+    arroz integral, batata y maíz. El motor sabía que los cinco "podían" ir a un
+    almuerzo y los trataba como equivalentes; ahora el peso dice de quién es cada
+    comida y las principales se comen lo que se come a mediodía.
+    """
+    selector = TemplateSelector(testing_allowed, catalog, DAILY, seed=0)
+    week = selector.select_week(seed=0)
+
+    breads = {"arepa de maíz", "pan integral"}
+    served = [
+        (day, slot, food.name_es)
+        for day, meals in enumerate(week)
+        for slot in (MealSlot.LUNCH, MealSlot.DINNER)
+        for food in meals[slot].foods
+        if food.category is FoodCategory.CARB
+    ]
+    assert served, "los almuerzos y cenas llevan carbohidrato"
+    bread_meals = [(d, s.value, n) for d, s, n in served if n in breads]
+    assert not bread_meals, f"pan o arepa en comidas principales: {bread_meals}"
+
+    # Y siguen siendo el desayuno: no se les ha echado del catálogo, se les ha puesto
+    # en su sitio.
+    breakfasts = {
+        food.name_es
+        for meals in week
+        for food in meals[MealSlot.BREAKFAST].foods
+        if food.category is FoodCategory.CARB
+    }
+    assert breakfasts & breads
+
+
+def test_the_only_carb_you_have_is_the_one_you_eat(catalog, foods) -> None:
+    """El peso ORDENA, no prohíbe.
+
+    Si a un cliente solo le gusta la arepa, su almuerzo lleva arepa. Lo contrario
+    —tratar el peso como un filtro— sería dejarlo sin plan por comer lo que come.
+    """
+    only_arepa = [
+        foods[name]
+        for name in (
+            "arepa de maíz", "pechuga de pollo", "huevo entero", "yogur griego natural",
+            "aguacate", "aceite de oliva", "banano", "fresa", "avena en hojuelas",
+        )
+    ]
+    selector = TemplateSelector(only_arepa, catalog, DAILY, seed=0)  # no lanza
+    week = selector.select_week(seed=0)
+
+    lunch_carbs = {
+        food.name_es
+        for meals in week
+        for food in meals[MealSlot.LUNCH].foods
+        if food.category is FoodCategory.CARB
+    }
+    assert lunch_carbs == {"arepa de maíz"}
+
+
+def test_an_optional_component_can_actually_be_left_out(catalog, foods) -> None:
+    """"Opcional" significaba "solo si no hay nada que lo cubra" — o sea, nunca.
+
+    En cuanto existía UN candidato el componente pasaba a ser obligatorio, y el
+    plato no tenía la versión que la plantilla promete ("proteína + carbohidrato +
+    grasa OPCIONAL"). A un cliente cuya única grasa de cena es el aguacate se lo
+    servía en el almuerzo Y en la cena, y el día se pasaba de grasa sin salida.
+    """
+    allowed = [
+        foods[name]
+        for name in ("pechuga de pollo", "arroz blanco cocido", "aceite de oliva")
+    ]
+    pool = expand(catalog, allowed)[MealSlot.LUNCH]
+    assert pool, "el almuerzo tiene platos"
+
+    with_fat = [d for d in pool if any(f.category is FoodCategory.FAT for f in d.foods)]
+    without_fat = [d for d in pool if not any(
+        f.category is FoodCategory.FAT for f in d.foods
+    )]
+    assert with_fat, "la grasa existe y el plato completo se puede servir"
+    assert without_fat, "y también la versión sin ella, que es lo que 'opcional' dice"
+    assert all(d.dropped == 0 for d in with_fat)
+    assert all(d.dropped == 1 for d in without_fat)

@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Generador{% endblock %}
+{# Sólo el generador es de altura fija (sus dos columnas scrollean por separado).
+   El estado vacío no: es una tarjeta suelta que quiere el flujo normal. #}
+{% block page_class %}{% if ctx is not none %}gen-fixed{% endif %}{% endblock %}
 {% block content %}
 {% if ctx is none %}
 <div style="padding-top:60px">

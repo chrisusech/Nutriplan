@@ -19,7 +19,7 @@ plan que el solver produce es el que el validador rechaza.
 from collections.abc import Sequence
 
 from nutriplan.domain.generation_rules import CARB_GROUP, PROTEIN_GROUP
-from nutriplan.domain.models import FoodItem, MealSlot
+from nutriplan.domain.models import DayPlan, FoodItem, MacroTargets, MealSlot
 from nutriplan.domain.nutrition_config import NutritionConfig
 
 # Los dos macros que se reparten por comida. La grasa NO está: cierra a nivel de
@@ -71,6 +71,45 @@ def macro_shares(meals: Meals, config: NutritionConfig) -> dict[MealSlot, dict[s
                 else 0.0
             )
     return shares
+
+
+def daily_minus_free_meal(
+    daily: MacroTargets, config: NutritionConfig, free_slot: MealSlot | None
+) -> MacroTargets:
+    """El objetivo de un día con comida libre: NO llega al total, a propósito.
+
+    La comida libre no se cuenta, y las demás comidas de ese día mantienen su
+    objetivo de siempre. Parece que bastaría con quitar el slot de la lista, pero
+    hace justo lo contrario: `macro_shares` RENORMALIZA sobre las comidas que
+    quedan, así que las cuatro restantes se repartirían el 100% del día y el día
+    cuadraría el objetivo completo — con una comida menos y porciones más grandes.
+
+    Lo que se descuenta es el PESO de la comida libre. Y entonces la cuenta sale
+    exacta: si el almuerzo vale w_a y la comida libre w_f, con un objetivo reducido
+    de daily·(1−w_f) y un peso renormalizado de w_a/(1−w_f), el almuerzo recibe
+    daily·w_a. Su objetivo absoluto de siempre, que es lo que se pedía.
+
+    La grasa y la fibra no tienen columna en `meal_distribution` (cierran a nivel de
+    día), así que se descuentan por el peso en kcal — el mismo criterio que usa el
+    paso 2 del porcionador para repartirlas.
+    """
+    if free_slot is None:
+        return daily
+    share = config.meal_distribution.get(free_slot)
+    if share is None:  # el cliente ya no hace esa comida: no pesa nada
+        return daily
+    return MacroTargets(
+        kcal=round(daily.kcal * (1 - share.kcal), 1),
+        protein_g=round(daily.protein_g * (1 - share.protein_g), 1),
+        carb_g=round(daily.carb_g * (1 - share.carb_g), 1),
+        fat_g=round(daily.fat_g * (1 - share.kcal), 1),
+        fiber_g=round(daily.fiber_g * (1 - share.kcal), 1),
+    )
+
+
+def free_meal_slot_of(day: DayPlan) -> MealSlot | None:
+    """La comida libre de este día, si la tiene."""
+    return next((m.slot for m in day.meals if m.is_free_meal), None)
 
 
 def flat_shares(config: NutritionConfig) -> dict[MealSlot, dict[str, float]]:

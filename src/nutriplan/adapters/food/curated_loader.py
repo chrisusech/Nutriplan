@@ -14,7 +14,13 @@ from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot, UnitGranularity
+from nutriplan.domain.models import (
+    MAX_SLOT_WEIGHT,
+    FoodCategory,
+    FoodItem,
+    MealSlot,
+    UnitGranularity,
+)
 
 _NAMESPACE = uuid5(NAMESPACE_URL, "nutriplan/foods")
 
@@ -36,6 +42,25 @@ def _semicolons(row: dict[str, str], key: str) -> list[str]:
     return [part.strip() for part in _text(row, key).split(";") if part.strip()]
 
 
+def _meal_slots(row: dict[str, str]) -> tuple[list[MealSlot], dict[MealSlot, int]]:
+    """`almuerzo:3;cena:3` → en qué comidas va, y cuánto encaja en cada una.
+
+    El peso es OPCIONAL: `desayuno` a secas vale lo mismo que antes
+    (DEFAULT_SLOT_WEIGHT), así que las filas que no lo declaran no cambian de
+    comportamiento. Se clampa a 1..MAX_SLOT_WEIGHT porque un `:30` de un dedo
+    torcido, con el coste del selector, dominaría la elección de todos los platos.
+    """
+    slots: list[MealSlot] = []
+    weights: dict[MealSlot, int] = {}
+    for token in _semicolons(row, "meal_slots"):
+        name, _, raw_weight = token.partition(":")
+        slot = MealSlot(name.strip())
+        slots.append(slot)
+        if raw_weight.strip():
+            weights[slot] = min(max(int(raw_weight), 1), MAX_SLOT_WEIGHT)
+    return slots, weights
+
+
 def load_curated_foods(csv_path: Path) -> list[FoodItem]:
     foods: list[FoodItem] = []
     with csv_path.open(encoding="utf-8", newline="") as fh:
@@ -49,9 +74,10 @@ def load_curated_foods(csv_path: Path) -> list[FoodItem]:
             step = _number(row, "portion_step_g")
             if step is not None:
                 optional["portion_step_g"] = step
-            slots = _semicolons(row, "meal_slots")
+            slots, slot_weights = _meal_slots(row)
             if slots:
-                optional["meal_slots"] = [MealSlot(s) for s in slots]
+                optional["meal_slots"] = slots
+                optional["slot_weights"] = slot_weights
 
             foods.append(
                 FoodItem(
