@@ -4,11 +4,42 @@ Vive en el dominio porque el motor de cálculo depende de su forma; el YAML en
 sí se carga en un adaptador detrás del puerto ConfigProvider.
 """
 
-from typing import Self
+from collections.abc import Sequence
+from typing import Any, Self
 
 from pydantic import BaseModel, Field, model_validator
 
 from nutriplan.domain.models import ActivityLevel, Goal, MealSlot, Sex
+
+# Las comidas que ningún plan puede quitar. Los snacks sí son opcionales: hay
+# clientes de cuatro comidas, y de tres.
+CORE_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
+
+MACRO_COLUMNS = ("kcal", "protein_g", "carb_g")
+
+
+class SlotShare(BaseModel):
+    """Cuánto del día vale una comida, MACRO A MACRO.
+
+    Un solo porcentaje por comida no describe ninguna comida real: el desayuno
+    lleva mucho carbohidrato y poca proteína, la cena al revés. Con un peso único,
+    el desayuno de un cliente sin lácteos (huevos y punto) tenía que aportar 30 g
+    de proteína — cinco huevos —, así que el reparador recortaba y el desayuno se
+    quedaba corto de todos modos.
+
+    Un escalar en el YAML sigue valiendo: significa el mismo peso para los tres.
+    """
+
+    kcal: float = Field(gt=0)
+    protein_g: float = Field(ge=0)
+    carb_g: float = Field(ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_scalar(cls, value: Any) -> Any:
+        if isinstance(value, int | float):
+            return {"kcal": value, "protein_g": value, "carb_g": value}
+        return value
 
 
 class Tolerances(BaseModel):
@@ -50,7 +81,7 @@ class NutritionConfig(BaseModel):
     kcal_floor: dict[Sex, float]
     carb_floor_g_per_kg: float = Field(default=0.5, ge=0)
     fiber: FiberConfig = FiberConfig()
-    meal_distribution: dict[MealSlot, float]
+    meal_distribution: dict[MealSlot, SlotShare]
     tolerances: Tolerances
     portioning: PortioningConfig
     generation: GenerationConfig = GenerationConfig()
@@ -74,9 +105,49 @@ class NutritionConfig(BaseModel):
                     raise ValueError(
                         f"{name}[{goal.value}] = {value} fuera del rango [{lo}, {hi}]"
                     )
-        if set(self.meal_distribution) != set(MealSlot):
-            raise ValueError("meal_distribution debe cubrir los 5 slots")
-        total = sum(self.meal_distribution.values())
-        if abs(total - 1.0) > 1e-9:
-            raise ValueError(f"meal_distribution debe sumar 1.0 (suma {total})")
+        # El reparto puede tener MENOS de cinco comidas (un cliente come cuatro),
+        # pero nunca puede quedarse sin desayuno, almuerzo o cena: los snacks son
+        # lo único opcional.
+        missing = [s.value for s in CORE_SLOTS if s not in self.meal_distribution]
+        if missing:
+            raise ValueError(f"meal_distribution debe incluir {', '.join(missing)}")
+        for macro in MACRO_COLUMNS:
+            total = sum(getattr(s, macro) for s in self.meal_distribution.values())
+            if abs(total - 1.0) > 1e-6:
+                raise ValueError(
+                    f"meal_distribution[{macro}] debe sumar 1.0 (suma {total})"
+                )
         return self
+
+    def kcal_shares(self) -> dict[MealSlot, float]:
+        """El peso de cada comida en las kcal del día."""
+        return {slot: share.kcal for slot, share in self.meal_distribution.items()}
+
+    def for_slots(self, slots: Sequence[MealSlot]) -> "NutritionConfig":
+        """La misma estrategia para un cliente que come SOLO estas comidas.
+
+        Quitar el snack de la tarde no adelgaza el día: su cuota se reparte entre
+        las comidas que quedan, en proporción a lo que ya pesaban. Cada macro se
+        renormaliza por separado.
+        """
+        keep = [s for s in self.meal_distribution if s in set(slots)]
+        if not keep:
+            raise ValueError("Un plan necesita al menos una comida")
+        totals = {
+            macro: sum(getattr(self.meal_distribution[s], macro) for s in keep)
+            for macro in MACRO_COLUMNS
+        }
+        distribution = {
+            slot: SlotShare(
+                **{
+                    macro: (
+                        getattr(self.meal_distribution[slot], macro) / totals[macro]
+                        if totals[macro] > 0
+                        else 0.0
+                    )
+                    for macro in MACRO_COLUMNS
+                }
+            )
+            for slot in keep
+        }
+        return self.model_copy(update={"meal_distribution": distribution})

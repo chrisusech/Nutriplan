@@ -201,6 +201,27 @@ def test_goal_toggle_persists_and_rerenders(offline) -> None:
     assert "Superávit" in client.get("/generador", params={"cliente": cid}).text
 
 
+def test_the_trainer_can_take_a_snack_out_and_the_plan_has_four_meals(offline) -> None:
+    """Un cliente que come cuatro veces no recibe un plan de cinco.
+
+    Y las comidas grandes no se pueden quitar: un plan sin cena no es un plan.
+    """
+    client, _ = offline
+    cid = _create_client(client)
+
+    response = client.post(f"/generador/{cid}/comidas", data={"slot": "snack_pm"})
+    assert response.status_code == 200
+
+    cycle_id = _generate_and_wait(client, cid)
+    plan = client.get(f"/planes/{cycle_id}").text
+    assert "Snack PM" not in plan
+
+    # La cena no se puede apagar: la ruta lo ignora y el plan la conserva.
+    client.post(f"/generador/{cid}/comidas", data={"slot": "cena"})
+    page = client.get("/generador", params={"cliente": cid}).text
+    assert "Cena" in page
+
+
 def test_macro_override_marks_targets_as_overridden(offline) -> None:
     client, _ = offline
     cid = _create_client(client)
@@ -662,3 +683,14 @@ def test_password_reset_flow(offline) -> None:
         follow_redirects=False,
     )
     assert ok.status_code == 303
+
+
+def test_taking_a_snack_out_after_the_plan_exists_does_not_break_the_page(offline) -> None:
+    """El plan viejo (5 comidas) se sigue pudiendo abrir con el cliente ya en 4."""
+    client, _ = offline
+    cid = _create_client(client)
+    _generate_and_wait(client, cid)
+
+    response = client.post(f"/generador/{cid}/comidas", data={"slot": "snack_pm"})
+    assert response.status_code == 200
+    assert client.get("/generador", params={"cliente": cid}).status_code == 200

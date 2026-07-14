@@ -20,7 +20,14 @@ from nutriplan.container import Container
 from nutriplan.domain.calculation import compute_targets as compute_targets_domain
 from nutriplan.domain.errors import CalculationError
 from nutriplan.domain.food_filter import allowed_foods, forbidden_tags
-from nutriplan.domain.models import Client, Goal, MacroFormula, NutritionTargets
+from nutriplan.domain.models import (
+    CORE_MEAL_SLOTS,
+    Client,
+    Goal,
+    MacroFormula,
+    MealSlot,
+    NutritionTargets,
+)
 from nutriplan.ports.job_repository import JobKind, JobStatus
 from nutriplan.ui.web import presenter
 from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
@@ -62,7 +69,7 @@ async def _generator_context(request: Request, session: AsyncSession,
 
     container = container_of(request)
     repos = repos_of(request, session)
-    config = container.config_provider.get_nutrition_config()
+    config = container.nutrition_config(client)
     targets = await _fresh_targets(request, session, client)
     phase = presenter.parse_plan_phase(fase)
 
@@ -240,7 +247,7 @@ async def set_macros(request: Request, session: Annotated[AsyncSession, Depends(
     container = container_of(request)
     repos = repos_of(request, session)
     client = await _get_client(request, session, cid)
-    config = container.config_provider.get_nutrition_config()
+    config = container.nutrition_config(client)
     existing = await repos.targets.latest_for_client(client.id)
     formula = existing.formula if existing else None
     base = compute_targets_domain(client, config, formula=formula).daily.model_dump()
@@ -260,6 +267,29 @@ async def toggle_food(request: Request, session: Annotated[AsyncSession, Depends
     liked.symmetric_difference_update({fid})
     client = client.model_copy(update={"liked_food_ids": sorted(liked, key=str)})
     await repos.clients.update(client)
+    return await _rerender(request, session, client)
+
+
+@router.post("/generador/{cid}/comidas", response_class=HTMLResponse)
+async def toggle_meal(request: Request,
+                      session: Annotated[AsyncSession, Depends(db_session)],
+                      cid: str, slot: Annotated[str, Form()]) -> HTMLResponse:
+    """Enciende o apaga un snack. Los macros se recalculan sobre las comidas que quedan."""
+    repos = repos_of(request, session)
+    client = await _get_client(request, session, cid)
+    try:
+        chosen = MealSlot(slot)
+    except ValueError:
+        return await _rerender(request, session, client)
+    if chosen in CORE_MEAL_SLOTS:  # desayuno, almuerzo y cena no se quitan
+        return await _rerender(request, session, client)
+
+    slots = set(client.meal_slots)
+    slots.symmetric_difference_update({chosen})
+    client = client.model_copy(update={"meal_slots": [s for s in MealSlot if s in slots]})
+    await repos.clients.update(client)
+    # Los objetivos por comida cambian con el número de comidas: se recalculan ya.
+    await _fresh_targets(request, session, client)
     return await _rerender(request, session, client)
 
 
@@ -315,7 +345,7 @@ async def _launch_generation(request: Request, session: AsyncSession,
     container = container_of(request)
     repos = repos_of(request, session)
     targets = await _fresh_targets(request, session, client)
-    config = container.config_provider.get_nutrition_config()
+    config = container.nutrition_config(client)
 
     banned = set(await repos.clients.list_banned_food_ids(client.id))
     allowed = allowed_foods(

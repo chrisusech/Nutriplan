@@ -11,6 +11,7 @@ from nutriplan.adapters.llm.template_selector import (
     TemplateSelector,
 )
 from nutriplan.adapters.meals.template_store import load_meal_catalog
+from nutriplan.domain.macro_split import macro_shares
 from nutriplan.domain.meal_template import (
     Component,
     MealCatalog,
@@ -162,6 +163,21 @@ def test_testing_no_longer_eats_the_same_yogurt_seven_days(catalog, testing_allo
             assert worst <= 5, f"{slot.value}: {counts}"
 
 
+def test_no_snack_is_ever_a_hard_boiled_egg(catalog, foods) -> None:
+    """El huevo duro no es un snack, y ningún plato de snack lo lleva.
+
+    Se comprueba sobre el catálogo ENTERO, no sobre una lista concreta: la puerta
+    está cerrada en el dato (el huevo ya no declara los slots de snack), así que
+    ningún cliente puede acabar con uno a media mañana.
+    """
+    pools = expand(catalog, list(foods.values()))
+    for slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM):
+        assert pools[slot], f"{slot.value} se quedó sin platos"
+        for dish in pools[slot]:
+            assert not any("huevo" in f.tags for f in dish.foods), dish.name
+            assert len(dish.foods) <= 2, f"{dish.name}: un snack no es una comida"
+
+
 def test_testing_gets_a_real_breakfast_not_yogurt_and_bread(
     catalog, testing_allowed, nutrition_config
 ) -> None:
@@ -170,7 +186,12 @@ def test_testing_gets_a_real_breakfast_not_yogurt_and_bread(
     for day in sel.select_week(seed=0):
         meals = [(slot, list(dish.foods)) for slot, dish in day.items()]
         solved = solve_day_portions(meals, DAILY, nutrition_config)
-        assert validate_day(solved, DAILY, nutrition_config) == []
+        # Con el reparto REAL: un snack de solo fruta no debe proteína, y el
+        # almuerzo lleva la que el snack no lleva.
+        deviations = validate_day(
+            solved, DAILY, nutrition_config, shares=macro_shares(meals, nutrition_config)
+        )
+        assert deviations == []
 
 
 def test_a_client_with_nothing_to_cook_raises_instead_of_guessing(catalog, foods) -> None:

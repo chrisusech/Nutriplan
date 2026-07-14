@@ -14,11 +14,13 @@ tamaño par, el índice `(2·día + offset) % len` es constante toda la semana).
 """
 
 from collections import Counter
+from math import ceil
 from typing import TypeVar
 
 from pydantic import BaseModel
 
 from nutriplan.domain.errors import LLMError
+from nutriplan.domain.generation_rules import slot_availability
 from nutriplan.domain.meal_template import (
     Dish,
     MealCatalog,
@@ -27,18 +29,21 @@ from nutriplan.domain.meal_template import (
 )
 from nutriplan.domain.models import FoodCategory, FoodItem, MacroTargets, MealSlot
 from nutriplan.domain.nutrition_config import NutritionConfig
-from nutriplan.domain.portioning import fits_protein
+from nutriplan.domain.portioning import fits_protein, usable_in_slot
 
 T = TypeVar("T", bound=BaseModel)
 
-_FALLBACK_SHARE = {
-    MealSlot.BREAKFAST: 0.25,
-    MealSlot.SNACK_AM: 0.10,
-    MealSlot.LUNCH: 0.30,
-    MealSlot.SNACK_PM: 0.10,
-    MealSlot.DINNER: 0.25,
+# Peso de cada comida en la PROTEÍNA del día. Solo se usa si no hay config.
+_FALLBACK_PROTEIN_SHARE = {
+    MealSlot.BREAKFAST: 0.22,
+    MealSlot.SNACK_AM: 0.05,
+    MealSlot.LUNCH: 0.36,
+    MealSlot.SNACK_PM: 0.05,
+    MealSlot.DINNER: 0.32,
 }
 
+# El orden del día. Los slots que el cliente NO come no salen del plan: el motor
+# recorre los que su reparto declara.
 SLOT_ORDER = [
     MealSlot.BREAKFAST,
     MealSlot.SNACK_AM,
@@ -50,6 +55,11 @@ SLOT_ORDER = [
 # Pesos del coste. El del mismo día es una prohibición de facto: repetir un
 # alimento dos veces en una jornada es peor que cualquier otra cosa.
 W_SAME_DAY = 10_000.0
+# Pasarse del tope de repeticiones que `check_variety` va a exigir. Es casi una
+# prohibición: sin este término, el motor no conoce la regla por la que lo
+# evalúan, y con dos carbos de desayuno para siete días hacía 5/2 en vez de 4/3
+# —una sola repetición de más— y la generación fallaba entera.
+W_OVER_CAP = 5_000.0
 W_TEMPLATE = 120.0   # repetir el mismo plato en la semana
 W_FOOD_WEEK = 40.0   # repetir el mismo alimento en la semana, CRUZANDO SLOTS
 W_ANCHOR_DAY = 80.0  # el ancla proteica del día, repetida en otro slot
@@ -78,22 +88,45 @@ class TemplateSelector:
         seed: int = 0,
         config: NutritionConfig | None = None,
     ) -> None:
-        share = dict(config.meal_distribution) if config else _FALLBACK_SHARE
-        targets = {slot: daily.protein_g * share[slot] for slot in MealSlot}
+        share = (
+            {s: sh.protein_g for s, sh in config.meal_distribution.items()}
+            if config
+            else _FALLBACK_PROTEIN_SHARE
+        )
+        # Las comidas del cliente: las que su reparto declara, en el orden del día.
+        self.slots = [s for s in SLOT_ORDER if s in share]
+        targets = {slot: daily.protein_g * share[slot] for slot in self.slots}
 
         def admissible(food: FoodItem, slot: MealSlot) -> bool:
-            return fits_protein(food, targets[slot])
+            return fits_protein(food, targets.get(slot, 0.0))
 
         self.pools = expand(catalog, allowed, admissible=admissible)
-        empty = [s.value for s in SLOT_ORDER if not self.pools[s]]
+        empty = [s.value for s in self.slots if not self.pools[s]]
         if empty:
             raise InsufficientDishes(
                 "No hay ningún plato que se pueda cocinar con los alimentos de este "
                 f"cliente en: {', '.join(empty)}."
             )
-        self.warnings = pool_health(self.pools)
+        self.warnings = pool_health({s: self.pools[s] for s in self.slots})
         self._seed = seed
         self.calls = 0
+
+        # El tope por slot que `check_variety` va a aplicar. El motor lo usa para
+        # no pasarse: si no lo conoce, produce planes que la validación rechaza.
+        gen = config.generation if config else None
+        self._cap = {
+            FoodCategory.PROTEIN: gen.max_protein_repeats_per_week if gen else 4,
+            FoodCategory.DAIRY: gen.max_protein_repeats_per_week if gen else 4,
+            FoodCategory.CARB: gen.max_carb_repeats_per_week if gen else 4,
+            FoodCategory.FRUIT: gen.max_carb_repeats_per_week if gen else 4,
+        }
+        # Cuántas opciones REALES tiene el cliente en cada slot — las mismas que
+        # cuenta `check_variety`, que es quien lo va a juzgar. Con dos carbos de
+        # desayuno para siete días, repetir cuatro veces es inevitable y no hay que
+        # penalizarlo.
+        self._options = slot_availability(
+            allowed, usable_in_slot(daily, config) if config else None
+        )
 
     async def extract(self, *, system: str, text: str, schema: type[T], model: str) -> T:
         raise LLMError(
@@ -104,9 +137,20 @@ class TemplateSelector:
     def pop_usage(self) -> dict[str, int]:
         return {"input_tokens": 0, "output_tokens": 0, "calls": self.calls}
 
+    def _cap_for(self, slot: MealSlot, category: FoodCategory, ndays: int) -> int:
+        """El techo que `check_variety` va a aplicar a este alimento en este slot.
+
+        Si el cliente tiene menos opciones que días, repetir es INEVITABLE y el
+        techo se relaja: con dos carbos de desayuno y siete días, alguno sale
+        cuatro veces y no es culpa del motor.
+        """
+        options = self._options.get((slot, category), 0) or 1
+        return max(self._cap.get(category, 4), ceil(ndays / options))
+
     def select_week(self, *, seed: int, ndays: int = 7) -> list[dict[MealSlot, Dish]]:
         used_template: Counter[str] = Counter()
         used_food: Counter[str] = Counter()  # CRUZA SLOTS: aquí muere el yogur 14×
+        used_in_slot: Counter[tuple[str, MealSlot]] = Counter()  # como cuenta el validador
         last_day: dict[str, int] = {}
         week: list[dict[MealSlot, Dish]] = []
 
@@ -115,11 +159,11 @@ class TemplateSelector:
             today_anchors: set[str] = set()
             chosen: dict[MealSlot, Dish] = {}
 
-            for slot in SLOT_ORDER:
+            for slot in self.slots:
                 pool = self.pools[slot]
 
                 def cost(dish: Dish, *, _today=today_foods, _anchors=today_anchors,
-                         _day=day) -> float:
+                         _day=day, _slot=slot) -> float:
                     ids = {str(fid) for fid in dish.food_ids}
                     total = W_SAME_DAY * len(ids & _today)
                     total += W_TEMPLATE * used_template[dish.template_id] ** 2
@@ -132,6 +176,11 @@ class TemplateSelector:
                         total += W_FOOD_WEEK * used_food[fid] ** 2
                         gap = _day - last_day.get(fid, -99)
                         total += W_RECENCY * max(0, 3 - gap)
+                        # No pasarse del tope con el que lo van a validar.
+                        cap = self._cap_for(_slot, food.category, ndays)
+                        over = used_in_slot[(fid, _slot)] + 1 - cap
+                        if over > 0:
+                            total += W_OVER_CAP * over
                     return total
 
                 # El término modular SOLO desempata platos de coste IDÉNTICO, y el
@@ -152,6 +201,7 @@ class TemplateSelector:
                 for food in best.foods:
                     fid = str(food.id)
                     used_food[fid] += 1
+                    used_in_slot[(fid, slot)] += 1
                     last_day[fid] = day
                     today_foods.add(fid)
 
@@ -171,7 +221,7 @@ class TemplateSelector:
                         "food_ids": [str(fid) for fid in day[slot].food_ids],
                         "free_salad": day[slot].free_salad,
                     }
-                    for slot in SLOT_ORDER
+                    for slot in self.slots
                 ],
             }
             for i, day in enumerate(week)

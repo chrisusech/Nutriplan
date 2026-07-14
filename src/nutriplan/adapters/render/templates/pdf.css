@@ -201,7 +201,12 @@ table.grid th.corner { width: 54px; background: transparent; }
 
 table.grid td {
   background: var(--brand-soft);
-  vertical-align: top;
+  /* Al FONDO, y no por gusto: es lo ÚNICO que alinea los macros entre columnas en
+   * WeasyPrint. Ni el flex con `height: 100%`, ni `position: absolute` contra la
+   * celda, ni fijarle la altura a la fila funcionan dentro de una tabla — se
+   * probaron los cuatro. Alineando el contenido abajo, la última línea de cada
+   * celda (los macros) cae a la misma altura en los siete días. */
+  vertical-align: bottom;
   padding: 6px 3px;
   border-radius: 5px;
   text-align: center;
@@ -232,6 +237,8 @@ table.grid tr:nth-child(even) td { background: var(--brand-wash); }
   font-style: italic;
   margin-bottom: 2px;
 }
+/* La última línea de la celda. Con el contenido alineado abajo, los macros de las
+ * siete columnas quedan a la misma altura y el plan se lee de un vistazo. */
 .macros {
   display: block;
   font-size: 6pt;
@@ -242,6 +249,9 @@ table.grid tr:nth-child(even) td { background: var(--brand-wash); }
   padding-top: 3px;
   border-top: 1px solid rgba(0, 0, 0, .06);
 }
+/* Dos líneas SIEMPRE (kcal / P·C·G): si una celda partiera los macros en dos y
+ * otra no, volverían a desalinearse por una línea. */
+.m-kcal, .m-pcg { display: block; white-space: nowrap; }
 
 tr.day-totals th.slot { background: transparent; }
 tr.day-totals td {

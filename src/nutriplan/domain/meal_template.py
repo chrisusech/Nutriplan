@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from itertools import product
 from uuid import UUID
 
+from nutriplan.domain.generation_rules import SLOT_STRUCTURE
 from nutriplan.domain.models import FoodCategory, FoodItem, MealSlot, UnitGranularity
 
 # Tope de componentes por plato. No es una preferencia: `build_selection_schema`
@@ -249,7 +250,7 @@ def pool_health(
     de producir yogur siete días en silencio.
     """
     warnings: list[PoolWarning] = []
-    for slot in MealSlot:
+    for slot in pools:  # solo las comidas que el cliente come
         count = len(list(pools.get(slot, ())))
         if count < minimum:
             warnings.append(PoolWarning(slot=slot, dish_count=count, minimum=minimum))
@@ -277,6 +278,16 @@ def validate_catalog(catalog: MealCatalog, universe: Sequence[FoodItem]) -> None
                 f"Plato '{template.id}': {len(template.components)} componentes; "
                 f"el esquema de selección solo admite {MAX_COMPONENTS} alimentos por comida."
             )
+        # Y tampoco puede pasarse del tope de SU comida: un snack de tres alimentos
+        # carga sin protestar y luego `validate_selection_structure` lo rechaza a
+        # mitad de la generación, que agota los reintentos y falla el plan entero.
+        for slot in template.slots:
+            allowed_items = SLOT_STRUCTURE[slot].max_items
+            if len(template.components) > allowed_items:
+                raise MealCatalogError(
+                    f"Plato '{template.id}' en {slot.value}: {len(template.components)} "
+                    f"componentes; esa comida admite {allowed_items}."
+                )
         for component in template.components:
             if component.role not in ROLE_CATEGORIES:
                 raise MealCatalogError(

@@ -86,6 +86,7 @@ class SqlClientRepository:
             activity_level=c.activity_level.value,
             restrictions=list(c.restrictions),
             notes=c.notes,
+            meal_slots=[s.value for s in c.meal_slots],
             preferences=[
                 ClientFoodPreferenceRow(tenant_id=self._tenant, client_id=c.id, food_id=fid)
                 for fid in c.liked_food_ids
@@ -108,6 +109,8 @@ class SqlClientRepository:
             liked_food_ids=[p.food_id for p in row.preferences],
             restrictions=list(row.restrictions or []),
             notes=row.notes,
+            # NULL = cliente de antes de que esto se pudiera elegir: las cinco.
+            meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
         )
 
     async def add(self, client: Client) -> None:
@@ -147,6 +150,7 @@ class SqlClientRepository:
         row.activity_level = client.activity_level.value
         row.restrictions = list(client.restrictions)
         row.notes = client.notes
+        row.meal_slots = [s.value for s in client.meal_slots]
         # borrar preferencias viejas antes de insertar (unique client_id+food_id)
         row.preferences.clear()
         await self._s.flush()

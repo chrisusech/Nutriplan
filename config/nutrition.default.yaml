@@ -37,12 +37,26 @@ carb_floor_g_per_kg: 0.5               # guarda de imposibilidad, no de opinión
 fiber:
   g_per_1000_kcal: 14                  # estándar DRI
   min_fruit_servings: 2                # fruta al día (digestión)
-meal_distribution:                     # debe sumar 1.0
-  desayuno: 0.25
-  snack_am: 0.10
-  almuerzo: 0.30
-  snack_pm: 0.10
-  cena: 0.25
+# Cuánto del día vale cada comida, MACRO A MACRO (cada columna suma 1.0).
+#
+# Un solo porcentaje por comida no describe ninguna comida real: el desayuno lleva
+# mucho carbohidrato y poca proteína; la cena, al revés. Y un snack NO es una
+# comida en pequeño — es saciedad: una fruta, un yogur, una manzana con crema de
+# almendras. Con el 10% de proteína que tenían antes, el motor tenía que meterles
+# una fuente proteica seria y acababa poniendo huevo duro a media mañana.
+#
+# Lo que el snack no lleva no se pierde: `macro_split.macro_shares` reparte cada
+# macro solo entre las comidas que tienen fuente, así que la proteína de un snack
+# de solo fruta la absorben desayuno, almuerzo y cena.
+#
+# La grasa no está: cierra a nivel de día y se reparte entre los ítems de grasa
+# (ver portioning.py).
+meal_distribution:
+  desayuno: {kcal: 0.27,  protein_g: 0.22, carb_g: 0.30}
+  snack_am: {kcal: 0.075, protein_g: 0.05, carb_g: 0.10}
+  almuerzo: {kcal: 0.32,  protein_g: 0.36, carb_g: 0.30}
+  snack_pm: {kcal: 0.075, protein_g: 0.05, carb_g: 0.10}
+  cena:     {kcal: 0.26,  protein_g: 0.32, carb_g: 0.20}
 tolerances:                            # desviación aceptada al validar
   kcal: 0.08
   protein_g: 0.10

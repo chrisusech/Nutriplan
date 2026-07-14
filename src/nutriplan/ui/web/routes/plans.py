@@ -126,14 +126,19 @@ async def review_plan(request: Request,
         targets = await repos.targets.latest_for_client(client.id)
     if targets is None:
         return RedirectResponse("/planes", status_code=303)
-    config = container.config_provider.get_nutrition_config()
+    config = container.nutrition_config(client)
 
     phases = presenter.plan_phases(cycle)
     phase = _parse_phase(fase)
     if phase not in phases:
         phase = phases[0]
 
-    grid = presenter.week_grid(cycle, targets, config, phase)
+    # Los alimentos hacen falta para saber CON QUÉ reparto se porcionó cada día:
+    # sin ellos, un día con snack de solo fruta se pintaría como "no cuadra".
+    all_ids = {item.food_id for d in cycle.days for m in d.meals
+               for item in m.items if item.food_id}
+    foods_map = {f.id: f for f in await repos.foods.get_by_ids(sorted(all_ids, key=str))}
+    grid = presenter.week_grid(cycle, targets, config, phase, foods=foods_map)
     fit_days = sum(1 for cell in grid if cell["fit"])
     approved = cycle.status == PlanStatus.APPROVED
     goal_meta = presenter.GOAL_META[client.goal]
@@ -256,7 +261,10 @@ async def edit_portions(request: Request,
 
     meal.items = new_items
     container = container_of(request)
-    config = container.config_provider.get_nutrition_config()
+    client = await repos.clients.get(cycle.client_id)
+    if client is None:
+        return RedirectResponse("/planes", status_code=303)
+    config = container.nutrition_config(client)
     targets = await repos.targets.latest_for_client(cycle.client_id)
     if targets is not None:
         all_ids = {
@@ -312,7 +320,7 @@ async def swap_food(request: Request,
         return RedirectResponse("/generador", status_code=303)
 
     container = container_of(request)
-    config = container.config_provider.get_nutrition_config()
+    config = container.nutrition_config(client)
     targets = await repos.targets.latest_for_client(cycle.client_id)
     if targets is None:
         return RedirectResponse(f"/generador?cliente={cliente}&editar=1", status_code=303)
@@ -397,7 +405,10 @@ async def remove_food(request: Request,
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 
     container = container_of(request)
-    config = container.config_provider.get_nutrition_config()
+    client = await repos.clients.get(cycle.client_id)
+    if client is None:
+        return RedirectResponse("/generador", status_code=303)
+    config = container.nutrition_config(client)
     targets = await repos.targets.latest_for_client(cycle.client_id)
     if targets is None:
         return RedirectResponse(f"/generador?cliente={cliente}&editar=1", status_code=303)

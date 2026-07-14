@@ -11,6 +11,7 @@ from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer, render_plan_html
 from nutriplan.adapters.render.view import natural_units, portion_text
 from nutriplan.domain.errors import RenderError
+from nutriplan.domain.models import MealSlot
 
 
 @pytest.fixture(scope="module")
@@ -29,6 +30,32 @@ def test_html_is_deterministic(fixed_plan) -> None:
     a = render_plan_html(plan, branding, foods)
     b = render_plan_html(plan, branding, foods)
     assert a == b
+
+
+def test_the_notes_say_what_the_numbers_do_cooked_not_raw(fixed_plan) -> None:
+    """El catálogo lleva macros de alimento COCIDO; la nota decía "pesa en CRUDO".
+
+    Quien pesara 120 g de pollo crudo se comía ~85 g cocidos: un 30% menos de
+    proteína de la que el plan le prometía. La nota ahora dice lo que el motor
+    calcula.
+    """
+    plan, foods, branding = fixed_plan
+    html = render_plan_html(plan, branding, foods, client_name="Cliente Ejemplo")
+    assert "COCIDO" in html
+    assert "CRUDO" not in html
+
+
+def test_the_notes_count_the_meals_the_plan_really_has() -> None:
+    """A quien recibe cuatro comidas no se le promete un plan de cinco."""
+    plan, foods, branding = build_fixed_plan()  # propio: no se toca el del módulo
+    html = render_plan_html(plan, branding, foods)
+    assert "El plan consta de 5 comidas" in html
+
+    for day in plan.days:  # el mismo plan, sin snack PM
+        day.meals = [m for m in day.meals if m.slot is not MealSlot.SNACK_PM]
+    html = render_plan_html(plan, branding, foods)
+    assert "El plan consta de 4 comidas: desayuno, snack AM, almuerzo y cena." in html
+    assert "Snack PM" not in html  # tampoco hay fila vacía en la rejilla
 
 
 def test_html_contains_business_format(fixed_plan) -> None:

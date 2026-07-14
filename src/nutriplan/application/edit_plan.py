@@ -6,7 +6,7 @@ from uuid import UUID
 from nutriplan.domain import meal_affinity
 from nutriplan.domain.errors import GenerationError
 from nutriplan.domain.food_filter import allowed_foods
-from nutriplan.domain.generation_rules import PROTEIN_GROUP, SLOT_STRUCTURE
+from nutriplan.domain.generation_rules import SLOT_STRUCTURE
 from nutriplan.domain.models import (
     Client,
     DayPlan,
@@ -147,16 +147,10 @@ async def resolve_day(
         raise GenerationError("El día no tiene alimentos porcionables")
 
     free_flags = {m.slot: m.free_salad for m in day.meals}
-    relaxed: frozenset[MealSlot] = frozenset()
-    if edited_slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM):
-        meal = next((m for m in day.meals if m.slot is edited_slot), None)
-        if meal and not any(
-            foods[item.food_id].category in PROTEIN_GROUP
-            for item in meal.items
-            if item.food_id and item.grams and item.grams > 0
-        ):
-            relaxed = frozenset({edited_slot})
 
+    # Un slot sin fuente de proteína (un snack de solo fruta) ya no debe proteína:
+    # `macro_split.macro_shares` le da cuota 0 y la reparte entre las comidas que
+    # sí la llevan. Antes había que decirle al reparador que la relajara a mano.
     if _needs_full_solve(day):
         solved = solve_day_portions(meals_input, targets.daily, config)
     else:
@@ -167,7 +161,6 @@ async def resolve_day(
             targets.daily,
             config,
             locked=locked,
-            protein_relaxed_slots=relaxed,
         )
         solved = []
         for slot, slot_foods in meals_input:

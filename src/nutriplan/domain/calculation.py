@@ -30,7 +30,7 @@ from nutriplan.domain.models import (
     NutritionTargets,
     Sex,
 )
-from nutriplan.domain.nutrition_config import NutritionConfig
+from nutriplan.domain.nutrition_config import NutritionConfig, SlotShare
 
 KCAL_PER_G_PROTEIN = 4.0
 KCAL_PER_G_CARB = 4.0
@@ -152,18 +152,22 @@ def apply_overrides(daily: MacroTargets, overrides: dict[str, float]) -> MacroTa
 
 
 def split_per_meal(
-    daily: MacroTargets, distribution: dict[MealSlot, float]
+    daily: MacroTargets, distribution: dict[MealSlot, SlotShare]
 ) -> dict[MealSlot, MacroTargets]:
-    """Reparto por comida: cada macro se multiplica por el % del slot."""
+    """Reparto por comida: cada macro tiene su propio peso.
+
+    La grasa y la fibra no lo tienen (la grasa cierra a nivel de día, donde hay
+    fuente): van por el peso en kcal del slot.
+    """
     return {
         slot: MacroTargets(
-            kcal=round(daily.kcal * pct, 1),
-            protein_g=round(daily.protein_g * pct, 1),
-            carb_g=round(daily.carb_g * pct, 1),
-            fat_g=round(daily.fat_g * pct, 1),
-            fiber_g=round(daily.fiber_g * pct, 1),
+            kcal=round(daily.kcal * share.kcal, 1),
+            protein_g=round(daily.protein_g * share.protein_g, 1),
+            carb_g=round(daily.carb_g * share.carb_g, 1),
+            fat_g=round(daily.fat_g * share.kcal, 1),
+            fiber_g=round(daily.fiber_g * share.kcal, 1),
         )
-        for slot, pct in distribution.items()
+        for slot, share in distribution.items()
     }
 
 

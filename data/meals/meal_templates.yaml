@@ -9,7 +9,7 @@
 #
 # `version` entra en compute_input_hash: si añades un plato, los planes se
 # regeneran en vez de servirse de la caché.
-version: "2026.07.13"
+version: "2026.07.14"
 
 templates:
   # ---------------------------------------------------------------- DESAYUNO --
@@ -55,32 +55,45 @@ templates:
       - {role: fat, sel: "#aguacate"}
 
   # ------------------------------------------------------------------ SNACKS --
-  # Los snacks NO tienen por qué girar en torno al lácteo. Ese era justo el
-  # problema: un cliente con un solo yogur en su lista lo comía catorce veces por
-  # semana. Fruta con crema de frutos secos, o huevo duro con fruta, son snacks
-  # perfectamente legítimos y no necesitan un lácteo.
+  # Un snack NO es una comida pequeña: es saciedad entre comidas. Una fruta, una
+  # manzana con crema de almendras, un yogur griego con fruta. Nada de huevo duro
+  # —que es lo que salía cuando el snack tenía que aportar su 10% de proteína—.
+  # Máximo DOS componentes, y la proteína que no llevan la ponen las tres comidas
+  # grandes (`macro_split.macro_shares`).
 
-  - id: lacteo_fruta
-    name: Lácteo con fruta
+  - id: fruta_sola
+    name: Fruta
     slots: [snack_am, snack_pm]
     components:
-      - {role: protein, sel: "@lacteo_magro"}
       - {role: fruit, sel: "@fruta"}
 
-  - id: lacteo_fruta_frutos_secos
-    name: Lácteo con fruta y frutos secos
+  - id: fruta_crema
+    name: Fruta con crema de frutos secos
     slots: [snack_am, snack_pm]
     components:
-      - {role: protein, sel: "@lacteo_magro"}
+      - {role: fruit, sel: "@fruta"}
+      - {role: fat, sel: "@crema_frutos_secos"}
+
+  - id: fruta_frutos_secos
+    name: Fruta con frutos secos
+    slots: [snack_am, snack_pm]
+    components:
       - {role: fruit, sel: "@fruta"}
       - {role: fat, sel: "@frutos_secos"}
 
-  - id: huevo_duro_fruta
-    name: Huevo duro con fruta
+  - id: lacteo_fruta
+    name: Yogur griego con fruta
     slots: [snack_am, snack_pm]
     components:
-      - {role: protein, sel: "@huevos"}
+      - {role: protein, sel: "@lacteo_magro"}
       - {role: fruit, sel: "@fruta"}
+
+  # La salida cuando el cliente no tiene fruta en su lista: el yogur solo.
+  - id: lacteo_solo
+    name: Yogur griego
+    slots: [snack_am, snack_pm]
+    components:
+      - {role: protein, sel: "@lacteo_magro"}
 
   - id: loncha_carbo_snack
     name: Loncha con galletas o tostada

@@ -57,6 +57,11 @@ class UnitGranularity(StrEnum):
     HALF = "half"     # aguacate, pan, banano → medias unidades permitidas
 
 
+# Las comidas que un plan no puede quitar. Los snacks sí: hay clientes de cuatro
+# comidas, y de tres.
+CORE_MEAL_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
+
+
 class Client(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -71,6 +76,23 @@ class Client(BaseModel):
     liked_food_ids: list[UUID] = []  # alimentos que le gustan
     restrictions: list[str] = []  # tags: "no_seafood","no_gluten","no_shake",...
     notes: str | None = None
+
+    # Cuántas comidas hace al día, y CUÁLES. Cinco por defecto, que es lo normal;
+    # pero quien come cuatro no tiene por qué recibir un plan de cinco. Vacío =
+    # las cinco (planes ya guardados siguen deserializando).
+    meal_slots: list[MealSlot] = []
+
+    @model_validator(mode="after")
+    def _default_meal_slots(self) -> "Client":
+        chosen = set(self.meal_slots) or set(MealSlot)
+        missing = [s for s in CORE_MEAL_SLOTS if s not in chosen]
+        if missing:
+            raise ValueError(
+                "Un plan necesita desayuno, almuerzo y cena; faltan: "
+                + ", ".join(s.value for s in missing)
+            )
+        self.meal_slots = [s for s in MealSlot if s in chosen]  # orden del día
+        return self
 
 
 # Paso de redondeo por defecto para lo que se pesa a granel. 10 g y no 5 porque

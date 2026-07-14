@@ -36,7 +36,8 @@ from nutriplan.adapters.render.docx_renderer import DocxRenderer
 from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer
 from nutriplan.config.settings import Settings, get_settings
 from nutriplan.domain.meal_template import MealCatalog
-from nutriplan.domain.models import Branding
+from nutriplan.domain.models import Branding, Client
+from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.observability.logging import configure_logging
 from nutriplan.ports.llm_client import LLMClient
 from nutriplan.ports.renderer import Renderer
@@ -97,6 +98,16 @@ class Container:
     @cached_property
     def config_provider(self) -> YamlConfigProvider:
         return YamlConfigProvider(self.settings.nutrition_config_path)
+
+    def nutrition_config(self, client: Client) -> NutritionConfig:
+        """La estrategia YA AJUSTADA a las comidas que hace este cliente.
+
+        Es el único sitio donde se aplica: todo lo demás (porcionador, validación,
+        motores, presenter) lee `config.meal_distribution`, así que recortar el
+        reparto aquí hace que el plan entero salga con las comidas del cliente sin
+        que ninguno de ellos sepa nada de esto.
+        """
+        return self.config_provider.get_nutrition_config().for_slots(client.meal_slots)
 
     @cached_property
     def meal_catalog(self) -> MealCatalog:

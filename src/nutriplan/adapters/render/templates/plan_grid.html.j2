@@ -65,10 +65,19 @@
         <tr>
           <th class="slot">{{ row.label }}<span class="time">{{ row.time }}</span></th>
           {% for cell in row.cells %}
+          {# Los macros van ANCLADOS al pie de la celda (la celda reserva la franja
+             con su padding-bottom), no colgando de la última porción: así quedan a
+             la misma altura en las siete columnas. Y van en dos líneas fijas —kcal
+             arriba, P/C/G abajo— para que la franja mida siempre lo mismo. #}
           <td>
             {% for p in cell.portions %}<span class="portion">{{ p.text }}</span>{% endfor %}
             {% for e in cell.extras %}<span class="extra">{{ e }}</span>{% endfor %}
-            {% if cell.macro_line %}<span class="macros">{{ cell.macro_line }}</span>{% endif %}
+            {% if cell.macro_line %}
+            <span class="macros">
+              <span class="m-kcal">{{ cell.kcal | round | int }} kcal</span>
+              <span class="m-pcg">P {{ cell.protein_g | round | int }} · C {{ cell.carb_g | round | int }} · G {{ cell.fat_g | round | int }}</span>
+            </span>
+            {% endif %}
           </td>
           {% endfor %}
         </tr>

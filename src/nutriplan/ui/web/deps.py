@@ -23,6 +23,7 @@ templates.env.globals.update(
     GOAL_META=presenter.GOAL_META,
     MACRO_META=presenter.MACRO_META,
     RESTRICTION_TOGGLES=presenter.RESTRICTION_TOGGLES,
+    MEAL_TOGGLES=presenter.MEAL_TOGGLES,
     ACTIVITY_LABELS=presenter.ACTIVITY_LABELS,
     SEX_LABELS=presenter.SEX_LABELS,
     DAY_SHORT=presenter.DAY_SHORT,

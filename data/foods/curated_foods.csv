@@ -1,8 +1,8 @@
 name_es,name_en,category,kcal_100g,protein_100g,carb_100g,fat_100g,fiber_100g,tags,aliases,default_unit_g,unit_granularity,unit_name,portion_step_g,portion_min_g,portion_max_g,meal_slots,is_free,free_text,source,source_ref
 pechuga de pollo,chicken breast cooked,protein,165,31,0,3.6,0,,pollo,120,grams,,10,50,,almuerzo;cena,,,USDA,171477
 pechuga de pavo,turkey breast cooked,protein,136,29.5,0,2,0,,pavo,120,grams,,10,50,,almuerzo;cena,,,USDA,174516
-huevo entero,whole egg,protein,143,12.6,0.7,9.5,0,huevo,huevo;huevos,50,whole,huevo,50,50,,desayuno;snack_am;snack_pm;cena,,,USDA,171287
-clara de huevo,egg white,protein,52,10.9,0.7,0.2,0,huevo,,33,whole,clara,33,33,,desayuno;snack_am;snack_pm;cena,,,USDA,172183
+huevo entero,whole egg,protein,143,12.6,0.7,9.5,0,huevo,huevo;huevos,50,whole,huevo,50,50,,desayuno;cena,,,USDA,171287
+clara de huevo,egg white,protein,52,10.9,0.7,0.2,0,huevo,,33,whole,clara,33,33,,desayuno;cena,,,USDA,172183
 carne de res magra,lean beef cooked,protein,187,29.5,0,6.7,0,res,carne de res;res;carne,120,grams,,10,50,,almuerzo;cena,,,USDA,173118
 carne molida de res,lean ground beef cooked,protein,214,26.6,0,11.1,0,res,,120,grams,,10,50,,almuerzo;cena,,,USDA,171795
 lomo de cerdo,pork loin cooked,protein,143,26.2,0,3.5,0,cerdo,cerdo,120,grams,,10,50,,almuerzo;cena,,,USDA,168250
@@ -94,7 +94,7 @@ pechuga de pollo desmechada,"Chicken, broilers or fryers, breast, meat only, coo
 muslo de pollo,"Chicken, broilers or fryers, thigh, meat only, cooked, roasted",protein,179,24.8,0,8.2,0,,,120,grams,,10,50,,almuerzo;cena,,,USDA,172388
 pavo molido,"Turkey, Ground, cooked",protein,203,27.4,0,10.4,0,,,120,grams,,10,50,,almuerzo;cena,,,USDA,171506
 chuleta de cerdo,"Pork, fresh, loin, center rib (chops), boneless, separable lean only, cooked, broiled",protein,216,29.5,0,10.1,0,cerdo,,120,grams,,10,50,,almuerzo;cena,,,USDA,168304
-lomo de res,"Beef, tenderloin, steak, separable lean only, trimmed to 1/8"" fat, select, raw",protein,148,22.1,0,5.9,0,res,,120,grams,,10,50,,almuerzo;cena,,,USDA,171803
+lomo de res,"Beef, tenderloin, steak, separable lean only, trimmed to 1/8"" fat, select, cooked, broiled",protein,194,29.1,0,7.8,0,res,,120,grams,,10,50,,almuerzo;cena,,,USDA,174043
 hígado de res,"Beef, variety meats and by-products, liver, cooked, braised",protein,191,29.1,5.1,5.3,0,res,,100,grams,,10,40,,almuerzo;cena,,,USDA,168626
 trucha,"Fish, trout, rainbow, farmed, cooked, dry heat",protein,168,23.8,0,7.4,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,173718
 bacalao,"Fish, cod, Atlantic, cooked, dry heat",protein,105,22.8,0,0.9,0,pescado,,120,grams,,10,50,,almuerzo;cena,,,USDA,171956
@@ -104,7 +104,7 @@ atún en aceite,"Fish, tuna, light, canned in oil, drained solids",protein,198,2
 mejillones,"Mollusks, mussel, blue, cooked, moist heat",protein,172,23.8,7.4,4.5,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,174217
 calamar,"Mollusks, squid, mixed species, cooked, fried",protein,175,17.9,7.8,7.5,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,171982
 cangrejo,"Crustaceans, crab, blue, cooked, moist heat",protein,83,17.9,0,0.7,0,mariscos,,100,grams,,10,50,,almuerzo;cena,,,USDA,174205
-huevo de codorniz,"Egg, quail, whole, fresh, raw",protein,158,13.1,0.4,11.1,0,huevo,,10,whole,huevo,10,10,,desayuno;snack_am;snack_pm;cena,,,USDA,172191
+huevo de codorniz,"Egg, quail, whole, fresh, raw",protein,158,13.1,0.4,11.1,0,huevo,,10,whole,huevo,10,10,,desayuno;cena,,,USDA,172191
 jamón de cerdo magro,"Pork, cured, ham, boneless, extra lean (approximately 5% fat), roasted",protein,145,20.9,1.5,5.5,0,cerdo,,30,whole,loncha,30,30,,desayuno;snack_am;snack_pm,,,USDA,167871
 edamame,"Edamame, frozen, prepared",protein,121,11.9,8.9,5.2,5.2,soya;vegano,,100,grams,,10,40,,snack_am;snack_pm;almuerzo;cena,,,USDA,168411
 tempeh,Tempeh,protein,192,20.3,7.6,10.8,0,soya;vegano,,100,grams,,10,40,,almuerzo;cena,,,USDA,174272

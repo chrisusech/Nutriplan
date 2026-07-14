@@ -23,6 +23,7 @@ from nutriplan.domain.generation_rules import (
     slot_availability,
     validate_selection_structure,
 )
+from nutriplan.domain.macro_split import macro_shares
 from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import (
     Client,
@@ -38,7 +39,7 @@ from nutriplan.domain.models import (
     PlanStatus,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
-from nutriplan.domain.portioning import solve_day_portions
+from nutriplan.domain.portioning import solve_day_portions, usable_in_slot
 from nutriplan.domain.selection_schema import build_selection_schema
 from nutriplan.domain.validation import day_totals, validate_day
 from nutriplan.ports.food_repository import FoodRepository
@@ -48,6 +49,15 @@ from nutriplan.ports.repository import ClientRepository, PlanRepository
 logger = structlog.get_logger(__name__)
 
 _SLOT_ORDER = list(MealSlot)
+
+
+def _slots_of(config: NutritionConfig) -> list[MealSlot]:
+    """Las comidas de este cliente: las que su reparto declara, en orden del día.
+
+    El reparto ya viene recortado a lo que el cliente come (`config.for_slots`),
+    así que el motor, el schema y el validador leen la misma fuente.
+    """
+    return [s for s in _SLOT_ORDER if s in config.meal_distribution]
 
 _PHASE_HINT = {
     PlanPhase.FIRST_15: "FASE 1 (días 1-15): primera semana del ciclo.",
@@ -81,6 +91,9 @@ def compute_input_hash(
         "variant": variant,
         "duration_days": duration_days,
         "client": {
+            # Sin esto, cambiar a un cliente de 4 comidas le devolvería el plan de
+            # 5 servido de la caché.
+            "meal_slots": [s.value for s in client.meal_slots],
             "sex": client.sex.value,
             "age": client.age_years,
             "birthdate": client.birthdate.isoformat() if client.birthdate else None,
@@ -111,10 +124,11 @@ def build_selection_prompt(
     duration_days: int = 15,
     phase: PlanPhase = PlanPhase.FIRST_15,
 ) -> str:
+    slots = _slots_of(config)
     structure_lines = [
         f"- {slot.value}: {SLOT_STRUCTURE[slot].description} "
         f"(máx. {SLOT_STRUCTURE[slot].max_items} alimentos)"
-        for slot in _SLOT_ORDER
+        for slot in slots
     ]
     catalog_lines = [
         f"- {f.id} | {f.name_es} | {f.category.value}"
@@ -125,6 +139,9 @@ def build_selection_prompt(
     parts = [
         f"Plan nutricional de {duration_label}.",
         _PHASE_HINT[phase],
+        "",
+        f"CADA DÍA TIENE {len(slots)} COMIDAS, exactamente estas: "
+        f"{', '.join(s.value for s in slots)}.",
         "",
         "ESTRUCTURA DE CADA COMIDA:",
         *structure_lines,
@@ -169,7 +186,12 @@ def _selection_to_days(
         except GenerationError as exc:
             problems.append(f"fase {phase.value}, día {day_sel.day_index}: {exc}")
             continue
-        deviations = validate_day(solved, targets.daily, config)
+        deviations = validate_day(
+            solved,
+            targets.daily,
+            config,
+            shares=macro_shares(meals_input, config),
+        )
         if deviations:
             problems += [
                 f"fase {phase.value}, día {day_sel.day_index}, {d}" for d in deviations
@@ -249,7 +271,8 @@ async def _generate_phase_week(
     catalog: MealCatalog | None = None,
 ) -> tuple[list[DayPlan], list[str]]:
     prompt = load_prompt(prompts_dir, "plan_generation")
-    schema = build_selection_schema(allowed)
+    slots = _slots_of(config)
+    schema = build_selection_schema(allowed, slots)
     foods_by_id = {str(f.id): f for f in allowed}
     selector = _llm_for_phase(llm, allowed, targets, config, variant, phase, catalog)
 
@@ -263,7 +286,7 @@ async def _generate_phase_week(
 
     problems = [
         f"fase {phase.value}, día {v.day_index}, {v.slot.value}: {v.reason}"
-        for v in validate_selection_structure(selection, foods_by_id)
+        for v in validate_selection_structure(selection, foods_by_id, slots)
     ]
     problems += [
         f"fase {phase.value}, variedad: {v.food_name} usado {v.times_used} veces "
@@ -273,7 +296,10 @@ async def _generate_phase_week(
             foods_by_id,
             max_protein_repeats=config.generation.max_protein_repeats_per_week,
             max_carb_repeats=config.generation.max_carb_repeats_per_week,
-            available=slot_availability(allowed),
+            # Las opciones REALES del cliente en cada slot, no las nominales: una
+            # lata de atún declara "almuerzo" pero no cuadra un almuerzo de 36 g de
+            # proteína, y el motor no la va a usar ahí.
+            available=slot_availability(allowed, usable_in_slot(targets.daily, config)),
         )
     ]
     days, solve_problems = _selection_to_days(
@@ -306,6 +332,10 @@ async def generate_cycle(
         raise GenerationError("duration_days debe ser 15 o 30")
 
     prompt = load_prompt(prompts_dir, "plan_generation")
+    # El hash con el que se GUARDA tiene que ser el mismo con el que se BUSCA
+    # (`generate_plan_for_client`). Sin `catalog_version` aquí, el plan se guardaba
+    # con un hash que nadie consulta: la caché no acertaba nunca y, al regenerar el
+    # mismo plan, la inserción chocaba contra la unicidad de (tenant, hash, variant).
     input_hash = compute_input_hash(
         client,
         targets,
@@ -314,6 +344,7 @@ async def generate_cycle(
         allowed,
         variant,
         duration_days=duration_days,
+        catalog_version=catalog.version if catalog else "",
     )
 
     feedback: str | None = None

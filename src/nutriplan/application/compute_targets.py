@@ -23,7 +23,9 @@ async def compute_and_store_targets(
     formula: MacroFormula | None = None,
     overrides: dict[str, float] | None = None,
 ) -> NutritionTargets:
-    config = config_provider.get_nutrition_config()
+    # El reparto por comida se ajusta a las comidas que hace ESTE cliente: quien
+    # come cuatro no reparte su día en cinco.
+    config = config_provider.get_nutrition_config().for_slots(client.meal_slots)
     targets = compute_targets(client, config, formula=formula, overrides=overrides)
     await targets_repo.add(targets)
     logger.info(

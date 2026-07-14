@@ -14,15 +14,16 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from nutriplan.adapters.render.color import MACRO_COLORS, mix_white, soft_of, tint_of
 from nutriplan.adapters.render.view import (
-    ANOTACIONES_IMPORTANTES,
     DAY_LABELS,
     PHASE_INTRO,
     SLOT_LABELS,
     SLOT_TIMES,
+    anotaciones,
     build_grid,
     cell_for_template,
     day_totals_row,
     plan_phases_in,
+    slots_in,
 )
 from nutriplan.domain.errors import RenderError
 from nutriplan.domain.models import Branding, FoodItem, MacroTargets, PlanCycle
@@ -135,7 +136,7 @@ def render_plan_html(
         target_tiles=_target_tiles(daily),
         sections=_grid_sections(plan, foods),
         daily=daily,
-        anotaciones=ANOTACIONES_IMPORTANTES,
+        anotaciones=anotaciones(slots_in(plan)),
     )
 
 

@@ -73,6 +73,8 @@ async def run_generation_job(
         client = await client_repo.get(client_id)
         if client is None:
             raise GenerationError(f"Cliente {client_id} no existe")
+        # El reparto, a las comidas que hace este cliente (puede comer 4, no 5).
+        config = config.for_slots(client.meal_slots)
         targets = await targets_repo.latest_for_client(client_id)
         if targets is None:
             raise GenerationError(

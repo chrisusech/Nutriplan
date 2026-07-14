@@ -35,12 +35,18 @@ def breakfast_protein(food: FoodItem) -> bool:
 
 
 def snack_protein(food: FoodItem) -> bool:
-    """Proteína apta para snack: lácteo, huevo, batido o loncha pequeña. Ligero."""
+    """Proteína apta para snack: lácteo, batido o loncha pequeña. Ligero.
+
+    El HUEVO no. Un huevo duro no es lo que nadie come a media mañana, y el motor
+    lo ponía porque el snack tenía que aportar su cuota de proteína como cualquier
+    otra comida. Ya no: el snack es saciedad y las comidas grandes cierran los
+    macros (ver `macro_split.macro_shares`).
+    """
     if not allows(food, MealSlot.SNACK_AM):
         return False
-    if is_shake(food) or food.category is FoodCategory.DAIRY:
-        return True
     if is_egg(food):
+        return False
+    if is_shake(food) or food.category is FoodCategory.DAIRY:
         return True
     # lonchas unitarias (jamón, queso fresco) — no carnes de plato principal
     return (

@@ -4,14 +4,15 @@ from io import BytesIO
 from uuid import UUID
 
 from nutriplan.adapters.render.view import (
-    ANOTACIONES_IMPORTANTES,
     DAY_LABELS,
     PHASE_SUBTITLES,
     SLOT_LABELS,
+    anotaciones,
     build_grid,
     day_totals_row,
     macro_line,
     plan_phases_in,
+    slots_in,
 )
 from nutriplan.domain.errors import RenderError
 from nutriplan.domain.models import Branding, FoodItem, MacroTargets, PlanCycle
@@ -69,12 +70,13 @@ class DocxRenderer:
 
         phases = plan_phases_in(plan)
         multi = len(phases) > 1 or plan.duration_days >= 30
+        slots = slots_in(plan)  # las comidas que este cliente come, no siempre 5
         for phase in phases:
             if multi:
                 doc.add_heading(PHASE_SUBTITLES.get(phase, phase.value), level=2)
             grid = build_grid(plan, foods, phase=phase)
             totals = day_totals_row(plan, phase)
-            table = doc.add_table(rows=2 + len(SLOT_LABELS), cols=8)
+            table = doc.add_table(rows=2 + len(slots), cols=8)
             table.style = "Table Grid"
 
             header = table.rows[0].cells
@@ -91,7 +93,7 @@ class DocxRenderer:
                         lines.append(cell.macro_line)
                     row[c].text = "\n".join(lines)
 
-            total_row = table.rows[1 + len(SLOT_LABELS)].cells
+            total_row = table.rows[1 + len(slots)].cells
             total_row[0].text = "Totales día"
             for c, dt in enumerate(totals, start=1):
                 total_row[c].text = (
@@ -100,7 +102,7 @@ class DocxRenderer:
                 )
 
         doc.add_heading("Anotaciones Importantes", level=2)
-        for nota in ANOTACIONES_IMPORTANTES:
+        for nota in anotaciones(slots):
             doc.add_paragraph(nota, style="List Number")
 
         buffer = BytesIO()

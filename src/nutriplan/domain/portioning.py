@@ -1,9 +1,11 @@
 """Portion solver por roles (sección 11.3) — determinista, sin IA.
 
 Estrategia:
-1. Proteína y carbohidratos se resuelven POR SLOT contra el reparto de la
-   config (cada alimento cubre su macro dominante; se ajustan los aportes
-   cruzados por punto fijo).
+1. Proteína y carbohidratos se resuelven POR SLOT contra el reparto de
+   `macro_split.macro_shares` (cada alimento cubre su macro dominante; se
+   ajustan los aportes cruzados por punto fijo). El reparto va SOLO a las
+   comidas que tienen fuente de ese macro: un snack de solo fruta no lleva
+   proteína, y la suya la absorben las comidas grandes.
 2. La grasa cierra A NIVEL DE DÍA: los ítems de grasa explícitos absorben la
    grasa faltante tras contar la que ya traen proteínas y carbos. (Un snack
    de yogur+fruta no puede aportar la grasa de su % de kcal; esa cuota vive
@@ -18,6 +20,7 @@ El código es dueño de los números: `computed` SIEMPRE se recalcula desde los
 gramos finales y la base de alimentos.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import ceil
 
@@ -28,6 +31,7 @@ from nutriplan.domain.generation_rules import (
     PROTEIN_GROUP,
     SLOT_STRUCTURE,
 )
+from nutriplan.domain.macro_split import macro_shares
 from nutriplan.domain.models import (
     FoodCategory,
     FoodItem,
@@ -64,6 +68,26 @@ def fits_protein(food: FoodItem, target_g: float) -> bool:
     count = max(round(target_g / unit_protein / step) * step, step)
     tol = max(0.15 * target_g, MIN_RELEVANT_G)
     return abs(count * unit_protein - target_g) <= tol
+
+
+def usable_in_slot(
+    daily: MacroTargets, config: NutritionConfig
+) -> Callable[[FoodItem, MealSlot], bool]:
+    """¿Puede el motor usar este alimento en este slot?
+
+    Solo mira la proteína, que es el macro que no se puede fraccionar: lo demás se
+    porciona fino. Lo usan el motor (para armar sus pools) y la regla de variedad
+    (para saber cuántas opciones REALES hay). Si no miran lo mismo, la regla juzga
+    al motor por opciones que el motor no tiene.
+    """
+    share = config.meal_distribution
+
+    def usable(food: FoodItem, slot: MealSlot) -> bool:
+        if food.category not in PROTEIN_GROUP or slot not in share:
+            return True
+        return fits_protein(food, daily.protein_g * share[slot].protein_g)
+
+    return usable
 
 
 def _cap_g(food: FoodItem) -> float:
@@ -129,7 +153,11 @@ def solve_day_portions(
     config: NutritionConfig,
 ) -> list[SolvedMeal]:
     """Resuelve los gramos de todos los slots de un día."""
-    distribution = config.meal_distribution
+    # La grasa se reparte por el peso en KCAL del slot: no tiene columna propia.
+    kcal_share = config.kcal_shares()
+    # Cada macro va donde hay una fuente que lo lleve: un snack de solo fruta no
+    # tiene objetivo de proteína, y la suya se reparte entre las comidas grandes.
+    shares = macro_shares(meals, config)
 
     # --- Paso 1: proteína y carbo por slot (punto fijo sobre aportes cruzados)
     grams: dict[tuple[MealSlot, str], float] = {}
@@ -161,8 +189,8 @@ def solve_day_portions(
 
     for _ in range(FIXED_POINT_ITERATIONS):
         for slot, foods in meals:
-            p_target = daily.protein_g * distribution[slot]
-            c_target = daily.carb_g * distribution[slot]
+            p_target = daily.protein_g * shares[slot]["protein_g"]
+            c_target = daily.carb_g * shares[slot]["carb_g"]
 
             p_sources = slot_sources(slot, PROTEIN_GROUP)
             c_sources = slot_sources(slot, CARB_GROUP)
@@ -213,10 +241,10 @@ def solve_day_portions(
         # de 3 a 5 y el reparto uniforme dejaba 2 cucharadas de maní a media
         # mañana y un almuerzo sin aceite.
         if fat_items:
-            total_weight = sum(distribution[slot] for slot, _f in fat_items)
+            total_weight = sum(kcal_share.get(slot, 0.0) for slot, _f in fat_items)
             for slot, f in fat_items:
                 weight = (
-                    distribution[slot] / total_weight
+                    kcal_share.get(slot, 0.0) / total_weight
                     if total_weight > 0
                     else 1.0 / len(fat_items)
                 )
@@ -310,7 +338,6 @@ def _repair_residual(
     daily: MacroTargets,
     config: NutritionConfig,
     locked: frozenset[Key] = frozenset(),
-    protein_relaxed_slots: frozenset[MealSlot] = frozenset(),
 ) -> None:
     """Descenso por coordenadas sobre la rejilla, hasta que ningún paso mejore.
 
@@ -337,16 +364,17 @@ def _repair_residual(
             terms.append(
                 _Term(target, allowance, {k: getattr(f, attr) / 100.0 for k, f in items})
             )
-    # Por slot solo proteína y carbo, igual que validate_day — y con su mismo
-    # piso absoluto: un objetivo de 9.9 g admite ±10 g. Antes estos términos se
-    # SALTABAN por pequeños, así que la reparación inflaba el requesón del snack
-    # a 200 g sin coste alguno mientras el validador sí lo rechazaba.
+    # Por slot solo proteína y carbo, igual que validate_day — con el MISMO
+    # reparto (el de `macro_shares`) y su mismo piso absoluto: un objetivo de
+    # 9.9 g admite ±10 g. Antes estos términos se SALTABAN por pequeños, así que
+    # la reparación inflaba el requesón del snack a 200 g sin coste alguno
+    # mientras el validador sí lo rechazaba.
+    shares = macro_shares(meals, config)
     for slot, foods in meals:
-        pct = config.meal_distribution[slot]
         for macro in ("protein_g", "carb_g"):
-            if macro == "protein_g" and slot in protein_relaxed_slots:
-                continue
-            target = getattr(daily, macro) * pct
+            # Un slot sin fuente de ese macro no tiene objetivo: no se le pide lo
+            # que no puede dar (el snack de solo fruta no debe proteína).
+            target = getattr(daily, macro) * shares[slot][macro]
             if target <= 0:
                 continue
             attr = _MACRO_ATTR[macro]
@@ -407,16 +435,8 @@ def rebalance_day_after_edit(
     config: NutritionConfig,
     *,
     locked: frozenset[Key],
-    protein_relaxed_slots: frozenset[MealSlot] = frozenset(),
 ) -> dict[Key, float]:
     """Tras editar un slot, compensa el día: lo editado queda fijo, el resto ajusta."""
     working = dict(grams)
-    _repair_residual(
-        working,
-        meals,
-        daily,
-        config,
-        locked=locked,
-        protein_relaxed_slots=protein_relaxed_slots,
-    )
+    _repair_residual(working, meals, daily, config, locked=locked)
     return working

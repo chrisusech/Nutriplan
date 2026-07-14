@@ -15,7 +15,9 @@ def foods():
     return catalog_by_name()
 
 
-def test_eggs_and_dairy_are_breakfast_and_snack_not_main(foods) -> None:
+def test_eggs_are_breakfast_never_snack_and_never_main(foods) -> None:
+    """El huevo duro NO es un snack. Es lo que salía cuando el snack tenía que
+    aportar su cuota de proteína como cualquier otra comida."""
     huevo = foods["huevo entero"]
     clara = foods["clara de huevo"]
     yogur = foods["yogur griego natural"]
@@ -23,7 +25,8 @@ def test_eggs_and_dairy_are_breakfast_and_snack_not_main(foods) -> None:
     assert meal_affinity.breakfast_protein(huevo)
     assert meal_affinity.breakfast_protein(yogur)
     assert meal_affinity.snack_protein(yogur)
-    assert meal_affinity.snack_protein(clara)
+    assert not meal_affinity.snack_protein(huevo)
+    assert not meal_affinity.snack_protein(clara)
     # ni huevos ni lácteos son "plato principal" (esos son las carnes/pescados)
     assert not meal_affinity.main_protein(huevo)
     assert not meal_affinity.main_protein(yogur)

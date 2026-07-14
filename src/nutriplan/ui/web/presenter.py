@@ -10,8 +10,10 @@ from uuid import UUID
 
 from nutriplan.adapters.render.color import MACRO_COLORS
 from nutriplan.adapters.render.view import DAY_LABELS, natural_units, portion_text
+from nutriplan.domain.macro_split import macro_shares
 from nutriplan.domain.meal_template import MealCatalog, expand, pool_health
 from nutriplan.domain.models import (
+    CORE_MEAL_SLOTS,
     Client,
     DayPlan,
     FoodCategory,
@@ -139,6 +141,18 @@ SEX_LABELS = {"female": "Mujer", "male": "Hombre"}
 
 # Toggles de restricciones del diseño. `inverted=True` = el toggle encendido
 # significa SIN la restricción ("Con malteada" ON → la whey está permitida).
+# Qué comidas hace el cliente. Desayuno, almuerzo y cena no se pueden quitar (un
+# plan sin cena no es un plan); los snacks sí — hay quien come cuatro veces.
+MEAL_TOGGLES = [
+    {
+        "slot": slot,
+        "label": SLOT_META[slot]["name"],
+        "icon": SLOT_META[slot]["icon"],
+        "core": slot in CORE_MEAL_SLOTS,
+    }
+    for slot in MealSlot
+]
+
 RESTRICTION_TOGGLES = [
     {"key": "no_seafood", "label": "Sin mariscos", "icon": "set_meal", "inverted": False},
     {"key": "no_dairy", "label": "Sin lácteos", "icon": "icecream", "inverted": False},
@@ -294,6 +308,25 @@ def portion_edit_fields(
 compute_meal_macros = macros_of
 
 
+def day_shares(
+    day: DayPlan, foods: dict[UUID, FoodItem], config: NutritionConfig
+) -> dict[MealSlot, dict[str, float]]:
+    """El reparto de macros con el que se porcionó este día.
+
+    Sin él, `validate_day` juzgaría el día contra el peso plano del slot y marcaría
+    como "no cuadra" un día perfectamente correcto: el almuerzo lleva la proteína
+    que el snack de fruta no puede llevar.
+    """
+    meals = [
+        (
+            meal.slot,
+            [foods[p.food_id] for p in meal.portions if p.food_id in foods],
+        )
+        for meal in day.meals
+    ]
+    return macro_shares([(slot, f) for slot, f in meals if f], config)
+
+
 @dataclass
 class MealView:
     slot: MealSlot
@@ -358,7 +391,9 @@ def day_view(
         val = fmt_kcal(actual) if m["key"] == "kcal" else f"{fmt_g(round(actual))} g"
         bars.append({**m, "val": val, "pct": round(pct, 1)})
 
-    fits = not validate_day(list(day.meals), targets.daily, config)
+    fits = not validate_day(
+        list(day.meals), targets.daily, config, shares=day_shares(day, foods, config)
+    )
     # La fibra informa, no bloquea: el día puede cuadrar de macros y aun así
     # quedarse corto de fibra si al cliente no le gustan las fuentes que la traen.
     short = fiber_shortfall(list(day.meals), targets.daily)
@@ -383,11 +418,13 @@ def week_grid(
     targets: NutritionTargets,
     config: NutritionConfig,
     phase: PlanPhase = PlanPhase.FIRST_15,
+    foods: dict[UUID, FoodItem] | None = None,
 ) -> list[dict[str, Any]]:
     """Los 7 días de una fase: cada celda marca si el día cuadra."""
     cells = []
     for day in days_in_phase(cycle, phase):
-        ok = not validate_day(list(day.meals), targets.daily, config)
+        shares = day_shares(day, foods, config) if foods else None
+        ok = not validate_day(list(day.meals), targets.daily, config, shares=shares)
         cells.append({
             "n": day.day_index + 1,
             "cycle_id": str(cycle.id),
@@ -462,15 +499,18 @@ def pool_warnings(
     """
     if not allowed:
         return []
-    share = dict(config.meal_distribution)
-    targets = {slot: daily.protein_g * share[slot] for slot in MealSlot}
+    slots = list(config.meal_distribution)  # las comidas que este cliente come
+    targets = {
+        slot: daily.protein_g * share.protein_g
+        for slot, share in config.meal_distribution.items()
+    }
 
     def admissible(food: FoodItem, slot: MealSlot) -> bool:
-        return fits_protein(food, targets[slot])
+        return fits_protein(food, targets.get(slot, 0.0))
 
     pools = expand(catalog, allowed, admissible=admissible)
     out: list[dict[str, Any]] = []
-    for warning in pool_health(pools):
+    for warning in pool_health({s: pools[s] for s in slots}):
         meta = SLOT_META[warning.slot]
         if warning.dish_count == 0:
             message = (

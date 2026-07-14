@@ -6,7 +6,7 @@ Grupos de macro dominante:
 """
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -39,11 +39,16 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
         max_items=3,
         description="base de huevos/proteína + 1 carbohidrato + 1 grasa opcional",
     ),
+    # Un snack no es una comida en pequeño: es saciedad. Puede ser una fruta sola,
+    # una manzana con crema de almendras o un yogur griego con fruta. Exigirle
+    # proteína Y carbohidrato como a un almuerzo es lo que obligaba al motor a
+    # poner huevo duro a media mañana. Lo que no lleve, lo compensan las tres
+    # comidas grandes (ver `macro_split.macro_shares`).
     MealSlot.SNACK_AM: SlotStructure(
-        requires_protein=True,
-        requires_carb=True,
-        max_items=3,
-        description="lácteo o proteína ligera + 1 fruta (o carbo ligero) + 1 grasa opcional",
+        requires_protein=False,
+        requires_carb=False,
+        max_items=2,
+        description="ligero: 1 fruta, o fruta + crema de frutos secos, o lácteo + fruta",
     ),
     MealSlot.LUNCH: SlotStructure(
         requires_protein=True,
@@ -53,10 +58,10 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
         description="proteína + carbohidrato + ensalada libre (± aguacate)",
     ),
     MealSlot.SNACK_PM: SlotStructure(
-        requires_protein=True,
-        requires_carb=True,
-        max_items=3,
-        description="lácteo o proteína ligera + 1 fruta (o carbo ligero) + 1 grasa opcional",
+        requires_protein=False,
+        requires_carb=False,
+        max_items=2,
+        description="ligero: 1 fruta, o fruta + crema de frutos secos, o lácteo + fruta",
     ),
     MealSlot.DINNER: SlotStructure(
         requires_protein=True,
@@ -85,9 +90,16 @@ class VarietyViolation:
 
 
 def validate_selection_structure(
-    selection: PlanSelection, foods_by_id: dict[str, FoodItem]
+    selection: PlanSelection,
+    foods_by_id: dict[str, FoodItem],
+    slots: Sequence[MealSlot] | None = None,
 ) -> list[StructureViolation]:
-    """La selección de la IA debe cubrir los roles de cada slot. Determinista."""
+    """La selección de la IA debe cubrir los roles de cada slot. Determinista.
+
+    `slots` son las comidas que come este cliente (5 si no se dice otra cosa): un
+    plan de cuatro comidas no tiene un "snack PM faltante".
+    """
+    expected = list(slots) if slots else list(MealSlot)
     violations: list[StructureViolation] = []
     seen_days = {d.day_index for d in selection.days}
     if seen_days != set(range(7)):
@@ -97,9 +109,13 @@ def validate_selection_structure(
 
     for day in selection.days:
         seen_slots = {m.slot for m in day.meals}
-        for slot in MealSlot:
+        for slot in expected:
             if slot not in seen_slots:
                 violations.append(StructureViolation(day.day_index, slot, "slot faltante"))
+        for slot in seen_slots - set(expected):
+            violations.append(
+                StructureViolation(day.day_index, slot, "el cliente no come esta comida")
+            )
         for meal in day.meals:
             rule = SLOT_STRUCTURE[meal.slot]
             foods = [foods_by_id[fid] for fid in meal.food_ids if fid in foods_by_id]
@@ -236,10 +252,21 @@ def check_variety(
 
 def slot_availability(
     allowed: Sequence[FoodItem],
+    usable: Callable[[FoodItem, MealSlot], bool] | None = None,
 ) -> dict[tuple[MealSlot, FoodCategory], int]:
-    """Cuántos alimentos de cada categoría puede el cliente poner en cada slot."""
+    """Cuántos alimentos de cada categoría puede el cliente poner en cada slot.
+
+    `usable` descuenta los que declaran el slot pero el motor no puede usar ahí.
+    La diferencia decide planes: una lata de atún (100 g exactos, no se parte) no
+    cuadra un almuerzo de 36 g de proteína, así que el almuerzo de un cliente con
+    pollo y atún tiene UNA opción, no dos. Contando dos, el techo de repeticiones
+    del pollo sale a la mitad de lo que es inevitable y la generación entera falla
+    por una repetición que nadie podía evitar.
+    """
     counts: Counter[tuple[MealSlot, FoodCategory]] = Counter()
     for food in allowed:
         for slot in food.meal_slots:
+            if usable is not None and not usable(food, slot):
+                continue
             counts[(slot, food.category)] += 1
     return dict(counts)

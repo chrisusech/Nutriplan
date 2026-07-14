@@ -1,5 +1,6 @@
 """View-model del plan para render (PDF/DOCX comparten esta preparación)."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -49,16 +50,18 @@ SLOT_TIMES: dict[MealSlot, str] = {
     MealSlot.DINNER: "7:30 pm",
 }
 
-# Sección fija del formato del negocio (sección 12.2). Es el texto REAL de los
-# planes que entrega la entrenadora. La versión anterior decía "pesar los
-# alimentos ya cocidos", que contradice el plan de verdad: las proteínas se pesan
-# en CRUDO y los carbohidratos ya cocidos.
-ANOTACIONES_IMPORTANTES = [
-    "El plan consta de 5 comidas: desayuno, snack AM, almuerzo, snack PM y cena.",
-    "Las proteínas se pesan en CRUDO.",
-    "Los carbohidratos se miden ya COCIDOS.",
-    "Los huevos los puedes preparar como gustes, incluso con los vegetales que "
-    "desees, excepto fritos (evitar exceso de aceite).",
+# Sección fija del formato del negocio (sección 12.2).
+#
+# La versión anterior decía "las proteínas se pesan en CRUDO", y era FALSO respecto
+# a lo que el plan calcula: el catálogo lleva los macros del alimento COCIDO (el
+# pollo, 165 kcal y 31 g de proteína por 100 g — en crudo son 120 y 22.5). Quien
+# pesara 120 g de pollo crudo se comía ~85 g cocidos: un 30% menos de proteína de
+# la que el plan le prometía. El texto ahora dice lo que los números hacen.
+_ANOTACIONES_BASE = [
+    "Todos los pesos son del alimento YA COCIDO: pesa la porción lista para comer, "
+    "no cruda (el pollo, el arroz, la pasta).",
+    "Los huevos van por unidades, y los puedes preparar como gustes, incluso con "
+    "los vegetales que desees, excepto fritos (evitar exceso de aceite).",
     "La gelatina sin azúcar la puedes comer cuando quieras.",
     "Puedes comer 3 cuadritos de chocolate 80% cacao todos los días, MENOS sábado "
     "y domingo.",
@@ -67,6 +70,34 @@ ANOTACIONES_IMPORTANTES = [
     "que quieras y bebidas sin azúcar ni calorías.",
     "Las comidas son cada 2 a 3 horas.",
 ]
+
+
+# Como se nombran las comidas DENTRO de una frase (en la rejilla van con mayúscula).
+SLOT_NAMES: dict[MealSlot, str] = {
+    MealSlot.BREAKFAST: "desayuno",
+    MealSlot.SNACK_AM: "snack AM",
+    MealSlot.LUNCH: "almuerzo",
+    MealSlot.SNACK_PM: "snack PM",
+    MealSlot.DINNER: "cena",
+}
+
+
+def anotaciones(slots: Sequence[MealSlot]) -> list[str]:
+    """Las anotaciones del plan. La primera cuenta las comidas que de verdad tiene.
+
+    No todos los clientes comen cinco veces: prometerle cinco comidas a quien
+    recibió cuatro es la clase de detalle por la que el plan deja de parecer suyo.
+    """
+    chosen = set(slots)
+    names = [SLOT_NAMES[s] for s in SLOT_NAMES if s in chosen]
+    listed = f"{', '.join(names[:-1])} y {names[-1]}" if len(names) > 1 else names[0]
+    return [f"El plan consta de {len(names)} comidas: {listed}.", *_ANOTACIONES_BASE]
+
+
+def slots_in(plan: PlanCycle) -> list[MealSlot]:
+    """Las comidas que este plan tiene, en el orden del día."""
+    present = {meal.slot for day in plan.days for meal in day.meals}
+    return [slot for slot in SLOT_LABELS if slot in present]
 
 # Encabezado de cada rejilla, con el tono de los planes reales.
 PHASE_INTRO: dict[PlanPhase, str] = {
@@ -234,11 +265,12 @@ def build_grid(
     foods: dict[UUID, FoodItem],
     phase: PlanPhase | None = None,
 ) -> dict[MealSlot, list[CellView]]:
-    """Filas = slots, columnas = 7 días de una fase."""
-    grid: dict[MealSlot, list[CellView]] = {slot: [] for slot in SLOT_LABELS}
+    """Filas = las comidas que el plan tiene, columnas = 7 días de una fase."""
+    slots = slots_in(plan)
+    grid: dict[MealSlot, list[CellView]] = {slot: [] for slot in slots}
     for day in _days_for_phase(plan, phase):
         by_slot = {meal.slot: meal for meal in day.meals}
-        for slot in SLOT_LABELS:
+        for slot in slots:
             meal = by_slot.get(slot)
             if meal is None:
                 grid[slot].append(CellView(portions=[], extras=["—"], kcal=0.0))

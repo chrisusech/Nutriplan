@@ -1,6 +1,7 @@
 """Módulo 4 (dominio): schema dinámico, solver, validación, estructura, variedad."""
 
 import json
+from collections import Counter
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from nutriplan.domain.generation_rules import (
     slot_availability,
     validate_selection_structure,
 )
+from nutriplan.domain.macro_split import macro_shares
 from nutriplan.domain.models import (
     FoodCategory,
     MacroTargets,
@@ -56,6 +58,57 @@ def test_solver_squares_the_day(foods, nutrition_config) -> None:
     assert totals_c == pytest.approx(DAILY.carb_g, rel=0.12)
     assert totals_f == pytest.approx(DAILY.fat_g, rel=0.12)
     assert totals_kcal == pytest.approx(DAILY.kcal, rel=0.08)
+
+
+def test_a_snack_of_only_fruit_squares_the_day(foods, nutrition_config) -> None:
+    """Un snack puede ser una manzana y ya: la proteína la ponen las comidas grandes.
+
+    Es el corazón del asunto. Antes cada comida debía su 10% de proteína, así que
+    un snack sin fuente proteica dejaba el día corto y el plan se rechazaba — y por
+    eso el motor metía huevo duro a media mañana. Ahora `macro_shares` reparte cada
+    macro solo entre quien tiene fuente, y el desayuno, el almuerzo y la cena
+    absorben lo que el snack no lleva.
+    """
+    meals = [
+        (MealSlot.BREAKFAST, [foods["huevo entero"], foods["arepa de maíz"], foods["aguacate"]]),
+        (MealSlot.SNACK_AM, [foods["manzana"]]),                      # solo fruta
+        (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
+        (MealSlot.SNACK_PM, [foods["banano"], foods["almendras"]]),   # fruta + grasa
+        (MealSlot.DINNER, [foods["tilapia"], foods["batata cocida"]]),
+    ]
+    solved = solve_day_portions(meals, DAILY, nutrition_config)
+    shares = macro_shares(meals, nutrition_config)
+
+    # Ni el día ni ningún slot se sale de tolerancia...
+    assert validate_day(solved, DAILY, nutrition_config, shares=shares) == []
+    # ...y el snack no debe proteína que no puede dar.
+    assert shares[MealSlot.SNACK_AM]["protein_g"] == 0.0
+    # La cuota del snack no se pierde: se la reparten las comidas con fuente.
+    assert sum(s["protein_g"] for s in shares.values()) == pytest.approx(1.0)
+    assert sum(m.computed.protein_g for m in solved) == pytest.approx(DAILY.protein_g, rel=0.10)
+
+
+def test_a_client_who_eats_four_meals_gets_four(foods, nutrition_config) -> None:
+    """Quien come cuatro veces no recibe un plan de cinco.
+
+    El reparto se renormaliza sobre las comidas que quedan (no se pierde el 7.5%
+    del snack que no hace), y el día cuadra igual.
+    """
+    slots = [MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.SNACK_PM, MealSlot.DINNER]
+    config = nutrition_config.for_slots(slots)
+    assert list(config.meal_distribution) == slots
+    assert sum(s.kcal for s in config.meal_distribution.values()) == pytest.approx(1.0)
+
+    meals = [
+        (MealSlot.BREAKFAST, [foods["huevo entero"], foods["arepa de maíz"], foods["aguacate"]]),
+        (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
+        (MealSlot.SNACK_PM, [foods["yogur griego natural"], foods["manzana"]]),
+        (MealSlot.DINNER, [foods["tilapia"], foods["batata cocida"]]),
+    ]
+    solved = solve_day_portions(meals, DAILY, config)
+    assert [m.slot for m in solved] == slots
+    assert validate_day(solved, DAILY, config, shares=macro_shares(meals, config)) == []
+    assert sum(m.computed.kcal for m in solved) == pytest.approx(DAILY.kcal, rel=0.08)
 
 
 def test_portions_land_on_numbers_a_person_can_weigh(foods, nutrition_config) -> None:
@@ -217,10 +270,9 @@ def test_structure_flags_violations(foods) -> None:
     lookup = {str(f.id): f for f in foods.values()}
     day = _full_day(foods, 0)
     day["meals"][0]["food_ids"] = [str(foods["arepa de maíz"].id)]  # sin proteína
-    day["meals"][1]["food_ids"] = [  # 4 ítems: se pasa del máximo del snack
+    day["meals"][1]["food_ids"] = [  # 3 ítems: un snack no es una comida
         str(foods["yogur griego natural"].id),
         str(foods["banano"].id),
-        str(foods["aguacate"].id),
         str(foods["almendras"].id),
     ]
     day["meals"][2]["food_ids"] = [
@@ -230,22 +282,28 @@ def test_structure_flags_violations(foods) -> None:
     selection = _selection([day] + [_full_day(foods, i) for i in range(1, 7)])
     reasons = {v.reason for v in validate_selection_structure(selection, lookup)}
     assert "falta fuente de proteína" in reasons
-    assert "máximo 3 alimentos" in reasons
+    assert "máximo 2 alimentos" in reasons
     assert any("ensalada libre" in r for r in reasons)
     assert any("falta" in r and "carbohidrato" in r for r in reasons)
 
 
-def test_structure_accepts_fat_in_snack(foods) -> None:
-    """Un snack de fruta + mantequilla de frutos secos es legítimo (era ilegal)."""
+def test_snack_can_be_just_a_fruit(foods) -> None:
+    """Un snack no es una comida en pequeño: una fruta sola basta.
+
+    Antes el snack exigía proteína Y carbohidrato, y por eso el motor acababa
+    poniendo huevo duro a media mañana.
+    """
     lookup = {str(f.id): f for f in foods.values()}
-    day = _full_day(foods, 0)
-    day["meals"][1]["food_ids"] = [
-        str(foods["yogur griego natural"].id),
-        str(foods["banano"].id),
-        str(foods["almendras"].id),
-    ]
-    selection = _selection([day] + [_full_day(foods, i) for i in range(1, 7)])
-    assert validate_selection_structure(selection, lookup) == []
+    days = []
+    for i in range(7):
+        day = _full_day(foods, i)
+        day["meals"][1]["food_ids"] = [str(foods["banano"].id)]  # solo fruta
+        day["meals"][3]["food_ids"] = [  # fruta + crema de frutos secos
+            str(foods["manzana"].id),
+            str(foods["almendras"].id),
+        ]
+        days.append(day)
+    assert validate_selection_structure(_selection(days), lookup) == []
 
 
 def test_structure_flags_missing_slot(foods) -> None:
@@ -432,8 +490,14 @@ async def test_every_day_carries_two_servings_of_fruit(foods) -> None:
         assert len(fruit) >= 2, f"día {day.day_index}: solo {len(fruit)} frutas ({fruit})"
 
 
-async def test_heuristic_snacks_rotate_proteins(foods) -> None:
-    """Los snacks no deben ser yogur+fruta los 14 días de la semana."""
+async def test_heuristic_snacks_are_light_and_varied_and_never_eggs(foods) -> None:
+    """El snack es saciedad: fruta, fruta con grasa, o lácteo con fruta. Nunca huevo.
+
+    Dos cosas se prueban a la vez porque nacen del mismo error: cuando el snack
+    tenía que aportar su cuota de proteína como cualquier otra comida, el motor
+    metía huevo duro a media mañana — y con un solo lácteo en la lista, el mismo
+    yogur catorce veces.
+    """
     from nutriplan.adapters.llm.heuristic import HeuristicSelector
 
     allowed = list(foods.values())
@@ -441,16 +505,20 @@ async def test_heuristic_snacks_rotate_proteins(foods) -> None:
         system="", prompt="", schema=build_selection_schema(allowed), model="x"
     )
     byid = {str(f.id): f for f in allowed}
-    snack_proteins: list[str] = []
+    snacks: list[list[str]] = []
     for day in sel.days:
         for slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM):
-            for fid in next(m.food_ids for m in day.meals if m.slot is slot):
-                food = byid[fid]
-                if food.category in (FoodCategory.PROTEIN, FoodCategory.DAIRY):
-                    snack_proteins.append(food.name_es)
-    unique = set(snack_proteins)
-    assert len(unique) >= 4, f"poca variedad en snacks: {unique}"
-    assert snack_proteins.count("yogur griego natural") <= 4, snack_proteins
+            ids = next(m.food_ids for m in day.meals if m.slot is slot)
+            snacks.append([byid[fid].name_es for fid in ids])
+
+    for snack in snacks:
+        assert len(snack) <= 2, f"snack de {len(snack)} ítems: {snack}"
+        assert not any("huevo" in byid_name for byid_name in snack), snack
+
+    counts = Counter(name for snack in snacks for name in snack)
+    assert max(counts.values()) <= 7, f"un alimento domina los snacks: {counts}"
+    # Y las formas varían: alguna vez el snack es solo una fruta.
+    assert any(len(snack) == 1 for snack in snacks), snacks
 
 
 def test_fiber_informs_but_never_blocks_the_plan(foods, nutrition_config) -> None:

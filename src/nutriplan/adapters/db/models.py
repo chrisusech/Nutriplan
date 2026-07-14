@@ -65,6 +65,9 @@ class ClientRow(Base):
     activity_level: Mapped[str] = mapped_column(String(20))
     restrictions: Mapped[list[str]] = mapped_column(JSON, default=list)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Las comidas que hace al día. NULL = las cinco de siempre (clientes de antes
+    # de que esto se pudiera elegir).
+    meal_slots: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     preferences: Mapped[list["ClientFoodPreferenceRow"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"

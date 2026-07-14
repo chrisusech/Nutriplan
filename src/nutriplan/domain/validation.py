@@ -1,20 +1,25 @@
 """Validación de tolerancias (sección 11.4).
 
 El contrato duro es el DÍA: kcal y los tres macros dentro de las tolerances
-de la config. Por slot se validan proteína y carbohidrato contra el reparto
-(la grasa se distribuye donde hay fuente real — ver portioning.py).
+de la config. Por slot se validan proteína y carbohidrato contra el reparto que
+usó el porcionador (`macro_split.macro_shares`): cada macro solo se le exige a
+las comidas que tienen una fuente que lo lleve. La grasa, solo a nivel de día.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from nutriplan.domain.macro_split import flat_shares
 from nutriplan.domain.models import MacroTargets, MealSlot
 from nutriplan.domain.nutrition_config import NutritionConfig
 
 # Por debajo de este valor absoluto (g) una desviación relativa no es señal:
 # 12% de 8 g son 0.96 g — ruido de redondeo, no un plan descuadrado.
 MIN_RELEVANT_G = 10.0
+
+# Lo que le toca a una comida que el cliente no hace: nada.
+_NO_SHARE = {"protein_g": 0.0, "carb_g": 0.0}
 
 
 class MealLike(Protocol):
@@ -52,9 +57,22 @@ def _off(actual: float, target: float, tolerance: float, *, floor: float = 0.0) 
 
 
 def validate_day(
-    solved: Sequence[MealLike], daily: MacroTargets, config: NutritionConfig
+    solved: Sequence[MealLike],
+    daily: MacroTargets,
+    config: NutritionConfig,
+    *,
+    shares: Mapping[MealSlot, Mapping[str, float]] | None = None,
 ) -> list[Deviation]:
+    """Valida un día. `shares` es el reparto por macro de `macro_split.macro_shares`.
+
+    Sin `shares` se usa el peso plano del slot: es el reparto de siempre y vale
+    cuando el llamador no tiene los alimentos a mano. Pero quien SÍ los tenga debe
+    pasarlos, o juzgará al plan por un objetivo que el porcionador nunca persiguió:
+    la proteína del snack de fruta la reparte el solver entre las comidas grandes,
+    y sin `shares` el almuerzo parecería pasado de proteína.
+    """
     tol = config.tolerances
+    shares = shares or flat_shares(config)
     deviations: list[Deviation] = []
 
     totals = MacroTargets(
@@ -74,10 +92,18 @@ def validate_day(
             deviations.append(Deviation("day", macro, target, actual))
 
     for meal in solved:
-        pct = config.meal_distribution[meal.slot]
+        # Una comida que el cliente ya no hace (un plan viejo, de antes de quitar el
+        # snack) no pesa nada: no se le exige macro alguno, y el día saldrá
+        # desajustado —que es la verdad— en vez de reventar.
+        share = shares.get(meal.slot, _NO_SHARE)
         slot_checks = (
-            ("protein_g", meal.computed.protein_g, daily.protein_g * pct, tol.protein_g),
-            ("carb_g", meal.computed.carb_g, daily.carb_g * pct, tol.carb_g),
+            (
+                "protein_g",
+                meal.computed.protein_g,
+                daily.protein_g * share["protein_g"],
+                tol.protein_g,
+            ),
+            ("carb_g", meal.computed.carb_g, daily.carb_g * share["carb_g"], tol.carb_g),
         )
         for macro, actual, target, tolerance in slot_checks:
             if _off(actual, target, tolerance, floor=MIN_RELEVANT_G):
@@ -111,4 +137,4 @@ def fiber_shortfall(solved: Sequence[MealLike], daily: MacroTargets) -> float:
 
 
 def slot_kcal_targets(daily: MacroTargets, config: NutritionConfig) -> dict[MealSlot, float]:
-    return {slot: daily.kcal * pct for slot, pct in config.meal_distribution.items()}
+    return {slot: daily.kcal * pct for slot, pct in config.kcal_shares().items()}

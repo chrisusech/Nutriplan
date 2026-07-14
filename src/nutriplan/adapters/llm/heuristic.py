@@ -26,15 +26,16 @@ from nutriplan.domain.portioning import fits_protein
 
 T = TypeVar("T", bound=BaseModel)
 
-# Reparto por defecto cuando no se pasa la config. Antes esto era una constante
-# que DUPLICABA config.meal_distribution: cambiar el YAML desincronizaba el
-# selector en silencio. Ahora la config manda y esto es solo el último recurso.
-_FALLBACK_SHARE = {
-    MealSlot.BREAKFAST: 0.25,
-    MealSlot.SNACK_AM: 0.10,
-    MealSlot.LUNCH: 0.30,
-    MealSlot.SNACK_PM: 0.10,
-    MealSlot.DINNER: 0.25,
+# Peso de cada comida en la PROTEÍNA del día, cuando no se pasa la config. Antes
+# esto era una constante que DUPLICABA config.meal_distribution: cambiar el YAML
+# desincronizaba el selector en silencio. Ahora la config manda y esto es solo el
+# último recurso.
+_FALLBACK_PROTEIN_SHARE = {
+    MealSlot.BREAKFAST: 0.22,
+    MealSlot.SNACK_AM: 0.05,
+    MealSlot.LUNCH: 0.36,
+    MealSlot.SNACK_PM: 0.05,
+    MealSlot.DINNER: 0.32,
 }
 def _unit_protein(food: FoodItem) -> float:
     """Proteína por unidad servible (huevo, loncha, lata). En gramos si no hay unidad."""
@@ -59,7 +60,14 @@ class HeuristicSelector:
         # `seed` desplaza la rotación: dos versiones del plan del mismo cliente
         # (mes 1 vs mes 2) arrancan en combinaciones distintas → menús diferentes.
         self._seed = seed
-        share = dict(config.meal_distribution) if config else _FALLBACK_SHARE
+        share = (
+            {s: sh.protein_g for s, sh in config.meal_distribution.items()}
+            if config
+            else _FALLBACK_PROTEIN_SHARE
+        )
+        # Las comidas de este cliente, en el orden del día.
+        self.slots = [s for s in MealSlot if s in share]
+
         def by_cat(c: FoodCategory) -> list[FoodItem]:
             return sorted((f for f in allowed if f.category == c), key=lambda f: f.name_es)
 
@@ -88,26 +96,30 @@ class HeuristicSelector:
         savory = [f for f in proteins if meal_affinity.main_protein(f)] or proteins
         lean = [f for f in savory if f.fat_100g <= 0.4 * f.protein_100g] or savory
         # El pool se filtra CONTRA EL OBJETIVO DE CADA SLOT, no solo contra el del
-        # almuerzo. La cena pide menos proteína (0.25 del día frente a 0.30), y una
+        # almuerzo. La cena pide menos proteína (0.32 del día frente a 0.36), y una
         # lata entera de atún —que no se porciona: su rejilla es de 100 g— cabe en
         # el almuerzo pero se pasa 10 g en la cena, y el solver no puede bajarla.
         self.main_proteins_by_slot = {
-            slot: [f for f in lean if _fits_protein(f, daily_protein_g * share[slot])] or lean
+            slot: [
+                f for f in lean
+                if _fits_protein(f, daily_protein_g * share.get(slot, 0.0))
+            ] or lean
             for slot in (MealSlot.LUNCH, MealSlot.DINNER)
         }
         self.main_proteins = self.main_proteins_by_slot[MealSlot.LUNCH]  # alias legado
 
-        # Snacks: ligeros y variados. Lácteos, huevos/claras, lonchas y batido;
-        # nunca carne de plato principal. Se intercalan categorías para no repetir
-        # yogur 14× en la semana.
-        snack_pt = daily_protein_g * share[MealSlot.SNACK_AM]
+        # Snacks: saciedad, no una comida en pequeño. Una fruta, una fruta con
+        # crema de frutos secos, un yogur griego con fruta. El HUEVO ya no entra —
+        # y no por una lista negra aquí, sino porque el catálogo dejó de declararle
+        # los slots de snack (`meal_affinity.allows`).
+        snack_pt = daily_protein_g * share.get(MealSlot.SNACK_AM, 0.05)
         snack_eligible = [
             f for f in allowed
             if meal_affinity.snack_protein(f) and _fits_protein(f, snack_pt)
         ]
         # El lácteo del snack va MAGRO, igual que el del desayuno. Un cheddar
-        # (34 g de grasa/100 g) mete 10 g de grasa escondida en un snack que solo
-        # vale el 10% del día: el presupuesto de grasa se agota antes de llegar a
+        # (34 g de grasa/100 g) mete 10 g de grasa escondida en un snack que apenas
+        # vale el 7.5% del día: el presupuesto de grasa se agota antes de llegar a
         # los ítems de grasa, que ya no pueden bajar de su porción mínima, y el
         # reparador acaba recortando el HUEVO DEL DESAYUNO para compensar —
         # dejándolo sin proteína. La grasa del día vive en los ítems de grasa,
@@ -117,42 +129,16 @@ class HeuristicSelector:
             [f for f in snack_dairy_all if f.fat_100g <= 5.0] or snack_dairy_all,
             key=lambda f: f.name_es,
         )
-        snack_eggs = sorted(
-            (f for f in snack_eligible if meal_affinity.is_egg(f)),
+        snack_rest = sorted(
+            (f for f in snack_eligible if f.category is not FoodCategory.DAIRY),
             key=lambda f: f.name_es,
         )
-        snack_slices = sorted(
-            (
-                f for f in snack_eligible
-                if f.category is FoodCategory.PROTEIN and not meal_affinity.is_egg(f)
-            ),
-            key=lambda f: f.name_es,
-        )
-        snack_shakes = sorted(
-            (f for f in snack_eligible if meal_affinity.is_shake(f)),
-            key=lambda f: f.name_es,
-        )
-
-        def _interleave(*pools: list[FoodItem]) -> list[FoodItem]:
-            active = [p for p in pools if p]
-            if not active:
-                return []
-            out: list[FoodItem] = []
-            for i in range(max(len(p) for p in active)):
-                for pool in active:
-                    if i < len(pool):
-                        out.append(pool[i])
-            return out
-
-        self.snack_pool = _interleave(snack_dairy, snack_eggs, snack_slices, snack_shakes)
-        if not self.snack_pool:
-            fallback = light_dairy or eggs or shakes or proteins
-            self.snack_pool = [f for f in fallback if _fits_protein(f, snack_pt)] or fallback
+        self.snack_pool = snack_dairy + snack_rest
         self.snack_proteins = self.snack_pool  # alias legado para tests que lo lean
 
         # Desayuno: los HUEVOS son el ancla (aparecen la mayoría de días); lácteos
         # y batido rotan como variación. Nunca carne/pescado al desayuno.
-        bfast_pt = daily_protein_g * share[MealSlot.BREAKFAST]
+        bfast_pt = daily_protein_g * share.get(MealSlot.BREAKFAST, 0.22)
         # El ancla es el huevo que más proteína aporta POR UNIDAD, para que una
         # ración normal (2-3 unidades) cubra el slot. Antes se elegía el huevo con
         # más GRASA — un atajo para preferir el entero sobre la clara que, al
@@ -210,10 +196,19 @@ class HeuristicSelector:
         Ps = self.snack_pool
         Cb, Cm, F = self.breakfast_carbs, self.main_carbs, self.fruits
         breakfast_ok = self.egg_anchor is not None or self.breakfast_alts
-        if not Pl or not Pd or not Cb or not Cm or not F or not Ps or not breakfast_ok:
+        # El snack ya no exige proteína: le basta una fruta (o, si no hay ninguna,
+        # un lácteo). Lo que no puede es quedarse VACÍO, y hay que comprobarlo slot
+        # a slot: una fruta que solo va a media mañana no salva el snack de la
+        # tarde, y una comida sin alimentos no la acepta ni el esquema.
+        snack_ok = all(
+            any(meal_affinity.allows(f, slot) for f in [*F, *Ps])
+            for slot in self.slots
+            if slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM)
+        )
+        if not Pl or not Pd or not Cb or not Cm or not snack_ok or not breakfast_ok:
             raise LLMError(
                 "El conjunto permitido no tiene fuentes suficientes por slot "
-                "(se requieren proteínas magras, carbohidratos y frutas)."
+                "(se requieren proteínas magras, carbohidratos y fruta o lácteo)."
             )
 
         def pick(pool: list[FoodItem], i: int, shift: int = 0) -> FoodItem:
@@ -243,43 +238,56 @@ class HeuristicSelector:
                 return self.egg_anchor
             return pick(self.breakfast_fallback, i)
 
-        def snack_protein_for(day_i: int, slot: MealSlot) -> FoodItem:
-            """AM y PM rotan en un pool intercalado; evita el mismo ítem dos veces al día.
+        def snack_for(day_i: int, slot: MealSlot, shift: int = 0) -> list[str]:
+            """El snack del día: fruta, fruta + grasa, o lácteo + fruta.
 
-            El paso de rotación es 1, NO 2. Con paso 2 y un pool de tamaño par,
-            gcd(2, len) = 2 y el índice `(2·día + offset) % len` es CONSTANTE toda
-            la semana: un cliente con dos snacks posibles comía el mismo yogur los
-            7 días. Con paso 1 el recorrido es un ciclo completo del pool.
+            Rota entre las tres formas para que la semana no sea siete yogures. Sin
+            fruta en la lista del cliente, el snack es el lácteo solo; sin lácteo ni
+            grasa, la fruta sola — que es un snack perfectamente digno.
+
+            La rotación va de uno en uno, NO de dos en dos. Con paso 2 y un pool de
+            tamaño par, gcd(2, len) = 2 y el índice `(2·día + offset) % len` es
+            CONSTANTE toda la semana: ahí vivía el yogur de los siete días.
             """
-            pool = [f for f in Ps if meal_affinity.allows(f, slot)] or Ps
-            choice = pick(pool, day_i)
-            if slot is MealSlot.SNACK_PM and len(pool) > 1:
-                am_pool = [f for f in Ps if meal_affinity.allows(f, MealSlot.SNACK_AM)] or Ps
-                am = pick(am_pool, day_i)
-                if choice.id == am.id:
-                    choice = pick(pool, day_i + 1)
-            return choice
+            fruits = [f for f in F if meal_affinity.allows(f, slot)]
+            dairy = [f for f in Ps if meal_affinity.allows(f, slot)]
+            fats = [f for f in self.fats_by_slot[slot] if meal_affinity.allows(f, slot)]
+            if not fruits:
+                return [str(pick(dairy, day_i, shift).id)] if dairy else []
 
-        days = []
-        for i in range(7):
-            meals = [
-                {"slot": MealSlot.BREAKFAST.value,
-                 "food_ids": [str(breakfast_protein(i).id), str(pick(Cb, i).id)]
-                 + fat_for(MealSlot.BREAKFAST, i)},
-                {"slot": MealSlot.SNACK_AM.value,
-                 "food_ids": [str(snack_protein_for(i, MealSlot.SNACK_AM).id),
-                              str(pick(F, i).id)]},
-                {"slot": MealSlot.LUNCH.value,
-                 "food_ids": [str(pick(Pl, i).id), str(pick(Cm, i, shift=1).id)]
-                 + fat_for(MealSlot.LUNCH, i),
-                 "free_salad": True},
-                {"slot": MealSlot.SNACK_PM.value,
-                 "food_ids": [str(snack_protein_for(i, MealSlot.SNACK_PM).id),
-                              str(pick(F, i, shift=1).id)]},
-                {"slot": MealSlot.DINNER.value,
-                 "food_ids": [str(pick(Pd, i, shift=1).id), str(pick(Cm, i, shift=2).id)]
-                 + fat_for(MealSlot.DINNER, i, shift=1),
-                 "free_salad": True},
-            ]
-            days.append({"day_index": i, "meals": meals})
+            fruit = str(pick(fruits, day_i, shift).id)
+            forms = [pool for pool in (dairy, fats) if pool]
+            if not forms:
+                return [fruit]
+            # La tercera forma es la fruta sola: un banano a media mañana no
+            # necesita compañía, y los macros los cierran las comidas grandes.
+            form = (day_i + shift + offset) % (len(forms) + 1)
+            if form == len(forms):
+                return [fruit]
+            return [str(pick(forms[form], day_i, shift).id), fruit]
+
+        def meal_for(slot: MealSlot, i: int) -> dict[str, object]:
+            """Cada comida del día. Solo se arman las que el cliente come."""
+            if slot is MealSlot.BREAKFAST:
+                return {"slot": slot.value,
+                        "food_ids": [str(breakfast_protein(i).id), str(pick(Cb, i).id)]
+                        + fat_for(slot, i)}
+            if slot is MealSlot.LUNCH:
+                return {"slot": slot.value,
+                        "food_ids": [str(pick(Pl, i).id), str(pick(Cm, i, shift=1).id)]
+                        + fat_for(slot, i),
+                        "free_salad": True}
+            if slot is MealSlot.DINNER:
+                return {"slot": slot.value,
+                        "food_ids": [str(pick(Pd, i, shift=1).id),
+                                     str(pick(Cm, i, shift=2).id)]
+                        + fat_for(slot, i, shift=1),
+                        "free_salad": True}
+            shift = 1 if slot is MealSlot.SNACK_PM else 0
+            return {"slot": slot.value, "food_ids": snack_for(i, slot, shift=shift)}
+
+        days = [
+            {"day_index": i, "meals": [meal_for(slot, i) for slot in self.slots]}
+            for i in range(7)
+        ]
         return schema.model_validate({"days": days})

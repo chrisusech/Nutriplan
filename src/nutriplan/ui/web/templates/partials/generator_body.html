@@ -167,6 +167,23 @@
     </div>
 
     <div class="card">
+      <div class="card-title" style="margin-bottom:3px">Comidas del día</div>
+      <div class="card-sub" style="margin-bottom:12px">Cinco es lo normal. Si {{ ctx.client.name.split(' ')[0] }} come cuatro, quita el snack que no hace: los macros se reparten entre las demás</div>
+      <div class="restr-grid">
+        {% for m in MEAL_TOGGLES %}
+        {% set active = m.slot in ctx.client.meal_slots %}
+        <button class="toggle-row" style="background:none;font-family:inherit;text-align:left{% if m.core %};opacity:.55;cursor:default{% endif %}"
+                {% if not m.core %}hx-post="/generador/{{ ctx.client.id }}/comidas"
+                hx-vals='{"slot":"{{ m.slot.value }}"}' hx-target="#gen-root" hx-swap="innerHTML"{% else %}disabled{% endif %}>
+          <span class="icon">{{ m.icon }}</span>
+          <span class="lbl">{{ m.label }}</span>
+          <div class="track {% if active %}on{% endif %}"><div class="knob"></div></div>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-title">Restricciones</div>
       <div class="restr-grid">
         {% for r in RESTRICTION_TOGGLES %}

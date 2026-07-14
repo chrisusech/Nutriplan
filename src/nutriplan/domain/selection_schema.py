@@ -5,6 +5,7 @@ food_ids permitidos: el modelo NO PUEDE elegir un alimento fuera de la lista
 ni inventar uno — Structured Outputs lo rechaza en el borde.
 """
 
+from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
@@ -12,11 +13,18 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 from nutriplan.domain.models import FoodItem, MealSlot
 
 
-def build_selection_schema(allowed: list[FoodItem]) -> type[BaseModel]:
-    """PlanSelection cuyo food_ids es Literal[<ids permitidos>]."""
+def build_selection_schema(
+    allowed: list[FoodItem], slots: Sequence[MealSlot] | None = None
+) -> type[BaseModel]:
+    """PlanSelection cuyo food_ids es Literal[<ids permitidos>].
+
+    `slots` son las comidas que come ESTE cliente: el día tiene tantas comidas como
+    él coma, no siempre cinco.
+    """
     if not allowed:
         raise ValueError("El conjunto permitido está vacío; no se puede generar")
 
+    n_meals = len(slots) if slots else len(MealSlot)
     ids = tuple(sorted(str(f.id) for f in allowed))
     food_id_literal = Literal[ids]  # type: ignore[valid-type]
 
@@ -31,7 +39,7 @@ def build_selection_schema(allowed: list[FoodItem]) -> type[BaseModel]:
         "DaySelectionStrict",
         __config__=ConfigDict(extra="forbid"),
         day_index=(int, Field(ge=0, le=6)),
-        meals=(list[meal_model], Field(min_length=5, max_length=5)),  # type: ignore[valid-type]
+        meals=(list[meal_model], Field(min_length=n_meals, max_length=n_meals)),  # type: ignore[valid-type]
     )
     return create_model(
         "PlanSelectionStrict",

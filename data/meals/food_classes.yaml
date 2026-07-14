@@ -6,7 +6,7 @@
 #
 # `version` entra en compute_input_hash: si cambias una clase, los planes se
 # regeneran en vez de servirse de la caché.
-version: "2026.07.13"
+version: "2026.07.14"
 
 classes:
   # --- Proteínas -------------------------------------------------------------
@@ -118,10 +118,15 @@ classes:
     slots_any: [desayuno]
     max_per_100g: {protein_100g: 25.0}
 
+  # La grasa de cocina es la que CIERRA el presupuesto de grasa del día, así que
+  # tiene que poder escalar. Las aceitunas (10.7 g de grasa/100 g y un tope de
+  # 30 g por porción) son un adorno: si son la única grasa del almuerzo, el día se
+  # queda corto de grasa y no hay forma de subirlo.
   grasa_cocina:
     label: grasa de cocina
     categories: [fat]
     slots_any: [almuerzo, cena]
+    min_per_100g: {fat_100g: 14.0}
 
   aguacate:
     label: aguacate
