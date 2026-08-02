@@ -4,16 +4,16 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.container import Container, Repos
 from nutriplan.domain.models import Account, Role
 from nutriplan.ui.web import format as fmt
 from nutriplan.ui.web import presenter
+from nutriplan.ui.web.security import csrf_token
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -39,23 +39,53 @@ templates.env.globals.update(
 )
 
 
+def safe_uuid(raw: str) -> UUID:
+    """Un id de la URL. Si no es un UUID es culpa de quien lo escribió: 400.
+
+    Antes `UUID(raw)` reventaba en un 500 con traza, que además le contaba al
+    curioso más de lo que debería sobre el servidor.
+    """
+    try:
+        return UUID(raw.strip())
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Identificador no válido") from None
+
+
 def container_of(request: Request) -> Container:
     return request.app.state.container  # type: ignore[no-any-return]
 
 
-def tenant_of(request: Request) -> UUID:
-    """Tenant del entrenador logueado (de la cookie de sesión).
+def tenant_or_none(request: Request) -> UUID | None:
+    """El tenant, o None si no hay sesión.
 
-    Sin sesión cae al tenant por defecto (semilla local); las rutas protegidas
-    ya redirigen a /login antes de llegar aquí.
+    Solo para presentación —la marca de la página de login, por ejemplo—, donde
+    no tener tenant es normal y hay un valor por defecto razonable. Para leer o
+    escribir datos se usa `tenant_of`, que no adivina.
     """
     raw = request.session.get("tenant_id") if "session" in request.scope else None
-    if raw:
-        try:
-            return UUID(raw)
-        except ValueError:
-            pass
-    return DEFAULT_TENANT_ID
+    if not raw:
+        return None
+    try:
+        return UUID(str(raw))
+    except ValueError:
+        return None
+
+
+def tenant_of(request: Request) -> UUID:
+    """El tenant de quien está en sesión.
+
+    Antes caía al tenant semilla cuando no había sesión. Con rutas públicas
+    nuevas eso significaba que cualquiera heredaba los datos de la cuenta
+    local: los repos filtraban bien, pero por el tenant equivocado. Ahora
+    revienta, que es lo que un fallo de autorización debe hacer.
+    """
+    raw = request.session.get("tenant_id") if "session" in request.scope else None
+    if not raw:
+        raise RuntimeError("Ruta protegida sin tenant en sesión")
+    try:
+        return UUID(str(raw))
+    except ValueError:
+        raise RuntimeError("El tenant de la sesión no es un UUID") from None
 
 
 def current_trainer(request: Request) -> dict[str, str] | None:
@@ -112,7 +142,7 @@ def repos_of(request: Request, session: AsyncSession) -> Repos:
 def render(request: Request, template: str, **context: object) -> HTMLResponse:
     """Render con el contexto de marca que toda plantilla necesita."""
     container = container_of(request)
-    branding = container.branding(tenant_of(request))
+    branding = container.branding(tenant_or_none(request))
     return templates.TemplateResponse(
         request=request,
         name=template,
@@ -123,6 +153,7 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
             "trainer_initials": presenter.initials(branding.tenant_name),
             "trainer": current_trainer(request),
             "role": role_of(request),
+            "csrf_token": csrf_token(request),
             "offline": container.llm_client is None,
             **context,
         },

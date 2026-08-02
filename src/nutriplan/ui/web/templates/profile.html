@@ -27,6 +27,7 @@
 <section class="card danger-zone">
   <h3>Tu cuenta</h3>
   <form method="post" action="/logout">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline btn-block" type="submit">
       <span class="icon">logout</span>Cerrar sesión
     </button>
@@ -37,6 +38,7 @@
       comentarios. Las estadísticas de uso se conservan sin nada que te identifique.
       No se puede deshacer.</p>
     <form method="post" action="/perfil/eliminar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <button class="btn btn-danger btn-block" type="submit">
         Sí, eliminar mi cuenta
       </button>

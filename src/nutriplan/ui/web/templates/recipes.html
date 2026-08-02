@@ -56,6 +56,7 @@
     </div>
 
     <form method="post" action="/recetas" id="recipe-form" data-modo="ingredientes">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <input type="hidden" name="modo" value="">
       <div class="auth-field" style="margin:14px 0">
         <span>Nombre</span>

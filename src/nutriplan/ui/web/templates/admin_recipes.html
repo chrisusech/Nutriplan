@@ -20,11 +20,13 @@
       </div>
     </div>
     <form method="post" action="/admin/recetas/{{ r.id }}/verificar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <button class="btn btn-primary" type="submit" style="padding:9px 14px">
         <span class="icon" style="font-size:18px">verified</span>Verificar
       </button>
     </form>
     <form method="post" action="/admin/recetas/{{ r.id }}/rechazar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <button class="btn btn-outline" type="submit" style="padding:9px 14px">
         <span class="icon" style="font-size:18px">close</span>Rechazar
       </button>

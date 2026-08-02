@@ -34,6 +34,7 @@ from nutriplan.ui.web.deps import (
     db_session,
     render,
     repos_of,
+    safe_uuid,
 )
 from nutriplan.ui.web.routes.generator import _generator_context
 
@@ -101,7 +102,7 @@ async def plan_history(request: Request,
     no faltaba capacidad, faltaba un enlace.
     """
     repos = repos_of(request, session)
-    client = await repos.clients.get(UUID(client_id))
+    client = await repos.clients.get(safe_uuid(client_id))
     if client is None:
         return RedirectResponse("/planes", status_code=303)
 
@@ -146,7 +147,7 @@ async def activate(request: Request,
                    cycle_id: str) -> RedirectResponse:
     """Marca este plan como EL definitivo. Activar uno archiva al anterior."""
     repos = repos_of(request, session)
-    cycle = await repos.plans.get(UUID(cycle_id))
+    cycle = await repos.plans.get(safe_uuid(cycle_id))
     if cycle is None:
         return RedirectResponse("/planes", status_code=303)
     await repos.clients.set_active_plan(cycle.client_id, cycle.id)
@@ -159,7 +160,7 @@ async def review_plan(request: Request,
                       cycle_id: str) -> Response:
     container = container_of(request)
     repos = repos_of(request, session)
-    cycle = await repos.plans.get(UUID(cycle_id))
+    cycle = await repos.plans.get(safe_uuid(cycle_id))
     if cycle is None:
         return RedirectResponse("/planes", status_code=303)
     client = await repos.clients.get(cycle.client_id)
@@ -200,7 +201,7 @@ async def approve(request: Request,
                   session: Annotated[AsyncSession, Depends(db_session)],
                   cycle_id: str) -> RedirectResponse:
     repos = repos_of(request, session)
-    cycle = await repos.plans.get(UUID(cycle_id))
+    cycle = await repos.plans.get(safe_uuid(cycle_id))
     if cycle is None:
         return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
     # El super_user no tiene cupo; el entrenador aprueba hasta su tope de versiones.
@@ -228,7 +229,7 @@ async def edit_portions(request: Request,
     slot_value = str(form.get("slot", ""))
     cliente = str(form.get("cliente", ""))
 
-    cycle = await repos.plans.get(UUID(cycle_id))
+    cycle = await repos.plans.get(safe_uuid(cycle_id))
     if cycle is None or cycle.status not in (PlanStatus.DRAFT, PlanStatus.APPROVED):
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 
@@ -316,7 +317,7 @@ async def swap_food(request: Request,
     except ValueError:
         return RedirectResponse(f"/generador?cliente={cliente}&editar=1", status_code=303)
 
-    cycle = await repos.plans.get(UUID(cycle_id))
+    cycle = await repos.plans.get(safe_uuid(cycle_id))
     if cycle is None or cycle.status not in (PlanStatus.DRAFT, PlanStatus.APPROVED):
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 
@@ -402,7 +403,7 @@ async def remove_food(request: Request,
         return RedirectResponse(f"/generador?cliente={cliente}&editar=1", status_code=303)
     do_ban = str(form.get("ban", "")).lower() in ("1", "true", "on")
 
-    cycle = await repos.plans.get(UUID(cycle_id))
+    cycle = await repos.plans.get(safe_uuid(cycle_id))
     if cycle is None or cycle.status not in (PlanStatus.DRAFT, PlanStatus.APPROVED):
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 

@@ -17,7 +17,7 @@
 </head>
 <body class="{% block page_class %}{% endblock %}"
       data-brand="{{ brand }}" data-brand-soft="{{ brand_soft }}"
-      hx-headers='{"X-Requested-With":"htmx"}'>
+      hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
   <div class="app">
     <header class="app-head">

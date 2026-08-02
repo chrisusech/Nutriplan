@@ -9,6 +9,7 @@
     <p>Genera el tuyo: siete días de comidas pensadas para lo que te gusta y para
        cómo es tu día de verdad.</p>
     <form method="post" action="/generar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <button class="btn btn-primary btn-big" type="submit">
         <span class="icon">auto_awesome</span>Generar mi menú
       </button>
@@ -86,6 +87,7 @@
             {% endif %}
 
             <form class="rate" method="post" action="/calificar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
               <input type="hidden" name="dia" value="{{ dia }}">
               <input type="hidden" name="slot" value="{{ meal.slot }}">
               <span class="rate-label">¿Qué tal estuvo?</span>
@@ -106,6 +108,7 @@
 
   {% if can_regenerate %}
   <form method="post" action="/generar" class="regen">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline btn-block" type="submit">
       <span class="icon">refresh</span>Generar otra semana
     </button>

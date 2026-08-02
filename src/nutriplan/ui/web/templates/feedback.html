@@ -14,6 +14,7 @@
 {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
 
 <form method="post" action="/feedback" class="card form-card">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
   <fieldset class="field">
     <legend>¿De qué nos hablas?</legend>
     <div class="chips">

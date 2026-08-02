@@ -873,7 +873,9 @@ def test_blocked_trainer_cannot_login(offline) -> None:
     denied = trainer.post("/login", data={"email": "baja@fit.com", "password": "clave-baja-1"},
                           follow_redirects=False)
     assert denied.status_code == 200
-    assert "bloqueada" in denied.text.lower()
+    # El mensaje es el mismo que el de una clave mala: decir "bloqueada"
+    # confirmaría que ese correo existe.
+    assert "incorrectos" in denied.text.lower()
 
     # Y desbloquear lo deja entrar de nuevo.
     assert admin.post(f"/admin/entrenadores/{tid}/desbloquear",

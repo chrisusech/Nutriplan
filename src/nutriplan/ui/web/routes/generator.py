@@ -39,6 +39,7 @@ from nutriplan.ui.web.deps import (
     db_session,
     render,
     repos_of,
+    safe_uuid,
     tenant_of,
 )
 
@@ -178,7 +179,7 @@ async def generator_page(request: Request,
         return render(request, "generator.html", active_tab="generador", ctx=None)
     client = None
     if cliente:
-        client = await repos.clients.get(UUID(cliente))
+        client = await repos.clients.get(safe_uuid(cliente))
     client = client or clients[0]
     ctx = await _generator_context(request, session, client, dia, bool(editar))
     template = ("partials/generator_body.html"
@@ -194,7 +195,7 @@ async def _rerender(request: Request, session: AsyncSession, client: Client,
 
 
 async def _get_client(request: Request, session: AsyncSession, cid: str) -> Client:
-    client = await repos_of(request, session).clients.get(UUID(cid))
+    client = await repos_of(request, session).clients.get(safe_uuid(cid))
     if client is None:
         raise ValueError(f"Cliente {cid} no existe")
     return client

@@ -11,6 +11,7 @@
   {% if error %}<div class="alert">{{ error }}</div>{% endif %}
 
   <form method="post" action="/onboarding" class="onb-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
 
     <section class="onb-step">
       <h2>Tú</h2>

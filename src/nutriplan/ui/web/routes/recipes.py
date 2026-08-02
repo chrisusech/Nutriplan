@@ -22,7 +22,14 @@ from nutriplan.domain.models import (
     RecipeStatus,
 )
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
+from nutriplan.ui.web.deps import (
+    container_of,
+    db_session,
+    render,
+    repos_of,
+    safe_uuid,
+    tenant_of,
+)
 
 router = APIRouter()
 
@@ -149,7 +156,7 @@ async def verify(request: Request,
                  recipe_id: str) -> RedirectResponse:
     container = container_of(request)
     admin_repo = container.admin_recipe_repo(session)
-    recipe = await admin_repo.get(UUID(recipe_id))
+    recipe = await admin_repo.get(safe_uuid(recipe_id))
     if recipe is not None:
         # el alimento compuesto se crea en el tenant DUEÑO de la receta
         owner_foods = container.repos(session, recipe.tenant_id).foods
@@ -162,5 +169,5 @@ async def reject(request: Request,
                  session: Annotated[AsyncSession, Depends(db_session)],
                  recipe_id: str) -> RedirectResponse:
     admin_repo = container_of(request).admin_recipe_repo(session)
-    await reject_recipe(recipe_id=UUID(recipe_id), recipe_repo=admin_repo)
+    await reject_recipe(recipe_id=safe_uuid(recipe_id), recipe_repo=admin_repo)
     return RedirectResponse("/admin/recetas", status_code=303)

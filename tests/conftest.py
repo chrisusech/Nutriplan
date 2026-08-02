@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -61,3 +62,42 @@ def _no_real_llm() -> Iterator[None]:
 def nutrition_config() -> NutritionConfig:
     provider = YamlConfigProvider(PROJECT_ROOT / "config" / "nutrition.default.yaml")
     return provider.get_nutrition_config()
+
+
+@pytest.fixture(autouse=True)
+def _csrf_para_tests() -> Iterator[None]:
+    """Los tests mandan el token CSRF sin tener que pedirlo en cada POST.
+
+    El token vive dentro de la cookie de sesión firmada, así que no se puede
+    leer: se saca del HTML de una página cualquiera. Los tests que comprueban
+    el rechazo mandan `X-CSRF-Token: ""` explícitamente y este helper lo
+    respeta.
+    """
+    from fastapi.testclient import TestClient
+
+    original = TestClient.post
+
+    def fresh_token(client: TestClient) -> str:
+        # /login es pública y su formulario ya lleva el token.
+        match = re.search(r'name="_csrf" value="([^"]+)"', client.get("/login").text)
+        token = match.group(1) if match else ""
+        client._csrf_cache = token  # type: ignore[attr-defined]
+        return token
+
+    def post(self: TestClient, url: str, **kw: Any) -> Any:
+        headers = dict(kw.pop("headers", None) or {})
+        if "X-CSRF-Token" in headers:
+            return original(self, url, headers=headers, **kw)
+
+        token = getattr(self, "_csrf_cache", None) or fresh_token(self)
+        response = original(self, url, headers={**headers, "X-CSRF-Token": token}, **kw)
+        if response.status_code == 403:
+            # Cerrar sesión vacía el token: se pide otro y se reintenta.
+            headers["X-CSRF-Token"] = fresh_token(self)
+            response = original(self, url, headers=headers, **kw)
+        return response
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(TestClient, "post", post)
+    yield
+    mp.undo()

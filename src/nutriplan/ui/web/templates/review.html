@@ -23,6 +23,7 @@
   </span>
   {% else %}
   <form method="post" action="/planes/{{ cycle.id }}/activar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline" type="submit" style="padding:9px 13px;font-size:13px">
       <span class="icon" style="font-size:18px">push_pin</span>Hacer definitivo
     </button>
@@ -82,6 +83,7 @@
     <div style="display:flex;flex-direction:column;gap:10px">
       {% if not approved %}
       <form method="post" action="/planes/{{ cycle.id }}/aprobar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <button class="btn btn-primary btn-big" style="width:100%;border-radius:18px;padding:16px;font-size:16px" type="submit">
           <span class="icon" style="font-size:22px">check_circle</span>Aprobar este menú
         </button>

@@ -6,7 +6,6 @@ solo el super_user llega hasta acá.
 """
 
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.application.auth import SignupError, register
 from nutriplan.domain.models import Role
-from nutriplan.ui.web.deps import container_of, db_session, render
+from nutriplan.ui.web.deps import container_of, db_session, render, safe_uuid
 
 router = APIRouter()
 
@@ -76,7 +75,7 @@ async def update_limits(request: Request,
     auth_repo = container_of(request).auth_repo(session)
     try:
         await auth_repo.set_limits(
-            UUID(user_id), max_menus=_optional_int(max_menus)
+            safe_uuid(user_id), max_menus=_optional_int(max_menus)
         )
     except ValueError:
         pass
@@ -87,7 +86,7 @@ async def update_limits(request: Request,
 async def block_trainer(request: Request,
                         session: Annotated[AsyncSession, Depends(db_session)],
                         user_id: str) -> RedirectResponse:
-    await container_of(request).auth_repo(session).set_active(UUID(user_id), False)
+    await container_of(request).auth_repo(session).set_active(safe_uuid(user_id), False)
     return RedirectResponse("/admin/entrenadores", status_code=303)
 
 
@@ -95,5 +94,5 @@ async def block_trainer(request: Request,
 async def unblock_trainer(request: Request,
                           session: Annotated[AsyncSession, Depends(db_session)],
                           user_id: str) -> RedirectResponse:
-    await container_of(request).auth_repo(session).set_active(UUID(user_id), True)
+    await container_of(request).auth_repo(session).set_active(safe_uuid(user_id), True)
     return RedirectResponse("/admin/entrenadores", status_code=303)

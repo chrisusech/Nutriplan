@@ -42,6 +42,9 @@ logger = structlog.get_logger(__name__)
 
 
 def _set_session(request: Request, account: Account) -> None:
+    # Se limpia antes de escribir: si alguien fijó una sesión previa, entrar no
+    # puede heredarla (fijación de sesión). También renueva el token CSRF.
+    request.session.clear()
     request.session["user_id"] = str(account.id)
     request.session["tenant_id"] = str(account.tenant_id)
     request.session["name"] = account.name
@@ -170,22 +173,24 @@ async def login(request: Request,
                 password: Annotated[str, Form()]) -> HTMLResponse | RedirectResponse:
     auth_repo = container_of(request).auth_repo(session)
     trainer = await authenticate(email=email, password=password, auth_repo=auth_repo)
+    # Un solo mensaje para todos los fallos: distinguirlos convierte el login en
+    # un detector de correos registrados.
+    generico = "Correo o contraseña incorrectos."
     if trainer is None:
-        return render(request, "auth.html", mode="login",
-                      error="Correo o contraseña incorrectos.")
+        return render(request, "auth.html", mode="login", error=generico)
     if await session.get(TenantRow, trainer.tenant_id) is None:
         return render(
             request,
             "auth.html",
             mode="login",
-            error="Tu cuenta quedó desincronizada con la base de datos. Contacta al administrador.",
+            error=generico,
         )
     if not trainer.is_active:
         return render(
             request,
             "auth.html",
             mode="login",
-            error="Tu cuenta está bloqueada. Contacta al administrador.",
+            error=generico,
         )
     _set_session(request, trainer)
     return RedirectResponse("/", status_code=303)

@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     llm_fallback_model: str = ""
     # URL pública de la app: la necesitan los enlaces de correo.
     base_url: str = "http://127.0.0.1:8000"
+    # Dominios que la app acepta servir. Vacío = sin comprobación (solo local);
+    # sin esto, un Host falsificado envenena los enlaces de correo.
+    allowed_hosts: str = ""
 
     # Identificadores de cliente OAuth. Sin ellos el login social queda apagado
     # (no falla el arranque: la app funciona con correo y contraseña).

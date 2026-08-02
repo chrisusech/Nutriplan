@@ -13,10 +13,11 @@ from uuid import UUID
 
 import structlog
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.models import TenantRow
@@ -26,6 +27,12 @@ from nutriplan.config.settings import Environment
 from nutriplan.container import Container, build_container
 from nutriplan.domain.models import Role
 from nutriplan.ui.web.deps import container_of
+from nutriplan.ui.web.security import (
+    RateLimiter,
+    csrf_middleware,
+    rate_limit_middleware,
+    security_headers_middleware,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 logger = structlog.get_logger(__name__)
@@ -93,8 +100,18 @@ def create_app(container: Container | None = None) -> FastAPI:
         yield
         await container.engine.dispose()
 
-    app = FastAPI(title="NutriPlan", lifespan=lifespan)
+    prod = container.settings.env is Environment.PROD
+    # En producción no se publica el mapa de rutas: es el primer regalo a un
+    # escáner automático.
+    app = FastAPI(
+        title="NutriPlan",
+        lifespan=lifespan,
+        docs_url=None if prod else "/docs",
+        redoc_url=None,
+        openapi_url=None if prod else "/openapi.json",
+    )
     app.state.container = container
+    app.state.rate_limiter = RateLimiter()
 
     # El guard se registra ANTES que SessionMiddleware para que este quede por
     # fuera (add_middleware inserta al frente): así request.session ya existe
@@ -128,15 +145,44 @@ def create_app(container: Container | None = None) -> FastAPI:
         if not request.session.get("tenant_id"):
             return RedirectResponse("/login", status_code=303)
 
-        # Solo hay dos roles: el entrenador (user) y el dueño (super_user). El
-        # área /admin es exclusiva del super_user; el entrenador entra a todo lo
-        # demás.
-        role = request.session.get("role", "user")
-        if path.startswith("/admin") and role != Role.SUPER_USER:
-            return RedirectResponse("/", status_code=303)
+        # El rol NO se cree de la cookie: bloquear a alguien tiene que echarlo
+        # ya, no en catorce días cuando le caduque la sesión.
+        if path.startswith("/admin"):
+            email = request.session.get("email")
+            async with container_of(request).session_factory() as session:
+                account = await container_of(request).auth_repo(session).get_by_email_any_provider(
+                    str(email or "")
+                )
+            if account is None or not account.is_active or account.role != Role.SUPER_USER:
+                return RedirectResponse("/", status_code=303)
         return await call_next(request)
 
-    app.add_middleware(SessionMiddleware, secret_key=container.settings.session_secret)
+    app.middleware("http")(csrf_middleware)
+    app.middleware("http")(rate_limit_middleware(app.state.rate_limiter))
+    app.middleware("http")(security_headers_middleware(https=prod))
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=container.settings.session_secret,
+        session_cookie="nutriplan_session",
+        # Sin `Secure` la cookie viaja en claro por cualquier HTTP.
+        https_only=prod,
+        same_site="lax",
+        max_age=14 * 24 * 3600,
+    )
+    if prod and container.settings.allowed_hosts:
+        app.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=container.settings.allowed_hosts.split(","),
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled(request: Request, exc: Exception) -> Response:
+        """Un fallo nuestro no le cuenta al visitante cómo estamos por dentro."""
+        logger.exception("unhandled_error", path=request.url.path, error=str(exc))
+        return PlainTextResponse(
+            "Algo se rompió de nuestro lado. Ya lo estamos mirando.", status_code=500
+        )
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

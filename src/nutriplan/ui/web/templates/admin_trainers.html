@@ -18,6 +18,7 @@
   <div class="card-title" style="margin-bottom:12px">Nuevo entrenador</div>
   <form method="post" action="/admin/entrenadores"
         style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <label class="auth-field"><span>Nombre</span>
       <input name="name" required placeholder="Valeria Vega"></label>
     <label class="auth-field"><span>Correo</span>
@@ -50,12 +51,14 @@
       </div>
       {% if t.is_active %}
       <form method="post" action="/admin/entrenadores/{{ t.id }}/bloquear">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <button class="btn btn-outline" type="submit" style="padding:8px 12px">
           <span class="icon" style="font-size:18px">block</span>Bloquear
         </button>
       </form>
       {% else %}
       <form method="post" action="/admin/entrenadores/{{ t.id }}/desbloquear">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <button class="btn btn-primary" type="submit" style="padding:8px 12px">
           <span class="icon" style="font-size:18px">lock_open</span>Desbloquear
         </button>
@@ -64,6 +67,7 @@
     </div>
     <form method="post" action="/admin/entrenadores/{{ t.id }}/limites"
           style="display:flex;align-items:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <label class="auth-field" style="flex:1"><span>Máx. menús</span>
         <input name="max_menus" type="number" min="0"
                value="{{ t.max_menus if t.max_menus is not none else '' }}" placeholder="∞"></label>
