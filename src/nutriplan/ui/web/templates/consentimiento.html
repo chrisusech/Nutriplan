@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Antes de empezar{% endblock %}
+
+{% block content %}
+<h1>Antes de empezar</h1>
+<p class="muted">Esto es una BETA y necesitamos ser claros contigo.</p>
+
+<section class="card legal">
+  <p>Para mejorar la app guardamos <b>qué platos te gustan y cuáles no</b>, y
+    cómo la usas. Es justamente el punto de este lanzamiento.</p>
+  <p>No vendemos tus datos, no entrenamos modelos con lo que escribes, y puedes
+    <b>eliminar tu cuenta y todo lo tuyo</b> cuando quieras.</p>
+  <p><a href="/privacidad">Leer los detalles</a></p>
+</section>
+
+<form method="post" action="/consentimiento" class="consent-form">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <label class="chip consent-check">
+    <input type="checkbox" name="acepta" value="1" required>
+    Entiendo y acepto que guarden mis calificaciones y mi uso de la app
+  </label>
+  <button class="btn btn-primary btn-big btn-block" type="submit">
+    <span class="icon">check</span>Continuar
+  </button>
+</form>
+{% endblock %}

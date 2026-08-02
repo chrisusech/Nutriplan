@@ -96,13 +96,16 @@ def security_headers_middleware(*, https: bool) -> Middleware:
     atributo del `<body>` y no en un `<style>`, y el JavaScript vive en
     `app.js`. Relajarla aquí desharía ese trabajo.
     """
+    # `capacitor:` y `ionic:` son los orígenes que el WebView nativo usa para
+    # servir su puente. Sin ellos, dentro de la app no habría login social —
+    # pero sigue sin haber `unsafe-inline`, que es lo que importa.
     csp = "; ".join([
-        "default-src 'self'",
-        "script-src 'self'",
+        "default-src 'self' capacitor: ionic:",
+        "script-src 'self' capacitor: ionic:",
         "style-src 'self'",
         "img-src 'self' data:",
         "font-src 'self'",
-        "connect-src 'self'",
+        "connect-src 'self' capacitor: ionic: https:",
         "form-action 'self'",
         "frame-ancestors 'none'",
         "base-uri 'none'",

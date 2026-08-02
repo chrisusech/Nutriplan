@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutriplan.ui.web.deps import account_id_of, db_session, render, repos_of
+from nutriplan.ui.web.deps import (
+    account_id_of,
+    container_of,
+    db_session,
+    render,
+    repos_of,
+)
 
 router = APIRouter()
 
@@ -17,6 +23,32 @@ FEEDBACK_CATEGORIES = [
     ("general", "Otra cosa"),
 ]
 MAX_MESSAGE = 4000
+
+
+@router.get("/privacidad", response_class=HTMLResponse)
+async def privacy(request: Request) -> HTMLResponse:
+    """Pública: las tiendas exigen poder leerla sin cuenta."""
+    return render(request, "privacidad.html", active_tab="")
+
+
+@router.get("/consentimiento", response_class=HTMLResponse)
+async def consent_page(request: Request) -> HTMLResponse:
+    return render(request, "consentimiento.html", active_tab="")
+
+
+@router.post("/consentimiento", response_model=None)
+async def give_consent(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    acepta: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    """Sin esto no se registra un solo evento suyo en app_events."""
+    if acepta != "1":
+        return RedirectResponse("/consentimiento", status_code=303)
+    await container_of(request).auth_repo(session).grant_analytics_consent(
+        account_id_of(request)
+    )
+    return RedirectResponse("/onboarding", status_code=303)
 
 
 @router.get("/perfil", response_class=HTMLResponse)

@@ -60,7 +60,9 @@
       {# El ID token lo produce el plugin nativo y se postea aquí: Google
          bloquea su login dentro de un WebView plano. #}
       {% if google_client_id %}
-      <form method="post" action="/auth/oauth/google" class="auth-social">
+      {# Ocultos hasta que el puente nativo los active: en un navegador no hay
+   de dónde sacar el ID token. #}
+      <form method="post" action="/auth/oauth/google" class="auth-social" hidden>
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">
         <button class="btn btn-outline btn-big btn-block" type="submit">
@@ -69,7 +71,7 @@
       </form>
       {% endif %}
       {% if apple_client_id %}
-      <form method="post" action="/auth/oauth/apple" class="auth-social">
+      <form method="post" action="/auth/oauth/apple" class="auth-social" hidden>
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">
         <button class="btn btn-outline btn-big btn-block" type="submit">

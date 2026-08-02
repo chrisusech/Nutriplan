@@ -121,6 +121,13 @@ class SqlAuthRepository:
             row.name = name.strip()[:200]
             await self._s.flush()
 
+    async def grant_analytics_consent(self, user_id: UUID) -> None:
+        """La fecha es el consentimiento: sin ella no se registra nada suyo."""
+        row = await self._s.get(UserRow, user_id)
+        if row is not None and row.consent_analytics_at is None:
+            row.consent_analytics_at = datetime.now(UTC)
+            await self._s.flush()
+
     async def touch_login(self, user_id: UUID) -> None:
         row = await self._s.get(UserRow, user_id)
         if row is not None:

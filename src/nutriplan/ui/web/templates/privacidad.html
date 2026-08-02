@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Privacidad{% endblock %}
+
+{% block content %}
+<h1>Qué hacemos con tus datos</h1>
+<p class="muted">En corto y sin letra pequeña. Última revisión: agosto de 2026.</p>
+
+<section class="card legal">
+  <h2>Qué guardamos</h2>
+  <ul>
+    <li><b>Tu cuenta</b>: nombre y correo. Si entras con Google o Apple, también
+      el identificador que ellos nos dan para reconocerte.</li>
+    <li><b>Tu perfil</b>: sexo, edad, altura, peso, objetivo, ciudad, lo que te
+      gusta y lo que no, y lo que nos contaste sobre cómo comes.</li>
+    <li><b>Tus menús</b>, las calificaciones que les pones y lo que nos escribes
+      en Opinar.</li>
+    <li><b>Uso de la app</b>: qué pantallas se abren y cuándo, sin nada que te
+      identifique.</li>
+  </ul>
+
+  <h2>Para qué</h2>
+  <p>Para armarte el menú, y para entender qué platos gustan y cuáles no. Esto
+    es una BETA: lo que califiques cambia lo que la app recomienda después.</p>
+
+  <h2>Qué NO hacemos</h2>
+  <ul>
+    <li>No vendemos tus datos ni los compartimos con anunciantes.</li>
+    <li>No entrenamos modelos de IA con lo que escribes.</li>
+    <li>No te rastreamos fuera de la app.</li>
+  </ul>
+
+  <h2>Con quién se comparten</h2>
+  <p>Para escribir las recetas y darles nombre a los platos usamos un modelo de
+    lenguaje de pesos abiertos alojado por un tercero. Se le envía qué alimentos
+    lleva tu menú y el contexto que nos diste sobre cómo comes.
+    <b>Nunca tu nombre, tu correo ni nada que te identifique.</b></p>
+
+  <h2>Cuánto tiempo</h2>
+  <p>Mientras tengas cuenta. Si la eliminas, se borran tu perfil, tus menús, tus
+    calificaciones y tus comentarios. Las estadísticas de uso se conservan sin
+    ningún dato que te identifique.</p>
+
+  <h2>Tus derechos</h2>
+  <p>Puedes eliminar tu cuenta cuando quieras desde
+    <a href="/perfil">tu perfil</a>, sin pedírselo a nadie.</p>
+</section>
+{% endblock %}

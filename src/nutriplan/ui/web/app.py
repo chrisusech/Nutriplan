@@ -43,6 +43,7 @@ _PUBLIC_PREFIXES = (
     "/registro",
     "/verificar",
     "/auth/oauth",
+    "/privacidad",
     "/recuperar",
     "/static",
     "/logout",

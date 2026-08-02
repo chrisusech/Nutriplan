@@ -246,7 +246,7 @@ async def signup(
         logger.warning("verification_email_failed", error=str(exc))
 
     _set_session(request, account)
-    return RedirectResponse("/onboarding", status_code=303)
+    return RedirectResponse("/consentimiento", status_code=303)
 
 
 @router.get("/verificar/{token}", response_model=None)
@@ -309,7 +309,10 @@ async def oauth_sign_in(
     profile = await container.repos(session, tenant_id=account.tenant_id).clients.get_by_user(
         account.id
     )
-    return RedirectResponse("/" if profile else "/onboarding", status_code=303)
+    if profile:
+        return RedirectResponse("/", status_code=303)
+    destino = "/onboarding" if account.consent_analytics_at else "/consentimiento"
+    return RedirectResponse(destino, status_code=303)
 
 
 # --- Baja de cuenta ---------------------------------------------------------

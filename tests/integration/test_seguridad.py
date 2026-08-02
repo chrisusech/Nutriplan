@@ -206,3 +206,11 @@ def test_las_pantallas_del_usuario_no_usan_estilos_inline(app) -> None:
         n for n in publicas if 'style="' in (templates / n).read_text(encoding="utf-8")
     ]
     assert not con_estilos, f"la CSP romperá estas pantallas: {con_estilos}"
+
+
+def test_el_login_social_no_se_ofrece_en_un_navegador(app) -> None:
+    """El ID token lo produce el plugin nativo; en la web no hay de dónde
+    sacarlo, así que ofrecer el botón sería prometer algo que falla."""
+    html = app.get("/registro").text
+    if "auth-social" in html:
+        assert 'class="auth-social" hidden' in html

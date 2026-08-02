@@ -52,7 +52,9 @@ def _signup(client: TestClient, email: str = "ana@correo.com") -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 303, resp.text
-    assert resp.headers["location"] == "/onboarding"
+    # Primero se le explica qué se guarda; el onboarding viene después.
+    assert resp.headers["location"] == "/consentimiento"
+    client.post("/consentimiento", data={"acepta": "1"}, follow_redirects=False)
 
 
 def _complete_onboarding(client: TestClient) -> str:
@@ -139,7 +141,8 @@ def test_entrar_con_google_crea_la_cuenta_la_primera_vez(app, monkeypatch) -> No
         "/auth/oauth/google", data={"id_token": "token-de-google"}, follow_redirects=False
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/onboarding"
+    # Entrar por primera vez lleva al consentimiento, no al menú.
+    assert resp.headers["location"] == "/consentimiento"
 
 
 def test_quien_ya_entro_con_google_vuelve_a_su_menu_no_al_onboarding(app, monkeypatch) -> None:
@@ -253,3 +256,48 @@ def test_produccion_no_arranca_con_el_secreto_de_desarrollo() -> None:
         Settings(env="prod")
     # Con uno propio sí arranca
     assert Settings(env="prod", session_secret="x" * 48).env == "prod"
+
+
+# --- Consentimiento (requisito de tienda) -----------------------------------
+
+
+def test_la_politica_de_privacidad_se_lee_sin_tener_cuenta(app) -> None:
+    """Las tiendas exigen poder revisarla antes de registrarse."""
+    resp = app.get("/privacidad")
+    assert resp.status_code == 200
+    assert "Qué hacemos con tus datos" in resp.text
+    assert "eliminar tu cuenta" in resp.text.lower()
+
+
+def test_al_registrarse_se_explica_que_se_guarda_antes_de_pedir_nada(app) -> None:
+    resp = app.post(
+        "/registro",
+        data={"name": "Ana", "email": "nueva@correo.com", "password": "clave-segura-1"},
+        follow_redirects=False,
+    )
+    assert resp.headers["location"] == "/consentimiento"
+    pagina = app.get("/consentimiento").text
+    assert "acepto" in pagina.lower()
+    assert "/privacidad" in pagina
+
+
+def test_sin_marcar_la_casilla_no_se_da_por_consentido(app) -> None:
+    _signup(app)
+    resp = app.post("/consentimiento", data={}, follow_redirects=False)
+    assert resp.headers["location"] == "/consentimiento"
+
+
+def test_aceptar_deja_constancia_con_fecha(app, container) -> None:
+    """La fecha ES el consentimiento: sin ella no se registra nada suyo."""
+    import asyncio
+
+    _signup(app)  # el helper ya acepta
+
+    async def leer() -> object:
+        async with container.session_factory() as session:
+            cuenta = await container.auth_repo(session).get_by_email_any_provider(
+                "ana@correo.com"
+            )
+            return cuenta.consent_analytics_at if cuenta else None
+
+    assert asyncio.run(leer()) is not None
