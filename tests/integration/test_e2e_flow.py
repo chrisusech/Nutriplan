@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
-from nutriplan.application.approve_plan import approve_plan
 from nutriplan.application.compute_targets import compute_and_store_targets
 from nutriplan.application.generate_plan import generate_plan_for_client
 from nutriplan.application.jobs import new_job, run_generation_job
@@ -128,13 +127,10 @@ async def test_del_onboarding_al_menu_aprobado(ctx) -> None:
     )
     assert again.id == first.id
 
-    # 6) La compuerta humana: el plan nace borrador y alguien lo aprueba
+    # 6) El menú queda como borrador activo: en la app del usuario no hay
+    #    aprobación de nadie, el menú es suyo desde que se genera.
     assert first.status == PlanStatus.DRAFT
-    approved = await approve_plan(
-        plan_id=first.id, plan_repo=repos.plans, audit_repo=repos.audit
-    )
-    assert approved.status == PlanStatus.APPROVED
-    assert approved.approved_at is not None
+    assert (await repos.clients.get(client.id)).active_plan_id == first.id
 
 
 async def test_the_free_meal_is_a_cell_with_nothing_in_it_and_the_day_aims_lower(

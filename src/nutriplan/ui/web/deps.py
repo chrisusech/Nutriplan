@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from nutriplan.container import Container, Repos
 from nutriplan.domain.models import Account, Role
 from nutriplan.ui.web import format as fmt
-from nutriplan.ui.web import presenter
+from nutriplan.ui.web import presenter, week_view
 from nutriplan.ui.web.security import csrf_token
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -38,7 +38,6 @@ templates.env.globals.update(
     asset_v=ASSET_VERSION,
     soft_of=fmt.soft_of,
     initials=presenter.initials,
-    BRAND_SWATCHES=presenter.BRAND_SWATCHES,
     GOAL_META=presenter.GOAL_META,
     MACRO_META=presenter.MACRO_META,
     RESTRICTION_TOGGLES=presenter.RESTRICTION_TOGGLES,
@@ -46,7 +45,7 @@ templates.env.globals.update(
     ACTIVITY_LABELS=presenter.ACTIVITY_LABELS,
     SEX_LABELS=presenter.SEX_LABELS,
     DAY_SHORT=fmt.DAY_SHORT,
-    SLOT_META=presenter.SLOT_META,
+    SLOT_META=week_view.SLOT_META,
 )
 
 

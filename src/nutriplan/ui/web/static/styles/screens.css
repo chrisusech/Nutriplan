@@ -90,3 +90,29 @@ fieldset.field legend { padding: 0; font: 600 var(--t-sm) Poppins, sans-serif; c
 .auth-foot { text-align: center; font: 500 var(--t-sm) Poppins; color: var(--muted); margin-top: var(--s-3); }
 .auth-foot a { color: var(--brand); font-weight: 600; }
 .auth-social + .auth-social { margin-top: var(--s-2); }
+
+/* --- Generando ------------------------------------------------------------ */
+
+.gen-state {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
+  padding: var(--s-8) var(--s-4);
+  text-align: center;
+}
+.gen-state .icon { font-size: 2.5rem; color: var(--brand); }
+.gen-state-error .icon { color: var(--danger); }
+.gen-spin { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Admin ---------------------------------------------------------------- */
+
+.admin-new { padding: var(--s-4); margin: var(--s-4) 0; }
+.admin-new > summary { cursor: pointer; font: 700 var(--t-md) Poppins; }
+.admin-new form { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-4); }
+
+.admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.admin-row { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
+.admin-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.admin-acts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.admin-acts form { display: flex; gap: var(--s-2); align-items: center; }
+.admin-acts input { width: 6rem; }
+.pill-off { background: var(--warn-soft); color: var(--warn); }

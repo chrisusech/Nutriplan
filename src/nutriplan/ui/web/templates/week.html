@@ -8,7 +8,7 @@
     <h2>Todavía no tienes menú</h2>
     <p>Genera el tuyo: siete días de comidas pensadas para lo que te gusta y para
        cómo es tu día de verdad.</p>
-    <form method="post" action="/generar">
+    <form method="post" action="/menu/generar" hx-post="/menu/generar" hx-target="this" hx-swap="outerHTML">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <button class="btn btn-primary btn-big" type="submit">
         <span class="icon">auto_awesome</span>Generar mi menú
@@ -107,7 +107,7 @@
   </ul>
 
   {% if can_regenerate %}
-  <form method="post" action="/generar" class="regen">
+  <form method="post" action="/menu/generar" class="regen" hx-post="/menu/generar" hx-target="this" hx-swap="outerHTML">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline btn-block" type="submit">
       <span class="icon">refresh</span>Generar otra semana

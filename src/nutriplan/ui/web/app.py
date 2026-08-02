@@ -190,10 +190,8 @@ def create_app(container: Container | None = None) -> FastAPI:
         account,
         admin,
         auth,
-        generator,
+        menu,
         onboarding,
-        plans,
-        recipes,
         week,
     )
 
@@ -201,9 +199,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.include_router(week.router)
     app.include_router(account.router)
     app.include_router(onboarding.router)
-    app.include_router(generator.router)
-    app.include_router(plans.router)
-    app.include_router(recipes.router)
+    app.include_router(menu.router)
     app.include_router(admin.router)
     return app
 

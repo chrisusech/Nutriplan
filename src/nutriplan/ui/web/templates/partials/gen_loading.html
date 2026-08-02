@@ -1,17 +1,5 @@
-<div class="preview-card" style="padding:30px 20px"
-     hx-get="/generador/{{ client.id }}/estado?job={{ job_id }}&n={{ msg_index }}"
-     hx-trigger="every 1.6s" hx-target="#preview-col" hx-swap="innerHTML">
-  <div class="state-card loading" style="box-shadow:none;border:none;padding:14px;width:100%;max-width:none">
-    <div class="loading-ring">
-      <div class="halo"></div>
-      <div class="core"><span class="icon" style="font-size:34px;color:#fff">soup_kitchen</span></div>
-    </div>
-    <h3>{{ loading_msg }}</h3>
-    <p>Esto toma solo unos segundos ✨</p>
-    <div class="skeletons">
-      <div class="skeleton" style="width:100%"></div>
-      <div class="skeleton" style="width:80%"></div>
-      <div class="skeleton" style="width:92%"></div>
-    </div>
-  </div>
+<div class="gen-state" hx-get="/menu/estado?job={{ job_id }}&n={{ msg_index }}"
+     hx-trigger="load delay:900ms" hx-swap="outerHTML">
+  <span class="icon gen-spin">autorenew</span>
+  <p>{{ loading_msg }}</p>
 </div>

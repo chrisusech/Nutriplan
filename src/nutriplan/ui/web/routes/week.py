@@ -114,14 +114,4 @@ async def rate_meal(
     return RedirectResponse(f"/?dia={dia}", status_code=303)
 
 
-@router.post("/generar", response_model=None)
-async def generate(
-    request: Request, session: Annotated[AsyncSession, Depends(db_session)]
-) -> RedirectResponse:
-    """Dispara la generación del menú de esta persona."""
-    repos = repos_of(request, session)
-    client = await repos.clients.get_by_user(account_id_of(request))
-    if client is None:
-        return RedirectResponse("/onboarding", status_code=303)
-    return RedirectResponse(f"/generador/{client.id}/generar", status_code=307)
 

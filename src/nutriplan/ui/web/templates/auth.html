@@ -42,12 +42,12 @@
       <form method="post" action="{{ '/registro' if mode == 'signup' else '/login' }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         {% if mode == 'signup' %}
-        <label class="auth-field"><span>¿Cómo te llamas?</span>
+        <label class="field"><span>¿Cómo te llamas?</span>
           <input name="name" required maxlength="200" placeholder="Ana Pérez"></label>
         {% endif %}
-        <label class="auth-field"><span>Correo</span>
+        <label class="field"><span>Correo</span>
           <input name="email" type="email" required placeholder="tu@correo.com"></label>
-        <label class="auth-field"><span>Contraseña</span>
+        <label class="field"><span>Contraseña</span>
           <input name="password" type="password" required minlength="8"
                  placeholder="••••••••"></label>
         <button class="btn btn-primary btn-big btn-block" type="submit">

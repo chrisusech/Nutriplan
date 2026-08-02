@@ -139,13 +139,17 @@ def test_sin_sesion_toda_ruta_privada_lleva_al_login(app) -> None:
 # --- Errores ----------------------------------------------------------------
 
 
-def test_un_identificador_corrupto_da_400_y_no_una_traza(app) -> None:
+def test_un_identificador_corrupto_da_400_y_no_una_traza() -> None:
     """Antes `UUID(raw)` reventaba en un 500 con traza, que además le contaba
     al curioso más de lo debido sobre el servidor."""
-    _registrar(app)
-    resp = app.get("/planes/esto-no-es-un-uuid", follow_redirects=False)
-    assert resp.status_code == 400
-    assert "Traceback" not in resp.text
+    from fastapi import HTTPException
+
+    from nutriplan.ui.web.deps import safe_uuid
+
+    with pytest.raises(HTTPException) as exc:
+        safe_uuid("esto-no-es-un-uuid")
+    assert exc.value.status_code == 400
+    assert "Traceback" not in str(exc.value.detail)
 
 
 def test_produccion_no_publica_el_mapa_de_rutas(tmp_path, monkeypatch) -> None:

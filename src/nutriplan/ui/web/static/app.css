@@ -2,10 +2,12 @@
 
    Son @import y no un solo archivo para que cada hoja se lea sola; en HTTP/2 el
    coste de cuatro peticiones pequeñas es despreciable frente a lo que gana la
-   siguiente persona que tenga que tocar esto. */
+   siguiente persona que tenga que tocar esto.
+
+   OJO con el orden: lo que se importa al final gana. Una hoja que redeclare
+   `:root` aquí abajo pisaría todos los tokens — pasó con la hoja heredada. */
 
 @import url('/static/styles/tokens.css');
 @import url('/static/styles/base.css');
 @import url('/static/styles/week.css');
 @import url('/static/styles/screens.css');
-@import url('/static/styles/legacy.css');
