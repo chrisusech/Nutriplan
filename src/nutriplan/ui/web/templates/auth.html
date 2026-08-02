@@ -8,39 +8,38 @@
   <link rel="preload" href="/static/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
 </head>
-<body style="background:var(--bg)">
-  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">
-    <div class="card" style="width:100%;max-width:400px;padding:34px 30px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <div class="logo-badge"><span class="icon" style="font-size:22px">restaurant</span></div>
-        <span style="font:800 20px Poppins;color:var(--ink)">NutriPlan</span>
+<body>
+  <div class="auth-page">
+    <div class="card auth-card">
+      <div class="auth-brand">
+        <span class="logo-badge"><span class="icon">restaurant</span></span>
+        <span>Nutri<span class="brand-word">Plan</span></span>
       </div>
-      <h1 style="font:800 22px Poppins;color:var(--ink);margin:14px 0 4px">
+      <h1>
         {{ 'Crea tu cuenta' if mode == 'signup' else 'Hola de nuevo' }}
       </h1>
-      <p style="font:500 13px Poppins;color:var(--muted);margin:0 0 20px">
+      <p class="muted">
         {{ 'Tu menú de la semana, hecho para ti.' if mode == 'signup'
            else 'Entra para ver tu menú.' }}
       </p>
 
       {% if request.query_params.get('baja') %}
-      <div class="badge" style="width:100%;justify-content:flex-start;margin-bottom:14px;padding:10px 12px">
-        <span class="icon" style="font-size:16px">check_circle</span>{{ request.query_params.get('baja') }}
+      <div class="alert alert-ok" role="status">
+        <span class="icon">check_circle</span>{{ request.query_params.get('baja') }}
       </div>
       {% elif request.query_params.get('verificado') %}
-      <div class="badge" style="width:100%;justify-content:flex-start;margin-bottom:14px;padding:10px 12px">
-        <span class="icon" style="font-size:16px">check_circle</span>Correo confirmado. Ya puedes entrar.
+      <div class="alert alert-ok" role="status">
+        <span class="icon">check_circle</span>Correo confirmado. Ya puedes entrar.
       </div>
       {% endif %}
 
       {% if error %}
-      <div class="badge badge-warn" style="width:100%;justify-content:flex-start;margin-bottom:14px;padding:10px 12px">
-        <span class="icon" style="font-size:16px">error</span>{{ error }}
+      <div class="alert" role="alert">
+        <span class="icon">error</span>{{ error }}
       </div>
       {% endif %}
 
-      <form method="post" action="{{ '/registro' if mode == 'signup' else '/login' }}"
-            style="display:flex;flex-direction:column;gap:12px">
+      <form method="post" action="{{ '/registro' if mode == 'signup' else '/login' }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         {% if mode == 'signup' %}
         <label class="auth-field"><span>¿Cómo te llamas?</span>
@@ -51,45 +50,41 @@
         <label class="auth-field"><span>Contraseña</span>
           <input name="password" type="password" required minlength="8"
                  placeholder="••••••••"></label>
-        <button class="btn btn-primary btn-big" type="submit" style="margin-top:6px;justify-content:center">
+        <button class="btn btn-primary btn-big btn-block" type="submit">
           {{ 'Crear cuenta' if mode == 'signup' else 'Entrar' }}
         </button>
       </form>
 
       {% if mode == 'signup' and (google_client_id or apple_client_id) %}
-      <div style="display:flex;align-items:center;gap:10px;margin:16px 0 12px">
-        <div style="flex:1;height:1px;background:var(--line)"></div>
-        <span style="font:500 12px Poppins;color:var(--muted)">o</span>
-        <div style="flex:1;height:1px;background:var(--line)"></div>
-      </div>
+      <div class="auth-alt"><span>o</span></div>
       {# El ID token lo produce el plugin nativo y se postea aquí: Google
          bloquea su login dentro de un WebView plano. #}
       {% if google_client_id %}
-      <form method="post" action="/auth/oauth/google" id="google-signin">
+      <form method="post" action="/auth/oauth/google" class="auth-social">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">
-        <button class="btn btn-outline btn-big" type="submit" style="width:100%;justify-content:center">
+        <button class="btn btn-outline btn-big btn-block" type="submit">
           Continuar con Google
         </button>
       </form>
       {% endif %}
       {% if apple_client_id %}
-      <form method="post" action="/auth/oauth/apple" id="apple-signin" style="margin-top:8px">
+      <form method="post" action="/auth/oauth/apple" class="auth-social">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">
-        <button class="btn btn-outline btn-big" type="submit" style="width:100%;justify-content:center">
+        <button class="btn btn-outline btn-big btn-block" type="submit">
           Continuar con Apple
         </button>
       </form>
       {% endif %}
       {% endif %}
 
-      <p style="text-align:center;font:500 13px Poppins;color:var(--muted);margin:14px 0 0">
+      <p class="auth-foot">
         {% if mode == 'signup' %}
-        ¿Ya tienes cuenta? <a href="/login" style="color:var(--brand);font-weight:600">Entra</a>
+        ¿Ya tienes cuenta? <a href="/login">Entra</a>
         {% else %}
-        ¿Primera vez? <a href="/registro" style="color:var(--brand);font-weight:600">Crea tu cuenta</a>
-        <br><a href="/recuperar" style="color:var(--brand);font-weight:600">¿Olvidaste tu contraseña?</a>
+        ¿Primera vez? <a href="/registro">Crea tu cuenta</a>
+        <br><a href="/recuperar">¿Olvidaste tu contraseña?</a>
         {% endif %}
       </p>
     </div>

@@ -165,3 +165,40 @@ def test_produccion_no_publica_el_mapa_de_rutas(tmp_path, monkeypatch) -> None:
     assert prod.docs_url is None
     assert prod.openapi_url is None
     assert prod.redoc_url is None
+
+
+def test_un_formulario_normal_funciona_con_el_campo_oculto(app) -> None:
+    """El hueco que tenían los otros tests: mandan el token por cabecera y así
+    el middleware nunca toca el cuerpo. Un `<form method="post">` de verdad no
+    manda cabeceras, y leer el formulario para sacar el token dejaba al
+    endpoint sin cuerpo que parsear — todo POST respondía 422.
+    """
+    token = re.search(r'name="_csrf" value="([^"]+)"', app.get("/login").text).group(1)
+    resp = app.post(
+        "/registro",
+        data={
+            "name": "Ana", "email": "form@correo.com",
+            "password": "clave-segura-1", "_csrf": token,
+        },
+        headers={"X-CSRF-Token": ""},   # el helper de tests no interviene
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303, resp.text
+
+
+def test_las_pantallas_del_usuario_no_usan_estilos_inline(app) -> None:
+    """La CSP bloquea el atributo `style=`, así que una plantilla que lo use se
+    ve rota: sin ancho, sin padding, desbordada. Pasó con el login.
+    """
+    from pathlib import Path
+
+    templates = Path(__file__).resolve().parents[2] / "src/nutriplan/ui/web/templates"
+    publicas = [
+        "base.html", "auth.html", "week.html", "onboarding.html",
+        "profile.html", "feedback.html",
+        "password_reset_request.html", "password_reset_confirm.html",
+    ]
+    con_estilos = [
+        n for n in publicas if 'style="' in (templates / n).read_text(encoding="utf-8")
+    ]
+    assert not con_estilos, f"la CSP romperá estas pantallas: {con_estilos}"

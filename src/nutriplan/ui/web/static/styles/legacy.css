@@ -3,36 +3,7 @@
 
 
 
-:root {
-  --bg: #FBF6F3;
-  --panel: #fff;
-  --line: #F1E4DD;
-  --line-strong: #EEDFD8;
-  --ink: #3B2E2B;
-  --ink-2: #5C4A44;
-  --ink-3: #6B564E;
-  --muted: #8A756C;
-  --muted-2: #9A857C;
-  --muted-3: #95817A;
-  --faint: #B0968C;
-  --faint-2: #C4A99E;
-  --wash: #F6ECE7;
-  --wash-2: #FBF7F4;
-  --ok: #2E9E6E;
-  --ok-soft: #E3F4EA;
-  --warn: #C9852E;
-  --warn-soft: #FBF0DA;
-  --brand: #F26D5B;
-  --brand-soft: #FDE8E2;
-}
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: Poppins, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
 
 .icon {
   font-family: 'Material Symbols Rounded';

@@ -7,11 +7,10 @@
 
   // El color de marca llega como atributo del <body>: es el único estilo que
   // depende del servidor, y así no hace falta un <style> inline.
-  const body = document.body;
-  if (body.dataset.brand) {
-    document.documentElement.style.setProperty('--brand', body.dataset.brand);
-    document.documentElement.style.setProperty('--brand-soft', body.dataset.brandSoft);
-  }
+  // Solo el color base: el tinte lo deriva el CSS con color-mix() para que
+  // siga al tema claro/oscuro. Fijarlo aquí lo congelaba en su versión clara.
+  const brand = document.body.dataset.brand;
+  if (brand) document.documentElement.style.setProperty('--brand', brand);
 
   // Al reemplazar un bloque grande, el documento se encoge, el navegador
   // recorta el scroll y al reinsertar ya no vuelve: calificar un plato te

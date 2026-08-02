@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable
 import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from starlette.types import Message
 
 logger = structlog.get_logger(__name__)
 
@@ -40,14 +41,30 @@ def csrf_token(request: Request) -> str:
 
 
 async def _submitted_token(request: Request) -> str:
+    """El token, de la cabecera (HTMX) o del campo oculto (formulario normal).
+
+    Leer el formulario consume el cuerpo de la petición, y el endpoint de más
+    abajo se queda sin nada que parsear: todo `<form method="post">` respondía
+    422. Por eso el cuerpo se guarda y se vuelve a servir.
+    """
     header = request.headers.get(CSRF_HEADER)
     if header:
         return header
     content_type = request.headers.get("content-type", "")
-    if content_type.startswith(("application/x-www-form-urlencoded", "multipart/form-data")):
-        form = await request.form()
-        return str(form.get(CSRF_FIELD) or "")
-    return ""
+    if not content_type.startswith(
+        ("application/x-www-form-urlencoded", "multipart/form-data")
+    ):
+        return ""
+
+    body = await request.body()
+
+    async def replay() -> Message:
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request._receive = replay  # noqa: SLF001 - no hay API pública para esto
+    form = await request.form()
+    request._receive = replay  # noqa: SLF001 - `form()` lo vuelve a consumir
+    return str(form.get(CSRF_FIELD) or "")
 
 
 async def csrf_middleware(request: Request, call_next: Handler) -> Response:

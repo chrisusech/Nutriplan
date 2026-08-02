@@ -89,17 +89,21 @@
 }
 .meal[open] .meal-icon { background: var(--card); }
 
-.meal-text { flex: 1; min-width: 0; }
-.meal-name {
-  font: 700 var(--t-md) Poppins, sans-serif;
-  color: var(--ink);
-  /* El nombre del plato puede ser largo; que no empuje al chevron fuera. */
+.meal-text { flex: 1 1 auto; min-width: 0; }
+/* `overflow` y `text-overflow` NO aplican a elementos inline, y estos son
+   <span>: sin `display: block` el nombre largo no se corta con puntos
+   suspensivos, se sale y se solapa con las kcal. */
+.meal-name, .meal-sub {
+  display: block;
+  min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.meal-name { font: 700 var(--t-md) Poppins, sans-serif; color: var(--ink); }
 .meal-sub { font: 500 var(--t-sm) Poppins, sans-serif; color: var(--muted-2); }
 
 .meal-kcal {
   flex: 0 0 auto;
+  white-space: nowrap;
   font: 700 var(--t-sm) Poppins, sans-serif;
   color: var(--ink-2);
 }

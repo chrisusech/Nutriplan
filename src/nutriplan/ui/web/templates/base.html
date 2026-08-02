@@ -16,7 +16,7 @@
   <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </head>
 <body class="{% block page_class %}{% endblock %}"
-      data-brand="{{ brand }}" data-brand-soft="{{ brand_soft }}"
+      data-brand="{{ brand }}"
       hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
   <div class="app">

@@ -18,9 +18,20 @@ from nutriplan.ui.web.security import csrf_token
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 
-# Cache-busting del CSS: al cambiar el archivo cambia su mtime, así que la URL del
-# `<link>` cambia y el navegador re-descarga en vez de quedarse con una copia vieja.
-ASSET_VERSION = int((STATIC_DIR / "app.css").stat().st_mtime)
+def _asset_version() -> int:
+    """Versión de los estáticos, para que el navegador no sirva una copia vieja.
+
+    Mira TODOS los archivos, no solo `app.css`: los estilos viven en los que
+    este importa, y esos no llevan versión en la URL. Mirando solo el de
+    entrada, editar `tokens.css` no invalidaba nada y el navegador seguía
+    pintando con el CSS anterior.
+    """
+    files = [*STATIC_DIR.glob("*.css"), *STATIC_DIR.glob("*.js"),
+             *(STATIC_DIR / "styles").glob("*.css")]
+    return int(max(f.stat().st_mtime for f in files))
+
+
+ASSET_VERSION = _asset_version()
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals.update(
@@ -149,7 +160,6 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
         context={
             "branding": branding,
             "brand": branding.primary_color,
-            "brand_soft": fmt.soft_of(branding.primary_color),
             "trainer_initials": presenter.initials(branding.tenant_name),
             "trainer": current_trainer(request),
             "role": role_of(request),

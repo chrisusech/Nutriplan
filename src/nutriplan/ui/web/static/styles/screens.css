@@ -56,3 +56,37 @@ fieldset.field { border: none; padding: 0; margin: 0; }
 fieldset.field legend { padding: 0; font: 600 var(--t-sm) Poppins, sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
 
 .regen { margin-top: var(--s-5); }
+
+/* --- Entrada (login, registro, recuperación) ------------------------------ */
+
+/* Sin clases, estas pantallas iban con `style=` inline — que la CSP bloquea.
+   El resultado era una tarjeta sin ancho ni padding, desbordada. */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-6) var(--s-4);
+}
+.auth-card {
+  width: 100%;
+  /* Un flex item no baja de su contenido salvo que se le diga: sin esto, en un
+     móvil de 390 px la tarjeta se quedaba en 400 y desbordaba. */
+  min-width: 0;
+  max-width: min(25rem, 100%);
+  padding: var(--s-8) var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.auth-brand { display: flex; align-items: center; gap: var(--s-2); font: 800 1.25rem Poppins; }
+.auth-card h1 { margin-top: var(--s-3); }
+.auth-card form { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-2); }
+.auth-alt { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-4) 0 var(--s-2); }
+.auth-alt::before, .auth-alt::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+.auth-alt span { font: 500 var(--t-sm) Poppins; color: var(--muted); }
+.auth-foot { text-align: center; font: 500 var(--t-sm) Poppins; color: var(--muted); margin-top: var(--s-3); }
+.auth-foot a { color: var(--brand); font-weight: 600; }
+.auth-social + .auth-social { margin-top: var(--s-2); }

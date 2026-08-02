@@ -30,9 +30,12 @@
   --warn-soft: #FBF0DA;
   --danger: #D2544A;
 
-  /* Marca — la sobreescribe el servidor por tenant */
+  /* Marca. El servidor solo fija `--brand`; el tinte se deriva aquí para que
+     siga al tema: escribirlo desde JavaScript ponía un estilo inline en <html>
+     que ganaba sobre la media query, y en oscuro el nombre del plato abierto
+     salía blanco sobre rosa claro. */
   --brand: #F26D5B;
-  --brand-soft: #FDE8E2;
+  --brand-soft: color-mix(in srgb, var(--brand) 14%, var(--card));
 
   /* Macros */
   --kcal: #F2704F;
