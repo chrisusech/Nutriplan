@@ -14,6 +14,7 @@ tamaño par, el índice `(2·día + offset) % len` es constante toda la semana).
 """
 
 from collections import Counter
+from collections.abc import Callable
 from math import ceil
 from typing import TypeVar
 
@@ -39,7 +40,6 @@ from nutriplan.domain.models import (
     MealSlot,
     UnitGranularity,
 )
-
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import fits_protein, usable_in_slot
 
@@ -233,6 +233,8 @@ class TemplateSelector:
         self.warnings = pool_health({s: self.pools[s] for s in self.slots})
         self._seed = seed
         self.calls = 0
+        # Los platos de la última semana elegida, por (día, comida).
+        self.last_dishes: dict[tuple[int, MealSlot], Dish] = {}
 
         # El tope por slot que `check_variety` va a aplicar. El motor lo usa para
         # no pasarse: si no lo conoce, produce planes que la validación rechaza.
@@ -336,8 +338,15 @@ class TemplateSelector:
             for slot in self.slots:
                 pool = self.pools[slot]
 
-                def cost(dish: Dish, *, _today=today_foods, _anchors=today_anchors,
-                         _day=day, _slot=slot, _fat=lambda: today_fat) -> float:
+                def cost(
+                    dish: Dish,
+                    *,
+                    _today: set[str] = today_foods,
+                    _anchors: set[str] = today_anchors,
+                    _day: int = day,
+                    _slot: MealSlot = slot,
+                    _fat: Callable[[], float] = lambda: today_fat,
+                ) -> float:
                     ids = {str(fid) for fid in dish.food_ids}
                     total = W_SAME_DAY * len(ids & _today)
                     total += W_DROPPED * dish.dropped
@@ -399,6 +408,15 @@ class TemplateSelector:
         seed = self._seed + self.calls  # el reintento desplaza el desempate
         self.calls += 1
         week = self.select_week(seed=seed)
+        # El schema del LLM solo lleva food_ids —un modelo no conoce los ids de
+        # plantilla—, así que la identidad del plato se guarda al lado y la lee
+        # `_selection_to_days`. Sin esto, "Tostada de huevos con aguacate" se
+        # perdía y quedaba la lista de alimentos.
+        self.last_dishes = {
+            (i, slot): dish
+            for i, day in enumerate(week)
+            for slot, dish in day.items()
+        }
         days = [
             {
                 "day_index": i,

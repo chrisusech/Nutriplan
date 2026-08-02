@@ -15,28 +15,52 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.models import TenantRow
 from nutriplan.adapters.db.seed import seed_local
+from nutriplan.application.auth import SignupError, register
 from nutriplan.config.settings import Environment
 from nutriplan.container import Container, build_container
+from nutriplan.domain.models import Role
 from nutriplan.ui.web.deps import container_of
 
 STATIC_DIR = Path(__file__).parent / "static"
 logger = structlog.get_logger(__name__)
 
-# Rutas accesibles sin sesión (login, alta, estáticos).
+# Rutas accesibles sin sesión. El alta es pública: cualquiera se registra.
 _PUBLIC_PREFIXES = (
     "/login",
-    "/signup",
+    "/registro",
+    "/verificar",
+    "/auth/oauth",
     "/recuperar",
     "/static",
     "/logout",
     "/docs",
     "/openapi.json",
 )
+
+
+async def _seed_super_user(container: Container, session: AsyncSession) -> None:
+    """Siembra el super_user desde settings si aún no existe. Idempotente."""
+    email = container.settings.admin_email.strip().lower()
+    password = container.settings.admin_password
+    if not email or not password:
+        return
+    auth_repo = container.auth_repo(session)
+    if await auth_repo.get_by_email(email) is not None:
+        return
+    try:
+        await register(
+            name="Administrador", email=email, password=password, auth_repo=auth_repo,
+            branding_dir=container.settings.branding_dir, role=Role.SUPER_USER,
+        )
+        logger.info("super_user_seeded", email=email)
+    except SignupError as exc:
+        logger.warning("super_user_seed_skipped", reason=str(exc))
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -62,6 +86,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         async with container.session_factory() as session:
             csv_path = container.settings.project_root / "data" / "foods" / "curated_foods.csv"
             await seed_local(session, csv_path)
+            await _seed_super_user(container, session)
             await session.commit()
         logger.info("startup_seed_done")
         app.state.jobs_in_flight = set()
@@ -80,8 +105,8 @@ def create_app(container: Container | None = None) -> FastAPI:
     ) -> Response:
         """Guard por sesión y por rol.
 
-        Sin sesión → /login (salvo rutas públicas). El cliente solo ve su portal;
-        las rutas de admin exigen rol admin; el entrenador/admin no entra al portal.
+        Sin sesión → /login (salvo rutas públicas). El área /admin exige rol
+        super_user; el entrenador (user) entra a todo lo demás.
         """
         path = request.url.path
         if path.startswith(_PUBLIC_PREFIXES):
@@ -103,15 +128,12 @@ def create_app(container: Container | None = None) -> FastAPI:
         if not request.session.get("tenant_id"):
             return RedirectResponse("/login", status_code=303)
 
-        role = request.session.get("role", "trainer")
-        if role == "client":
-            if not path.startswith("/portal"):
-                return RedirectResponse("/portal", status_code=303)
-        else:  # entrenador o admin
-            if path.startswith("/portal"):
-                return RedirectResponse("/", status_code=303)
-            if path.startswith("/admin") and role != "admin":
-                return RedirectResponse("/", status_code=303)
+        # Solo hay dos roles: el entrenador (user) y el dueño (super_user). El
+        # área /admin es exclusiva del super_user; el entrenador entra a todo lo
+        # demás.
+        role = request.session.get("role", "user")
+        if path.startswith("/admin") and role != Role.SUPER_USER:
+            return RedirectResponse("/", status_code=303)
         return await call_next(request)
 
     app.add_middleware(SessionMiddleware, secret_key=container.settings.session_secret)
@@ -119,22 +141,24 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     from nutriplan.ui.web.routes import (
+        account,
+        admin,
         auth,
-        dashboard,
         generator,
-        intake,
+        onboarding,
         plans,
-        portal,
         recipes,
+        week,
     )
 
     app.include_router(auth.router)
-    app.include_router(dashboard.router)
-    app.include_router(intake.router)
+    app.include_router(week.router)
+    app.include_router(account.router)
+    app.include_router(onboarding.router)
     app.include_router(generator.router)
     app.include_router(plans.router)
     app.include_router(recipes.router)
-    app.include_router(portal.router)
+    app.include_router(admin.router)
     return app
 
 

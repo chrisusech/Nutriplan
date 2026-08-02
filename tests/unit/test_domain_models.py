@@ -13,7 +13,6 @@ from nutriplan.domain.models import (
     FoodCategory,
     FoodItem,
     Goal,
-    IntakeParsed,
     MacroTargets,
     MealEntry,
     MealFoodPortion,
@@ -29,6 +28,7 @@ def make_client(**overrides) -> Client:
     base = dict(
         id=uuid4(),
         tenant_id=uuid4(),
+        user_id=uuid4(),
         name="Valeria Test",
         sex=Sex.FEMALE,
         age_years=30,
@@ -104,22 +104,12 @@ def test_plan_cycle_roundtrip_serialization() -> None:
     assert restored == plan
 
 
-def test_intake_parsed_forbids_extra_fields() -> None:
-    with pytest.raises(ValidationError):
-        IntakeParsed(
-            name="Ana",
-            sex=Sex.FEMALE,
-            goal_raw="bajar grasa",
-            liked_foods={},
-            campo_inventado="x",
-        )
-
-
 def test_a_recipe_can_declare_its_macros_instead_of_its_ingredients() -> None:
     """El plato de restaurante: sin ingredientes, con sus macros exactos."""
     dish = Recipe(
         id=uuid4(),
         tenant_id=uuid4(),
+        user_id=uuid4(),
         name="Hamburguesa del restaurante",
         macros=MacroTargets(kcal=550, protein_g=42, carb_g=55, fat_g=18),
         total_grams=350,
@@ -136,6 +126,7 @@ def test_a_recipe_with_neither_ingredients_nor_macros_is_nothing() -> None:
         Recipe(
             id=uuid4(),
             tenant_id=uuid4(),
+            user_id=uuid4(),
             name="Aire",
             macros=MacroTargets(kcal=0, protein_g=0, carb_g=0, fat_g=0),
             total_grams=100,

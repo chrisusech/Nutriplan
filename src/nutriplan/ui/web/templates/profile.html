@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Perfil{% endblock %}
+
+{% block content %}
+<h1>Tu perfil</h1>
+<p class="muted">{{ trainer.email }}</p>
+
+{% if perfil %}
+<section class="card profile-card">
+  <dl class="facts">
+    <div><dt>Objetivo</dt><dd>{{ GOAL_META[perfil.goal].label }}</dd></div>
+    <div><dt>Peso</dt><dd>{{ perfil.weight_kg }} kg</dd></div>
+    <div><dt>Altura</dt><dd>{{ perfil.height_cm }} cm</dd></div>
+    <div><dt>Edad</dt><dd>{{ perfil.age_years }} años</dd></div>
+    <div><dt>Comidas al día</dt><dd>{{ perfil.meal_slots|length }}</dd></div>
+    {% if perfil.city %}<div><dt>Ciudad</dt><dd>{{ perfil.city }}</dd></div>{% endif %}
+  </dl>
+  {% if perfil.eating_pattern_raw %}
+  <div class="habits">
+    <h3>Cómo comes</h3>
+    <p class="muted">{{ perfil.eating_pattern_raw }}</p>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="card danger-zone">
+  <h3>Tu cuenta</h3>
+  <form method="post" action="/logout">
+    <button class="btn btn-outline btn-block" type="submit">
+      <span class="icon">logout</span>Cerrar sesión
+    </button>
+  </form>
+  <details class="delete">
+    <summary>Eliminar mi cuenta</summary>
+    <p class="muted">Se borran tu perfil, tus menús, tus calificaciones y tus
+      comentarios. Las estadísticas de uso se conservan sin nada que te identifique.
+      No se puede deshacer.</p>
+    <form method="post" action="/perfil/eliminar">
+      <button class="btn btn-danger btn-block" type="submit">
+        Sí, eliminar mi cuenta
+      </button>
+    </form>
+  </details>
+</section>
+{% endblock %}

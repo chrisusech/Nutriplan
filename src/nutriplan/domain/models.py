@@ -4,7 +4,7 @@ Todos los IDs son UUID. Todos los agregados con datos de personas llevan
 tenant_id. Ningún modelo de este módulo conoce I/O, frameworks ni la IA.
 """
 
-from datetime import date, datetime
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -61,21 +61,41 @@ class UnitGranularity(StrEnum):
 # comidas, y de tres.
 CORE_MEAL_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
 
+# El menú es de una semana. No es una configuración: es el producto.
+DAYS_PER_WEEK = 7
+
 
 class Client(BaseModel):
+    """El perfil nutricional de una persona.
+
+    `name` no tiene columna propia: es el nombre de la cuenta (`users.name`), que
+    el repositorio trae por `user_id`. La identidad vive en un solo sitio.
+    """
+
     id: UUID
     tenant_id: UUID
+    user_id: UUID
     name: str
     sex: Sex
-    birthdate: date | None = None  # preferible a edad fija
-    age_years: int | None = None  # fallback si no hay fecha
+    age_years: int = Field(ge=13, le=100)
     height_cm: float = Field(gt=0)
     weight_kg: float = Field(gt=0)
     goal: Goal
     activity_level: ActivityLevel
-    liked_food_ids: list[UUID] = []  # alimentos que le gustan
+    # Dónde vive: lo que hace que el plan sepa a comida de su región.
+    city: str | None = None
+    country: str | None = None
+    liked_food_ids: list[UUID] = []  # vacío = "sorpréndeme", todo el catálogo
     restrictions: list[str] = []  # tags: "no_seafood","no_gluten","no_shake",...
-    notes: str | None = None
+    # Lo que NO quiere ver aunque no sea alergia. Antes se perdía en `notes` y
+    # nadie lo leía; ahora entra al filtro del catálogo.
+    dislikes: list[str] = []
+    # Cómo es su vida alrededor de la comida: "le encanta cocinar", "come afuera",
+    # "entrena de noche", "come rápido".
+    context_tags: list[str] = []
+    # Su relato libre: "cómo es un día típico tuyo". Contexto para el selector y
+    # para el crítico; no altera macros.
+    eating_pattern_raw: str | None = None
 
     # Cuántas comidas hace al día, y CUÁLES. Cinco por defecto, que es lo normal;
     # pero quien come cuatro no tiene por qué recibir un plan de cinco. Vacío =
@@ -282,11 +302,6 @@ class MealFoodPortion(BaseModel):
     grams: float = Field(gt=0)
 
 
-class PlanPhase(StrEnum):
-    FIRST_15 = "first_15"
-    NEXT_15 = "next_15"
-
-
 class MealItem(BaseModel):
     """Un alimento (o receta) dentro de una comida — unidad editable con id estable.
 
@@ -300,7 +315,6 @@ class MealItem(BaseModel):
     grams: float | None = None
     is_free: bool = False
     is_locked: bool = False
-    note: str | None = None
     position: int = 0
 
     @model_validator(mode="after")
@@ -317,6 +331,12 @@ class MealItem(BaseModel):
 class MealEntry(BaseModel):
     id: int | None = None  # fila meal_entries; estable para URLs HTMX
     slot: MealSlot
+    # Qué plato es, no solo qué alimentos lleva. Lo pone el motor de platos y lo
+    # puede renombrar el crítico: "Tostada de huevos con aguacate" en vez de una
+    # lista. `dish_key` es la clave de caché de su receta.
+    template_id: str | None = None
+    dish_name: str | None = None
+    dish_key: str | None = None
     items: list[MealItem] = []
     computed: MacroTargets  # recalculado por el código, nunca por la IA
     free_salad: bool = False
@@ -373,7 +393,6 @@ class MealEntry(BaseModel):
 
 class DayPlan(BaseModel):
     day_index: int = Field(ge=0, le=6)  # 0..6 (lunes..domingo)
-    phase: PlanPhase = PlanPhase.FIRST_15
     meals: list[MealEntry]
     totals: MacroTargets
 
@@ -381,7 +400,6 @@ class DayPlan(BaseModel):
 class PlanStatus(StrEnum):
     DRAFT = "draft"
     APPROVED = "approved"
-    EXPORTED = "exported"
 
 
 class PlanCycle(BaseModel):
@@ -389,8 +407,7 @@ class PlanCycle(BaseModel):
     tenant_id: UUID
     client_id: UUID
     targets_id: UUID
-    days: list[DayPlan]  # 7 días por bloque de fase
-    duration_days: int = Field(default=15, ge=15, le=30)
+    days: list[DayPlan]  # exactamente 7, uno por día de la semana
     variant: int = Field(default=0, ge=0)
     # El número humano del plan ("Plan nutricional v3"). `variant` es su gemelo
     # técnico: entra en el input_hash para que dos versiones no colisionen en la
@@ -406,64 +423,19 @@ class PlanCycle(BaseModel):
     prompt_version: str
     model: str
     input_hash: str
-    created_by: UUID | None = None
     created_at: datetime
     approved_at: datetime | None = None
     edited_at: datetime | None = None
-    edited_by: UUID | None = None
     edit_count: int = 0
+    # Rastro de la pasada crítica. Sin ella el menú es válido igual, solo que
+    # sin nombres de plato y sin las sustituciones de sabor.
+    refined_at: datetime | None = None
+    refine_model: str | None = None
+    refine_prompt_version: str | None = None
 
     @property
     def is_edited(self) -> bool:
         return self.edit_count > 0 or self.edited_at is not None
-
-
-class IntakeStatus(StrEnum):
-    PARSED = "parsed"
-    NEEDS_REVIEW = "needs_review"
-    CONFIRMED = "confirmed"
-
-
-class IntakeDocument(BaseModel):
-    id: UUID
-    tenant_id: UUID
-    client_id: UUID | None = None
-    source_filename: str
-    raw_text: str
-    parsed: dict[str, Any]  # datos extraídos por la IA
-    ambiguities: list[str] = []  # campos dudosos para revisión humana
-    status: IntakeStatus
-    created_at: datetime
-
-
-# --- Contratos de la IA (Structured Outputs) ---
-
-
-class LikedFoods(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    proteins: list[str] = []
-    carbs: list[str] = []
-    fats: list[str] = []
-    fruits: list[str] = []
-    vegetables: list[str] = []
-
-
-class IntakeParsed(BaseModel):
-    model_config = ConfigDict(extra="forbid")  # requerido por Structured Outputs
-
-    name: str
-    sex: Sex
-    age_years: int | None = None
-    height_cm: float | None = None
-    weight_kg: float | None = None
-    weight_is_approximate: bool = False  # bandera de ambigüedad
-    city: str | None = None
-    goal_raw: str  # texto libre del objetivo
-    liked_foods: LikedFoods  # listas por categoría (strings)
-    restrictions_raw: list[str] = []  # "sin mariscos", etc.
-    uses_protein_shake: bool | None = None
-    training_raw: str | None = None
 
 
 class MealSelection(BaseModel):
@@ -498,16 +470,40 @@ class Branding(BaseModel):
     handle: str | None = None  # @instagram u otro
 
 
-class Trainer(BaseModel):
-    """Cuenta de acceso. Un entrenador es dueño de su tenant; un cliente ve solo
-    su propio plan (client_id); un admin verifica recetas de todos."""
+class Role(StrEnum):
+    """Rol de la cuenta. `user` es el entrenador; `super_user` es el dueño de la
+    plataforma (crea entrenadores, fija cupos, bloquea) y no tiene límites."""
+
+    USER = "user"
+    SUPER_USER = "super_user"
+
+
+class AuthProvider(StrEnum):
+    PASSWORD = "password"
+    GOOGLE = "google"
+    APPLE = "apple"
+
+
+class Account(BaseModel):
+    """La cuenta de una persona. Cada `user` es dueño de su propio tenant.
+
+    Existe desde el registro; su perfil nutricional (`Client`) solo aparece al
+    terminar el onboarding, así que el nombre vive aquí y no allá.
+
+    `max_menus` es el override manual del super_user: `None` = se aplica la regla
+    del BETA (un menú, y el segundo se desbloquea calificando y dejando feedback).
+    """
 
     id: UUID
     tenant_id: UUID
     name: str
     email: str
-    role: str = "trainer"  # "trainer" | "client" | "admin"
-    client_id: UUID | None = None  # solo para cuentas de cliente
+    role: Role = Role.USER
+    provider: AuthProvider = AuthProvider.PASSWORD
+    is_active: bool = True
+    email_verified_at: datetime | None = None
+    consent_analytics_at: datetime | None = None
+    max_menus: int | None = None
 
 
 class RecipeStatus(StrEnum):

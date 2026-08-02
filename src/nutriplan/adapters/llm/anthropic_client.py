@@ -27,6 +27,13 @@ class AnthropicClient:
                  max_tokens_select: int = 8192) -> None:
         import anthropic
 
+        try:
+            import anthropic  # noqa: F401
+        except ImportError as exc:  # pragma: no cover - depende del extra
+            raise LLMError(
+                "Claude es opcional: instala el extra `anthropic` "
+                "(uv sync --extra anthropic) o usa un proveedor OpenAI-compatible."
+            ) from exc
         self._client = anthropic.AsyncAnthropic(api_key=api_key or None)
         self._anthropic = anthropic
         self._max_tokens_extract = max_tokens_extract

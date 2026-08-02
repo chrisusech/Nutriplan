@@ -298,3 +298,37 @@ def test_an_optional_component_can_actually_be_left_out(catalog, foods) -> None:
     assert without_fat, "y también la versión sin ella, que es lo que 'opcional' dice"
     assert all(d.dropped == 0 for d in with_fat)
     assert all(d.dropped == 1 for d in without_fat)
+
+
+def test_todas_las_plantillas_traen_una_receta_que_se_puede_leer() -> None:
+    """El catálogo REAL, no uno de mentira.
+
+    Un paso con dos puntos ("Sirve al momento: la avena espesa...") YAML lo
+    parsea como diccionario, no como texto, y la receta entera se cae al
+    validar. Pasó de verdad; los tests con datos sintéticos no lo veían.
+    """
+    from nutriplan.domain.meal_template import static_recipes
+
+    catalog = load_meal_catalog(CLASSES, TEMPLATES)
+    recetas = static_recipes(catalog)
+
+    assert len(recetas) == len(catalog.templates), "toda plantilla necesita su receta"
+    for template_id, steps in recetas.items():
+        assert steps, f"{template_id} tiene la clave `recipe` vacía"
+        for step in steps:
+            assert isinstance(step, str), f"{template_id}: un paso no es texto ({step!r})"
+            assert step.strip(), f"{template_id}: paso vacío"
+
+
+def test_las_recetas_del_catalogo_no_llevan_cifras() -> None:
+    """Las cantidades las pone el plan. Una receta que diga "200 g" miente."""
+    import re
+
+    from nutriplan.domain.meal_template import static_recipes
+
+    catalog = load_meal_catalog(CLASSES, TEMPLATES)
+    for template_id, steps in static_recipes(catalog).items():
+        for step in steps:
+            assert not re.search(r"\d+\s*(g|gr|gramos|kcal|ml)\b", step, re.I), (
+                f"{template_id} mete cantidades en la receta: {step!r}"
+            )

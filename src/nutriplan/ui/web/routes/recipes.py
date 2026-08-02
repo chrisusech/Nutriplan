@@ -89,7 +89,7 @@ async def create(request: Request,
     repos = repos_of(request, session)
     form = await request.form()
     name = str(form.get("name", ""))
-    slots = [MealSlot(s) for s in form.getlist("meal_slot")]
+    slots = [MealSlot(str(s)) for s in form.getlist("meal_slot")]
 
     try:
         if str(form.get("modo", "")) == "macros":

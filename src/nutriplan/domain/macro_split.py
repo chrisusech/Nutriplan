@@ -19,7 +19,13 @@ plan que el solver produce es el que el validador rechaza.
 from collections.abc import Sequence
 
 from nutriplan.domain.generation_rules import CARB_GROUP, PROTEIN_GROUP
-from nutriplan.domain.models import DayPlan, FoodItem, MacroTargets, MealSlot
+from nutriplan.domain.models import (
+    DayPlan,
+    FoodCategory,
+    FoodItem,
+    MacroTargets,
+    MealSlot,
+)
 from nutriplan.domain.nutrition_config import NutritionConfig
 
 # Los dos macros que se reparten por comida. La grasa NO está: cierra a nivel de
@@ -32,7 +38,9 @@ MACRO_SOURCES = {
 Meals = Sequence[tuple[MealSlot, list[FoodItem]]]
 
 
-def _has_source(foods: list[FoodItem], attr: str, group: frozenset | set) -> bool:
+def _has_source(
+    foods: list[FoodItem], attr: str, group: frozenset[FoodCategory] | set[FoodCategory]
+) -> bool:
     return any(
         f.category in group and not f.is_free and getattr(f, attr) > 0 for f in foods
     )

@@ -1,0 +1,227 @@
+/* "Mi semana": los días, los platos y su receta desplegable.
+   Es la pantalla que la gente abre a diario, así que manda sobre todo lo demás. */
+
+/* --- Selector de día ------------------------------------------------------ */
+
+.days {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  padding: var(--s-1) 0 var(--s-3);
+  margin-inline: calc(var(--s-4) * -1);
+  padding-inline: var(--s-4);
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.days::-webkit-scrollbar { display: none; }
+
+.day {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.125rem;
+  min-width: 3.25rem;
+  min-height: var(--tap);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font: 600 var(--t-xs) Poppins, sans-serif;
+}
+.day .n { font-size: var(--t-md); font-weight: 700; color: var(--ink); }
+.day.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.day.on .n { color: #fff; }
+.day.today::after {
+  content: ''; width: 0.25rem; height: 0.25rem; border-radius: 50%;
+  background: currentColor;
+}
+
+/* --- Resumen del día ------------------------------------------------------ */
+
+.day-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  margin-bottom: var(--s-3);
+  border-radius: var(--r-xl);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.day-summary .kcal { font: 800 var(--t-xl) Poppins, sans-serif; color: var(--ink); }
+.day-summary .kcal span { font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
+
+.macros { display: flex; gap: var(--s-3); }
+.macro { text-align: center; font: 600 var(--t-xs) Poppins, sans-serif; color: var(--muted); }
+.macro b { display: block; font-size: var(--t-md); font-weight: 700; color: var(--ink); }
+.macro.p b { color: var(--protein); }
+.macro.c b { color: var(--carb); }
+.macro.f b { color: var(--fat); }
+
+/* --- El plato ------------------------------------------------------------- */
+
+.meals { display: flex; flex-direction: column; gap: var(--s-2); list-style: none; margin: 0; padding: 0; }
+
+.meal { border-radius: var(--r-lg); }
+
+/* <details>/<summary>: el desplegable sin una línea de JavaScript, que además
+   es lo que hace posible una CSP sin `unsafe-inline`. */
+.meal > summary {
+  display: flex; align-items: center; gap: var(--s-3);
+  min-height: var(--tap);
+  padding: var(--s-3);
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--line);
+  background: var(--wash-2);
+  cursor: pointer;
+  list-style: none;
+}
+.meal > summary::-webkit-details-marker { display: none; }
+.meal[open] > summary { background: var(--brand-soft); border-color: var(--brand); }
+
+.meal-icon {
+  flex: 0 0 auto;
+  width: 2.375rem; height: 2.375rem;
+  border-radius: var(--r-sm);
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+}
+.meal[open] .meal-icon { background: var(--card); }
+
+.meal-text { flex: 1; min-width: 0; }
+.meal-name {
+  font: 700 var(--t-md) Poppins, sans-serif;
+  color: var(--ink);
+  /* El nombre del plato puede ser largo; que no empuje al chevron fuera. */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.meal-sub { font: 500 var(--t-sm) Poppins, sans-serif; color: var(--muted-2); }
+
+.meal-kcal {
+  flex: 0 0 auto;
+  font: 700 var(--t-sm) Poppins, sans-serif;
+  color: var(--ink-2);
+}
+.meal-chevron {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  color: var(--ink-3);
+  transition: transform 0.2s ease;
+}
+.meal[open] .meal-chevron { background: var(--brand); color: #fff; transform: rotate(180deg); }
+
+/* --- La receta ------------------------------------------------------------ */
+
+.recipe {
+  margin-top: var(--s-2);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--wash-2);
+  animation: slide-down 0.25s ease;
+}
+.recipe h4 {
+  margin: 0 0 var(--s-2);
+  font: 700 var(--t-xs) Poppins, sans-serif;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.recipe + .recipe, .recipe-block + .recipe-block { margin-top: var(--s-4); }
+
+.ingredients { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0 0 var(--s-4); padding: 0; list-style: none; }
+.ingredients li {
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--card);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--ink-2);
+}
+
+.steps { margin: 0; padding-left: var(--s-5); display: flex; flex-direction: column; gap: var(--s-2); }
+.steps li { font: 500 var(--t-md) Poppins, sans-serif; color: var(--ink-2); line-height: 1.6; }
+.steps li::marker { color: var(--brand); font-weight: 700; }
+
+.recipe-meta { display: flex; gap: var(--s-2); flex-wrap: wrap; margin-top: var(--s-4); }
+
+.tip {
+  margin-top: var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--chip);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--ink-3);
+}
+
+.free-meal {
+  padding: var(--s-5) var(--s-4);
+  text-align: center;
+  font: 600 var(--t-md) Poppins, sans-serif;
+  color: var(--ink-2);
+}
+
+/* --- Calificar ------------------------------------------------------------ */
+
+.rate { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); }
+.rate-label { font: 600 var(--t-sm) Poppins, sans-serif; color: var(--muted); margin-right: auto; }
+.star {
+  display: flex; align-items: center; justify-content: center;
+  width: var(--tap); height: var(--tap);
+  border: none; background: none; cursor: pointer;
+  color: var(--faint-2);
+}
+.star.on { color: var(--brand); }
+
+/* --- Barra inferior ------------------------------------------------------- */
+
+.nav {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-around;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-2) calc(var(--s-2) + var(--safe-b));
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(0.75rem);
+  border-top: 1px solid var(--line);
+}
+.nav a {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.125rem;
+  min-height: var(--tap);
+  padding: var(--s-1);
+  border-radius: var(--r-sm);
+  font: 600 var(--t-xs) Poppins, sans-serif;
+  color: var(--muted-2);
+}
+.nav a.on { color: var(--brand); }
+.nav .icon { font-size: 1.5rem; }
+
+/* En pantallas grandes la barra deja de ir pegada abajo y se centra. */
+@media (min-width: 40rem) {
+  .nav {
+    inset: auto auto 1.5rem 50%;
+    transform: translateX(-50%);
+    width: min(30rem, calc(100% - 3rem));
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    box-shadow: var(--sh-3);
+  }
+}
+
+/* --- Estados vacíos ------------------------------------------------------- */
+
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
+  padding: var(--s-8) var(--s-4);
+  text-align: center;
+}
+.empty .icon { font-size: 3rem; color: var(--faint-2); }
+.empty p { color: var(--muted); max-width: 22rem; }

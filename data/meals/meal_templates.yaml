@@ -13,13 +13,18 @@
 # de entrada mira la versión del catálogo, no los datos del alimento: sin subirla,
 # los planes ya generados se servirían de caché y parecería que el motor sigue
 # poniendo arepa en los almuerzos.
-version: "2026.07.15"
+version: "2026.08.01"
 
 templates:
   # ---------------------------------------------------------------- DESAYUNO --
 
   - id: huevos_carbo_grasa
     name: Huevos con carbohidrato y grasa
+    recipe:
+      - "Calienta una sartén antiadherente a fuego medio con unas gotas de aceite."
+      - "Cocina los huevos como más te gusten: revueltos, en tortilla o al ojo. Salpimenta al final."
+      - "Tuesta o calienta el carbohidrato mientras tanto."
+      - "Sirve, corta la grasa en láminas encima y come caliente."
     slots: [desayuno]
     components:
       - {role: protein, sel: "@huevos"}
@@ -28,6 +33,10 @@ templates:
 
   - id: bowl_lacteo_avena_fruta
     name: Bowl de lácteo con avena y fruta
+    recipe:
+      - "Sirve el lácteo en un tazón hondo."
+      - "Agrega la avena y mezcla hasta que se hidrate."
+      - "Corta la fruta encima. Si tienes tiempo, déjalo cinco minutos: la avena queda más suave."
     slots: [desayuno]
     components:
       - {role: protein, sel: "@lacteo_magro"}
@@ -36,6 +45,10 @@ templates:
 
   - id: lacteo_carbo_crema
     name: Lácteo con tostada y crema de frutos secos
+    recipe:
+      - "Tuesta el carbohidrato hasta que esté crujiente."
+      - "Úntale la crema de frutos secos mientras está caliente, para que se extienda sola."
+      - "Acompaña con el lácteo al lado."
     slots: [desayuno]
     components:
       - {role: protein, sel: "@lacteo_magro"}
@@ -44,6 +57,10 @@ templates:
 
   - id: batido_avena_fruta
     name: Batido de proteína con avena y fruta
+    recipe:
+      - "Pon en la licuadora la fruta, la avena, la proteína en polvo y agua fría."
+      - "Licúa un minuto hasta que no queden grumos."
+      - "Sirve al momento: la avena espesa el batido si lo dejas reposar."
     slots: [desayuno]
     components:
       - {role: protein, sel: "@batido"}
@@ -52,6 +69,10 @@ templates:
 
   - id: loncha_carbo_aguacate
     name: Tostada con loncha y aguacate
+    recipe:
+      - "Tuesta el carbohidrato."
+      - "Machaca el aguacate con un poco de sal y limón, y úntalo encima."
+      - "Coloca las lonchas por encima y cierra o come abierto."
     slots: [desayuno]
     components:
       - {role: protein, sel: "@loncha"}
@@ -67,12 +88,17 @@ templates:
 
   - id: fruta_sola
     name: Fruta
+    recipe:
+      - "Lava la fruta y córtala como prefieras. Come."
     slots: [snack_am, snack_pm]
     components:
       - {role: fruit, sel: "@fruta"}
 
   - id: fruta_crema
     name: Fruta con crema de frutos secos
+    recipe:
+      - "Corta la fruta en tajadas."
+      - "Sirve la crema de frutos secos al lado y ve mojando cada tajada."
     slots: [snack_am, snack_pm]
     components:
       - {role: fruit, sel: "@fruta"}
@@ -80,6 +106,9 @@ templates:
 
   - id: fruta_frutos_secos
     name: Fruta con frutos secos
+    recipe:
+      - "Corta la fruta en trozos."
+      - "Mézclala con los frutos secos en un tazón pequeño."
     slots: [snack_am, snack_pm]
     components:
       - {role: fruit, sel: "@fruta"}
@@ -87,6 +116,9 @@ templates:
 
   - id: lacteo_fruta
     name: Yogur griego con fruta
+    recipe:
+      - "Sirve el yogur en un tazón."
+      - "Lava y corta la fruta encima. Si la mezclas, queda más dulce."
     slots: [snack_am, snack_pm]
     components:
       - {role: protein, sel: "@lacteo_magro"}
@@ -95,12 +127,17 @@ templates:
   # La salida cuando el cliente no tiene fruta en su lista: el yogur solo.
   - id: lacteo_solo
     name: Yogur griego
+    recipe:
+      - "Sirve el yogur en un tazón. Un toque de canela le cambia la vida."
     slots: [snack_am, snack_pm]
     components:
       - {role: protein, sel: "@lacteo_magro"}
 
   - id: loncha_carbo_snack
     name: Loncha con galletas o tostada
+    recipe:
+      - "Coloca las lonchas sobre las galletas o la tostada."
+      - "Come al momento para que el carbohidrato no se ablande."
     slots: [snack_am, snack_pm]
     components:
       - {role: protein, sel: "@loncha"}
@@ -108,6 +145,9 @@ templates:
 
   - id: batido_fruta
     name: Batido de proteína con fruta
+    recipe:
+      - "Licúa la fruta con la proteína en polvo y agua bien fría."
+      - "Sirve enseguida."
     slots: [snack_am, snack_pm]
     components:
       - {role: protein, sel: "@batido"}
@@ -117,6 +157,11 @@ templates:
 
   - id: proteina_carbo_ensalada
     name: Proteína con carbohidrato y ensalada
+    recipe:
+      - "Salpimenta la proteína y cocínala en una sartén caliente con poco aceite, girándola una sola vez para que no se seque."
+      - "Cocina o calienta el carbohidrato aparte."
+      - "Arma una ensalada generosa con lo que tengas: hojas, tomate, cebolla, pepino."
+      - "Sirve todo junto y alíñala con limón, sal y un hilo de aceite."
     slots: [almuerzo, cena]
     free_salad: true
     components:
@@ -126,6 +171,10 @@ templates:
 
   - id: proteina_carbo_aguacate
     name: Proteína con carbohidrato y aguacate
+    recipe:
+      - "Cocina la proteína a fuego medio hasta que esté dorada por fuera y jugosa por dentro."
+      - "Calienta el carbohidrato."
+      - "Corta el aguacate en láminas y colócalo al lado, con sal y limón."
     slots: [almuerzo, cena]
     free_salad: true
     components:

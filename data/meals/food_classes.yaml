@@ -6,7 +6,11 @@
 #
 # `version` entra en compute_input_hash: si cambias una clase, los planes se
 # regeneran en vez de servirse de la caché.
-version: "2026.07.14"
+# 2026.07.16: las semillas de sésamo dejan de ser grasa de cocina en almuerzo/cena
+# (topping de desayuno, no algo que echar a 20 g en una carne molida). El cambio vive
+# en el CSV del catálogo, así que se sube la versión aquí para que el hash de entrada
+# cambie y los planes ya generados se regeneren en vez de servirse de caché.
+version: "2026.07.16"
 
 classes:
   # --- Proteínas -------------------------------------------------------------

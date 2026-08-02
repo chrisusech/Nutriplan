@@ -10,12 +10,11 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutriplan.adapters.db.models import TenantRow, UserRow
+from nutriplan.adapters.db.models import TenantRow
 from nutriplan.adapters.db.repositories import SqlFoodRepository
 from nutriplan.adapters.food.curated_loader import load_curated_foods
 
 DEFAULT_TENANT_ID: UUID = uuid5(NAMESPACE_URL, "nutriplan/default-tenant")
-DEFAULT_USER_ID: UUID = uuid5(NAMESPACE_URL, "nutriplan/default-user")
 
 
 async def seed_local(session: AsyncSession, foods_csv: Path) -> None:
@@ -25,8 +24,6 @@ async def seed_local(session: AsyncSession, foods_csv: Path) -> None:
                 id=DEFAULT_TENANT_ID, name="Entrenadora local", created_at=datetime.now(UTC)
             )
         )
-    if await session.get(UserRow, DEFAULT_USER_ID) is None:
-        session.add(UserRow(id=DEFAULT_USER_ID, tenant_id=DEFAULT_TENANT_ID, name="Valeria"))
     await session.flush()
 
     # Se re-siembra SIEMPRE. Antes había un guard por conteo (`if count >=

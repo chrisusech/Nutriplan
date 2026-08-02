@@ -8,7 +8,7 @@ from uuid import UUID
 
 import structlog
 
-from nutriplan.domain.errors import GenerationError
+from nutriplan.domain.errors import GenerationError, QuotaExceededError
 from nutriplan.domain.models import PlanCycle, PlanStatus
 from nutriplan.ports.job_repository import AuditLogRepository
 from nutriplan.ports.repository import PlanRepository
@@ -22,6 +22,7 @@ async def approve_plan(
     plan_repo: PlanRepository,
     audit_repo: AuditLogRepository,
     approved_by: UUID | None = None,
+    max_menus: int | None = None,
 ) -> PlanCycle:
     plan = await plan_repo.get(plan_id)
     if plan is None:
@@ -33,6 +34,17 @@ async def approve_plan(
             f"Solo un borrador puede aprobarse (estado actual: {plan.status.value})"
         )
 
+    # Aprobar = versión definitiva: consume cupo. `max_menus is None` es el
+    # super_user (sin límite). Los borradores no cuentan; solo las APPROVED.
+    approved_count = await plan_repo.count_approved_for_client(plan.client_id)
+    if max_menus is not None and approved_count >= max_menus:
+        raise QuotaExceededError(
+            f"Este cliente ya tiene {approved_count} de {max_menus} versiones "
+            "definitivas permitidas. Pide al administrador ampliar el cupo."
+        )
+
+    # La versión definitiva se numera al aprobar (los borradores no gastan número).
+    await plan_repo.set_version(plan_id, approved_count + 1)
     await plan_repo.set_status(plan_id, PlanStatus.APPROVED)
     await audit_repo.record(
         action="plan_approved",

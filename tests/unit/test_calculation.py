@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 
 from nutriplan.domain.calculation import (
     apply_overrides,
@@ -27,6 +28,7 @@ def make_client(**overrides) -> Client:
     base = dict(
         id=uuid4(),
         tenant_id=uuid4(),
+        user_id=uuid4(),
         name="Golden",
         sex=Sex.FEMALE,
         age_years=30,
@@ -156,9 +158,12 @@ def test_carb_floor_rejects_a_day_that_cannot_be_built(nutrition_config) -> None
         compute_targets(client, nutrition_config, formula=formula)
 
 
-def test_missing_age_raises(nutrition_config) -> None:
-    with pytest.raises(CalculationError):
-        compute_targets(make_client(age_years=None, birthdate=None), nutrition_config)
+def test_una_edad_imposible_no_llega_a_calcularse(nutrition_config) -> None:
+    """La edad la valida el tipo, no el cálculo: nunca llega un perfil sin ella."""
+    with pytest.raises(PydanticValidationError):
+        make_client(age_years=None)
+    with pytest.raises(PydanticValidationError):
+        make_client(age_years=8)
 
 
 def test_overrides_replace_and_are_recorded(nutrition_config) -> None:

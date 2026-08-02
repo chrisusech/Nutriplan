@@ -55,6 +55,7 @@ def client(foods, plan_bundle) -> Client:
     return Client(
         id=plan.client_id,
         tenant_id=plan.tenant_id,
+        user_id=uuid4(),
         name="Test",
         sex=Sex.FEMALE,
         age_years=30,
@@ -111,7 +112,6 @@ async def test_swap_food_in_slot(plan_bundle, targets, nutrition_config, foods) 
 
     swapped = await swap_food_in_slot(
         cycle=plan,
-        phase=day.phase,
         day_index=day.day_index,
         slot=MealSlot.BREAKFAST,
         old_food_id=arepa.food_id,
@@ -137,7 +137,6 @@ async def test_remove_food_from_slot(plan_bundle, targets, nutrition_config) -> 
 
     updated = await remove_food_from_slot(
         cycle=plan,
-        phase=day.phase,
         day_index=day.day_index,
         slot=MealSlot.BREAKFAST,
         food_id=aguacate.food_id,
@@ -251,13 +250,13 @@ async def test_the_free_meal_has_nothing_to_swap_or_remove(
 
     with pytest.raises(GenerationError, match="comida libre"):
         await swap_food_in_slot(
-            cycle=cycle, phase=cycle.days[0].phase, day_index=0, slot=MealSlot.DINNER,
+            cycle=cycle, day_index=0, slot=MealSlot.DINNER,
             old_food_id=arroz.id, new_food=arroz, foods=food_map,
             targets=targets, config=nutrition_config,
         )
 
     with pytest.raises(GenerationError, match="comida libre"):
         await remove_food_from_slot(
-            cycle=cycle, phase=cycle.days[0].phase, day_index=0, slot=MealSlot.DINNER,
+            cycle=cycle, day_index=0, slot=MealSlot.DINNER,
             food_id=arroz.id, foods=food_map, targets=targets, config=nutrition_config,
         )

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Mi semana{% endblock %}
+
+{% block content %}
+{% if not plan %}
+  <div class="empty">
+    <span class="icon">restaurant_menu</span>
+    <h2>Todavía no tienes menú</h2>
+    <p>Genera el tuyo: siete días de comidas pensadas para lo que te gusta y para
+       cómo es tu día de verdad.</p>
+    <form method="post" action="/generar">
+      <button class="btn btn-primary btn-big" type="submit">
+        <span class="icon">auto_awesome</span>Generar mi menú
+      </button>
+    </form>
+  </div>
+{% else %}
+
+  <nav class="days" aria-label="Días de la semana">
+    {% for d in days %}
+    <a class="day {% if d.index == dia %}on{% endif %} {% if d.is_today %}today{% endif %}"
+       href="/?dia={{ d.index }}"
+       {% if d.index == dia %}aria-current="page"{% endif %}>
+      <span>{{ d.short }}</span>
+      <span class="n">{{ d.index + 1 }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <section class="day-summary" aria-label="Resumen del día">
+    <div>
+      <div class="kcal">{{ day.kcal }} <span>kcal</span></div>
+      <div class="muted">{{ day.label }}</div>
+    </div>
+    <div class="macros">
+      <div class="macro p"><b>{{ day.protein_g }}</b>Proteína</div>
+      <div class="macro c"><b>{{ day.carb_g }}</b>Carbos</div>
+      <div class="macro f"><b>{{ day.fat_g }}</b>Grasas</div>
+    </div>
+  </section>
+
+  <ul class="meals">
+    {% for meal in day.meals %}
+    <li>
+      <details class="meal" {% if loop.first %}open{% endif %}>
+        <summary>
+          <span class="meal-icon"><span class="icon">{{ meal.icon }}</span></span>
+          <span class="meal-text">
+            <span class="meal-name">{{ meal.title }}</span>
+            <span class="meal-sub">{{ meal.slot_label }} · {{ meal.time }}</span>
+          </span>
+          {% if not meal.is_free %}<span class="meal-kcal">{{ meal.kcal }} kcal</span>{% endif %}
+          <span class="meal-chevron"><span class="icon">expand_more</span></span>
+        </summary>
+
+        {% if meal.is_free %}
+          <div class="recipe free-meal">
+            <span class="icon">celebration</span>
+            <p>Tu comida libre de la semana. Come lo que quieras, sin pesar nada.</p>
+          </div>
+        {% else %}
+          <div class="recipe">
+            <div class="recipe-block">
+              <h4>Ingredientes</h4>
+              <ul class="ingredients">
+                {% for item in meal.ingredients %}<li>{{ item }}</li>{% endfor %}
+              </ul>
+            </div>
+
+            {% if meal.steps %}
+            <div class="recipe-block">
+              <h4>Preparación</h4>
+              <ol class="steps">
+                {% for step in meal.steps %}<li>{{ step }}</li>{% endfor %}
+              </ol>
+              <div class="recipe-meta">
+                {% if meal.prep_minutes %}
+                <span class="pill"><span class="icon">schedule</span>{{ meal.prep_minutes }} min</span>
+                {% endif %}
+                {% if meal.difficulty %}
+                <span class="pill"><span class="icon">signal_cellular_alt</span>{{ meal.difficulty }}</span>
+                {% endif %}
+              </div>
+              {% if meal.tips %}<p class="tip">💡 {{ meal.tips }}</p>{% endif %}
+            </div>
+            {% endif %}
+
+            <form class="rate" method="post" action="/calificar">
+              <input type="hidden" name="dia" value="{{ dia }}">
+              <input type="hidden" name="slot" value="{{ meal.slot }}">
+              <span class="rate-label">¿Qué tal estuvo?</span>
+              {% for n in [1, 2, 3, 4, 5] %}
+              <button class="star {% if meal.rating and n <= meal.rating %}on{% endif %}"
+                      name="rating" value="{{ n }}" type="submit"
+                      aria-label="{{ n }} de 5">
+                <span class="icon {% if meal.rating and n <= meal.rating %}fill{% endif %}">star</span>
+              </button>
+              {% endfor %}
+            </form>
+          </div>
+        {% endif %}
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+
+  {% if can_regenerate %}
+  <form method="post" action="/generar" class="regen">
+    <button class="btn btn-outline btn-block" type="submit">
+      <span class="icon">refresh</span>Generar otra semana
+    </button>
+  </form>
+  {% elif unlock_hint %}
+  <p class="alert">{{ unlock_hint }}</p>
+  {% endif %}
+
+{% endif %}
+{% endblock %}

@@ -1,39 +1,18 @@
-"""Presenter: rejilla de revisión por fase."""
+"""Presenter: la rejilla de la semana."""
 
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from tests.fixtures.plan_builder import build_fixed_plan
 
-from nutriplan.domain.models import PlanPhase
+from nutriplan.domain.models import MacroTargets, NutritionTargets
 from nutriplan.ui.web import presenter
 
 
-def test_week_grid_filters_by_phase(nutrition_config) -> None:
+def test_la_rejilla_tiene_los_siete_dias_de_la_semana(nutrition_config) -> None:
     plan, _, _ = build_fixed_plan()
-    # Simula plan 30 días: duplicar días con otra fase
-    from nutriplan.domain.models import DayPlan
-
-    second_week = [
-        DayPlan(
-            day_index=d.day_index,
-            phase=PlanPhase.NEXT_15,
-            meals=d.meals,
-            totals=d.totals,
-        )
-        for d in plan.days
-    ]
-    plan = plan.model_copy(update={
-        "duration_days": 30,
-        "days": plan.days + second_week,
-    })
-    assert len(plan.days) == 14
-
-    targets_id = uuid4()
-    from nutriplan.domain.models import MacroTargets, NutritionTargets
-
     targets = NutritionTargets(
-        id=targets_id,
+        id=uuid4(),
         tenant_id=plan.tenant_id,
         client_id=plan.client_id,
         daily=MacroTargets(kcal=1700, protein_g=120, carb_g=180, fat_g=55),
@@ -41,19 +20,9 @@ def test_week_grid_filters_by_phase(nutrition_config) -> None:
         config_version="test",
         computed_at=datetime.now(UTC),
     )
-
-    grid_w1 = presenter.week_grid(plan, targets, nutrition_config, PlanPhase.FIRST_15)
-    grid_w2 = presenter.week_grid(plan, targets, nutrition_config, PlanPhase.NEXT_15)
-    assert len(grid_w1) == 7
-    assert len(grid_w2) == 7
-    assert all(c["fase"] == PlanPhase.FIRST_15.value for c in grid_w1)
-    assert all(c["fase"] == PlanPhase.NEXT_15.value for c in grid_w2)
-
-
-def test_parse_plan_phase_fallback() -> None:
-    assert presenter.parse_plan_phase("first_15").value == "first_15"
-    assert presenter.parse_plan_phase("invalid").value == "first_15"
-    assert presenter.parse_plan_phase(None).value == "first_15"
+    grid = presenter.week_grid(plan, targets, nutrition_config)
+    assert len(grid) == 7
+    assert [c["n"] for c in grid] == [1, 2, 3, 4, 5, 6, 7]
 
 
 def test_the_day_of_the_free_meal_is_not_painted_as_broken(nutrition_config) -> None:
@@ -111,7 +80,7 @@ def test_the_day_of_the_free_meal_is_not_painted_as_broken(nutrition_config) -> 
         computed=MacroTargets(kcal=0, protein_g=0, carb_g=0, fat_g=0),
         is_free_meal=True,
     ))
-    sunday = DayPlan(day_index=6, phase=PlanPhase.FIRST_15, meals=meals,
+    sunday = DayPlan(day_index=6, meals=meals,
                      totals=day_totals(solved))
 
     plan, _, _ = build_fixed_plan()
@@ -129,7 +98,7 @@ def test_the_day_of_the_free_meal_is_not_painted_as_broken(nutrition_config) -> 
     )
 
     # Y contra el suyo, cuadra. Es lo que la pantalla tiene que enseñar.
-    grid = presenter.week_grid(plan, targets, nutrition_config, PlanPhase.FIRST_15,
+    grid = presenter.week_grid(plan, targets, nutrition_config,
                                foods=foods_map)
     assert grid[6]["fit"], "el día de la comida libre no está roto: apunta más bajo"
 
@@ -138,3 +107,45 @@ def test_the_day_of_the_free_meal_is_not_painted_as_broken(nutrition_config) -> 
     free_meal = next(m for m in dv.meals if m.is_free_meal)
     assert free_meal.slot is MealSlot.DINNER
     assert free_meal.chips == []
+
+
+def test_weight_progress_chart_needs_two_points() -> None:
+    """Una línea necesita dos versiones: con menos, no hay gráfica."""
+    assert presenter.weight_progress_chart([]) is None
+    one = [(datetime(2026, 1, 1, tzinfo=UTC), 80.0, 1)]
+    assert presenter.weight_progress_chart(one) is None
+
+
+def test_weight_progress_chart_maps_weight_to_geometry() -> None:
+    """El peso mayor queda arriba (y menor) y el menor abajo; el delta lleva signo."""
+    points = [
+        (datetime(2026, 1, 1, tzinfo=UTC), 80.0, 1),
+        (datetime(2026, 2, 1, tzinfo=UTC), 78.0, 2),
+        (datetime(2026, 3, 1, tzinfo=UTC), 76.0, 3),
+    ]
+    chart = presenter.weight_progress_chart(points)
+    assert chart is not None
+    assert chart["w_max"] == "80" and chart["w_min"] == "76"
+    # Bajó 4 kg: signo negativo tipográfico y marcado como descenso.
+    assert chart["delta"] == "−4 kg"
+    assert chart["delta_down"] is True
+    # Tres puntos, en orden; el primero (80 kg, el más pesado) va más arriba (y menor)
+    # que el último (76 kg).
+    ys = [p["y"] for p in chart["points"]]
+    assert len(ys) == 3
+    assert ys[0] < ys[-1]
+    # La polilínea tiene un par de coordenadas por punto.
+    assert len(chart["polyline"].split(" ")) == 3
+
+
+def test_weight_progress_chart_flat_line_when_all_equal() -> None:
+    """Sin variación de peso, la línea es horizontal (no divide por cero)."""
+    points = [
+        (datetime(2026, 1, 1, tzinfo=UTC), 75.0, 1),
+        (datetime(2026, 2, 1, tzinfo=UTC), 75.0, 2),
+    ]
+    chart = presenter.weight_progress_chart(points)
+    assert chart is not None
+    assert chart["delta"] == "0 kg"
+    ys = {p["y"] for p in chart["points"]}
+    assert len(ys) == 1  # todos a la misma altura

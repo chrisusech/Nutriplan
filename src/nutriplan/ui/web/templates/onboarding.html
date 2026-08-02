@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Cuéntanos cómo comes{% endblock %}
+
+{% block content %}
+<div class="onboarding">
+  <header class="onb-head">
+    <h1>Cuéntanos cómo comes</h1>
+    <p class="muted">Con esto armamos un menú que tenga sentido en tu vida real.</p>
+  </header>
+
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/onboarding" class="onb-form">
+
+    <section class="onb-step">
+      <h2>Tú</h2>
+      <label>Nombre
+        <input name="name" required maxlength="200" value="{{ form.name if form else '' }}">
+      </label>
+      <label>Sexo
+        <select name="sex">
+          {% for value, label in SEX_LABELS.items() %}
+            <option value="{{ value }}" {% if form and form.sex == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="onb-row">
+        <label>Edad
+          <input name="age_years" type="number" min="13" max="100" required
+                 value="{{ form.age_years if form else '' }}">
+        </label>
+        <label>Altura (cm)
+          <input name="height_cm" type="number" step="0.5" min="120" max="230" required
+                 value="{{ form.height_cm if form else '' }}">
+        </label>
+        <label>Peso (kg)
+          <input name="weight_kg" type="number" step="0.1" min="30" max="300" required
+                 value="{{ form.weight_kg if form else '' }}">
+        </label>
+      </div>
+    </section>
+
+    <section class="onb-step">
+      <h2>Tu objetivo</h2>
+      <label>¿Qué buscas?
+        <select name="goal">
+          {% for goal_value, meta in GOAL_META.items() %}
+            <option value="{{ goal_value.value }}"
+              {% if form and form.goal == goal_value.value %}selected{% endif %}>{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>¿Cuánto te mueves?
+        <select name="activity_level">
+          {% for value, label in ACTIVITY_LABELS.items() %}
+            <option value="{{ value }}" {% if form and form.activity_level == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </section>
+
+    <section class="onb-step">
+      <h2>Tu día</h2>
+      <p class="muted">Desayuno, almuerzo y cena van siempre. Los snacks los eliges tú.</p>
+      <div class="chips">
+        {% for m in MEAL_TOGGLES %}
+          <label class="chip">
+            <input type="checkbox" name="meal_slots" value="{{ m.slot.value }}" checked
+                   {% if m.core %}disabled{% endif %}> {{ m.label }}
+            {% if m.core %}<input type="hidden" name="meal_slots" value="{{ m.slot.value }}">{% endif %}
+          </label>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="onb-step">
+      <h2>Lo que no comes</h2>
+      <div class="chips">
+        {% for r in RESTRICTION_TOGGLES %}
+          <label class="chip">
+            <input type="checkbox" name="restrictions" value="{{ r.key }}"
+                   {% if form and r.key in form.restrictions %}checked{% endif %}> {{ r.label }}
+          </label>
+        {% endfor %}
+      </div>
+      <label>¿Algo que no quieres ver aunque no sea alergia?
+        <input name="dislikes" placeholder="hígado, coliflor, atún…" maxlength="500">
+      </label>
+    </section>
+
+    <section class="onb-step">
+      <h2>¿Cómo es un día típico tuyo?</h2>
+      <p class="muted">Esto es lo que más nos ayuda: cuéntanoslo como se lo contarías a alguien.</p>
+      <textarea name="eating_pattern_raw" rows="6" maxlength="2000"
+        placeholder="Ej: desayuno rápido, casi siempre huevos o avena. Almuerzo en la oficina y prefiero algo que no lleve mucha preparación. Pico entre comidas. Ceno sobre las 7:30 porque entreno a las 8…">{{ form.eating_pattern_raw if form else '' }}</textarea>
+      <div class="chips">
+        <label class="chip"><input type="checkbox" name="context_tags" value="cocina"> Me encanta cocinar</label>
+        <label class="chip"><input type="checkbox" name="context_tags" value="come_afuera"> Como mucho afuera</label>
+        <label class="chip"><input type="checkbox" name="context_tags" value="entrena_noche"> Entreno de noche</label>
+        <label class="chip"><input type="checkbox" name="context_tags" value="come_rapido"> Como rápido</label>
+      </div>
+      <label>¿En qué ciudad vives?
+        <input name="city" placeholder="Medellín" maxlength="120">
+      </label>
+    </section>
+
+    <details class="onb-step">
+      <summary><h2>Alimentos que te gustan <span class="muted">(opcional)</span></h2></summary>
+      <p class="muted">Si no marcas nada, nos encargamos nosotros.</p>
+      {% for group in groups %}
+        <div class="food-group">
+          <h3>{{ group.label }}</h3>
+          <div class="chips">
+            {% for item in group['items'] %}
+              <label class="chip">
+                <input type="checkbox" name="food_ids" value="{{ item.id }}"
+                       {% if item.on %}checked{% endif %}> {{ item.name }}
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </details>
+
+    <button type="submit" class="btn-primary">Crear mi menú</button>
+  </form>
+</div>
+{% endblock %}

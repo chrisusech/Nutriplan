@@ -1,23 +1,22 @@
 # NutriPlan
 
-Backend generador de planes nutricionales de 30 días (2 ciclos de 15 días, 5 comidas/día)
-a partir de un intake en Word, exportable a PDF/DOCX con la marca del entrenador.
-Arquitectura hexagonal: el dominio es puro; FastAPI/SQLite/Claude/WeasyPrint son adaptadores.
+Generador de menús nutricionales semanales (7 días, hasta 5 comidas/día) que la persona
+lee **en la app** — sin PDF ni DOCX. Arquitectura hexagonal: el dominio es puro;
+FastAPI, SQLite y el LLM son adaptadores.
 
-Especificación completa: `ESPECIFICACION_BACKEND_planes_nutricionales.md.pdf`.
+Especificación original: `ESPECIFICACION_BACKEND_planes_nutricionales.md.pdf`.
 
 ## Requisitos
 
 - Python 3.12+ y [uv](https://docs.astral.sh/uv/)
-- macOS: `brew install pango` (requerido por WeasyPrint para el render PDF)
 
 ## Arranque rápido
 
 ```bash
 uv sync                       # instala dependencias
-cp .env.example .env          # agrega tu ANTHROPIC_API_KEY
+cp .env.example .env          # agrega tu clave del LLM
 uv run alembic upgrade head   # crea la base SQLite en data/app.db
-uv run pytest                 # todos los tests (sin llamadas reales a la IA)
+uv run pytest                 # todos los tests con cobertura (sin llamadas reales a la IA)
 uv run nutriplan              # UI Nivel 1 en http://127.0.0.1:8000
 ```
 
@@ -33,17 +32,17 @@ sigue disponible.
 2. **Núcleo puro, bordes sucios** — `domain/` y `application/` no conocen ningún framework.
 3. **Multi-tenant desde la primera línea** — toda fila de datos de cliente lleva `tenant_id`.
 4. **Procedencia en cada plan** — `config_version`, `prompt_version`, `model`, `input_hash`.
-5. **Humano en el bucle** — todo plan es un borrador que el profesional aprueba antes de exportar.
+5. **Humano en el bucle** — todo plan nace como borrador y alguien lo aprueba.
 
 ## Estructura
 
 ```
 src/nutriplan/
 ├── domain/        núcleo puro: modelos, cálculo, portion solver, reglas, validación
-├── ports/         interfaces (Repository, LLMClient, Renderer, ConfigProvider, ...)
+├── ports/         interfaces (Repository, LLMClient, ConfigProvider, ...)
 ├── application/   casos de uso: ParseIntake, ComputeTargets, GeneratePlan, ...
-├── adapters/      db (SQLAlchemy), llm (Anthropic), food (importador), render (PDF/DOCX)
-├── ui/web/        FastAPI + HTMX + Jinja2 (Nivel 1) — rutas, plantillas y view-models
+├── adapters/      db (SQLAlchemy), llm (Anthropic / compatible OpenAI), food (importador)
+├── ui/web/        FastAPI + HTMX + Jinja2 — rutas, plantillas y view-models
 └── container.py   composition root — el único lugar que elige adaptadores
 ```
 

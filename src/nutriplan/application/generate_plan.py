@@ -15,8 +15,10 @@ from uuid import uuid4
 import structlog
 
 from nutriplan.adapters.llm.prompts import load_prompt
-from nutriplan.domain.errors import GenerationError
-from nutriplan.domain.food_filter import allowed_foods
+from nutriplan.application.food_pool import resolve_allowed_foods, shortlist_for_llm
+from nutriplan.application.refine_plan import REVIEW_PROMPT_VERSION, refine_week
+from nutriplan.domain.dish_recipe import dish_key
+from nutriplan.domain.errors import GenerationError, LLMError
 from nutriplan.domain.generation_rules import (
     SLOT_STRUCTURE,
     check_variety,
@@ -25,8 +27,9 @@ from nutriplan.domain.generation_rules import (
     validate_selection_structure,
 )
 from nutriplan.domain.macro_split import daily_minus_free_meal, macro_shares
-from nutriplan.domain.meal_template import MealCatalog
+from nutriplan.domain.meal_template import Dish, MealCatalog
 from nutriplan.domain.models import (
+    DAYS_PER_WEEK,
     Client,
     DayPlan,
     FoodItem,
@@ -36,7 +39,6 @@ from nutriplan.domain.models import (
     MealSlot,
     NutritionTargets,
     PlanCycle,
-    PlanPhase,
     PlanSelection,
     PlanStatus,
 )
@@ -50,6 +52,10 @@ from nutriplan.ports.repository import ClientRepository, PlanRepository
 
 logger = structlog.get_logger(__name__)
 
+# La versión del prompt entra en el input_hash: subirla invalida la caché de
+# planes, que es exactamente lo que se quiere cuando cambian las reglas.
+PLAN_PROMPT_VERSION = 2
+
 _SLOT_ORDER = list(MealSlot)
 
 
@@ -61,15 +67,6 @@ def _slots_of(config: NutritionConfig) -> list[MealSlot]:
     """
     return [s for s in _SLOT_ORDER if s in config.meal_distribution]
 
-_PHASE_HINT = {
-    PlanPhase.FIRST_15: "FASE 1 (días 1-15): primera semana del ciclo.",
-    PlanPhase.NEXT_15: (
-        "FASE 2 (días 16-30): segunda semana — menú DISTINTO a la fase 1; "
-        "rota proteínas y carbohidratos respecto a la semana anterior."
-    ),
-}
-
-
 def compute_input_hash(
     client: Client,
     targets: NutritionTargets,
@@ -78,7 +75,6 @@ def compute_input_hash(
     allowed: list[FoodItem],
     variant: int = 0,
     *,
-    duration_days: int = 15,
     catalog_version: str = "",
 ) -> str:
     """Idempotencia (11.6): mismo insumo → mismo hash → mismo plan.
@@ -91,7 +87,6 @@ def compute_input_hash(
     snapshot = {
         "catalog_version": catalog_version,
         "variant": variant,
-        "duration_days": duration_days,
         "client": {
             # Sin esto, cambiar a un cliente de 4 comidas le devolvería el plan de
             # 5 servido de la caché.
@@ -105,12 +100,12 @@ def compute_input_hash(
             ),
             "sex": client.sex.value,
             "age": client.age_years,
-            "birthdate": client.birthdate.isoformat() if client.birthdate else None,
             "height_cm": client.height_cm,
             "weight_kg": client.weight_kg,
             "goal": client.goal.value,
             "activity": client.activity_level.value,
             "restrictions": sorted(client.restrictions),
+            "eating_pattern_raw": client.eating_pattern_raw,
         },
         "targets": {
             "daily": targets.daily.model_dump(),
@@ -130,8 +125,7 @@ def build_selection_prompt(
     config: NutritionConfig,
     feedback: str | None = None,
     *,
-    duration_days: int = 15,
-    phase: PlanPhase = PlanPhase.FIRST_15,
+    habits: str | None = None,
 ) -> str:
     slots = _slots_of(config)
     structure_lines = [
@@ -144,10 +138,8 @@ def build_selection_prompt(
         for f in sorted(allowed, key=lambda f: (f.category.value, f.name_es))
     ]
     gen = config.generation
-    duration_label = f"{duration_days} días" if duration_days >= 30 else "15 días (1 semana)"
     parts = [
-        f"Plan nutricional de {duration_label}.",
-        _PHASE_HINT[phase],
+        "Menú nutricional de una semana: 7 días.",
         "",
         f"CADA DÍA TIENE {len(slots)} COMIDAS, exactamente estas: "
         f"{', '.join(s.value for s in slots)}.",
@@ -167,6 +159,12 @@ def build_selection_prompt(
         "CATÁLOGO PERMITIDO (usa exclusivamente estos food_id):",
         *catalog_lines,
     ]
+    if habits and habits.strip():
+        parts += [
+            "",
+            "HÁBITOS DEL CLIENTE (respeta el estilo; no inventes alimentos fuera del catálogo):",
+            habits.strip(),
+        ]
     if feedback:
         parts += ["", "CORRECCIÓN REQUERIDA (la selección anterior falló):", feedback]
     return "\n".join(parts)
@@ -185,11 +183,11 @@ def _free_meal_entry(slot: MealSlot) -> MealEntry:
 def _selection_to_days(
     selection: PlanSelection,
     *,
-    phase: PlanPhase,
     foods_by_id: dict[str, FoodItem],
     targets: NutritionTargets,
     config: NutritionConfig,
     free_meal: tuple[int, MealSlot] | None = None,
+    dishes: dict[tuple[int, MealSlot], Dish] | None = None,
 ) -> tuple[list[DayPlan], list[str]]:
     problems: list[str] = []
     days: list[DayPlan] = []
@@ -211,7 +209,7 @@ def _selection_to_days(
         try:
             solved = solve_day_portions(meals_input, day_daily, config)
         except GenerationError as exc:
-            problems.append(f"fase {phase.value}, día {day_sel.day_index}: {exc}")
+            problems.append(f"día {day_sel.day_index}: {exc}")
             continue
         deviations = validate_day(
             solved,
@@ -221,31 +219,36 @@ def _selection_to_days(
         )
         if deviations:
             problems += [
-                f"fase {phase.value}, día {day_sel.day_index}, {d}" for d in deviations
+                f"día {day_sel.day_index}, {d}" for d in deviations
             ]
             continue
-        meals = [
-            MealEntry(
-                slot=m.slot,
-                items=[
-                    MealItem(food_id=p.food_id, grams=p.grams, position=i)
-                    for i, p in enumerate(m.portions)
-                ],
-                computed=m.computed,
-                free_salad=(
-                    free_salad_of.get((day_sel.day_index, m.slot), False)
-                    or SLOT_STRUCTURE[m.slot].free_salad_default
-                ),
+        meals = []
+        for m in solved:
+            dish = (dishes or {}).get((day_sel.day_index, m.slot))
+            food_ids = [p.food_id for p in m.portions]
+            meals.append(
+                MealEntry(
+                    slot=m.slot,
+                    template_id=dish.template_id if dish else None,
+                    dish_name=dish.name if dish else None,
+                    dish_key=dish_key(dish.template_id, food_ids) if dish else None,
+                    items=[
+                        MealItem(food_id=p.food_id, grams=p.grams, position=i)
+                        for i, p in enumerate(m.portions)
+                    ],
+                    computed=m.computed,
+                    free_salad=(
+                        free_salad_of.get((day_sel.day_index, m.slot), False)
+                        or SLOT_STRUCTURE[m.slot].free_salad_default
+                    ),
+                )
             )
-            for m in solved
-        ]
         if free_slot is not None:
             meals.append(_free_meal_entry(free_slot))
             meals.sort(key=lambda m: _SLOT_ORDER.index(m.slot))  # el orden del día
         days.append(
             DayPlan(
                 day_index=day_sel.day_index,
-                phase=phase,
                 meals=meals,
                 # La comida libre no suma: los totales del día son los de lo que se
                 # pesa, y por eso el día sale por debajo del objetivo. Es la verdad.
@@ -255,13 +258,12 @@ def _selection_to_days(
     return days, problems
 
 
-def _llm_for_phase(
+def _selector_for(
     llm: LLMClient | None,
     allowed: list[FoodItem],
     targets: NutritionTargets,
     config: NutritionConfig,
     variant: int,
-    phase: PlanPhase,
     catalog: MealCatalog | None = None,
 ) -> LLMClient:
     """El motor de la fase.
@@ -277,7 +279,7 @@ def _llm_for_phase(
     if llm is not None and not isinstance(llm, HeuristicSelector | TemplateSelector):
         return llm
 
-    seed = variant + (100 if phase is PlanPhase.NEXT_15 else 0)
+    seed = variant
     if catalog is not None:
         try:
             return TemplateSelector(
@@ -288,7 +290,7 @@ def _llm_for_phase(
     return HeuristicSelector(allowed, targets.daily.protein_g, seed=seed, config=config)
 
 
-async def _generate_phase_week(
+async def _generate_week(
     *,
     client: Client,
     targets: NutritionTargets,
@@ -298,23 +300,51 @@ async def _generate_phase_week(
     prompts_dir: Path,
     model: str,
     variant: int,
-    phase: PlanPhase,
-    duration_days: int,
     feedback: str | None,
     catalog: MealCatalog | None = None,
 ) -> tuple[list[DayPlan], list[str]]:
-    prompt = load_prompt(prompts_dir, "plan_generation")
-    slots = _slots_of(config)
-    schema = build_selection_schema(allowed, slots)
-    foods_by_id = {str(f.id): f for f in allowed}
-    selector = _llm_for_phase(llm, allowed, targets, config, variant, phase, catalog)
+    from nutriplan.adapters.llm.heuristic import HeuristicSelector
+    from nutriplan.adapters.llm.template_selector import TemplateSelector
 
+    prompt = load_prompt(prompts_dir, "plan_generation", PLAN_PROMPT_VERSION)
+    slots = _slots_of(config)
+    selector = _selector_for(llm, allowed, targets, config, variant, catalog)
+    offline = isinstance(selector, HeuristicSelector | TemplateSelector)
+
+    # Al modelo se le enseña un catálogo corto: los 172 alimentos gastan ~6.400
+    # tokens de entrada y el nivel gratis da 8.000 por minuto. Los selectores
+    # offline no pagan tokens, así que ven el pool entero.
+    visible = allowed if offline else shortlist_for_llm(allowed)
+    schema = build_selection_schema(visible, slots)
+    foods_by_id = {str(f.id): f for f in allowed}
+
+    habits = None if offline else client.eating_pattern_raw
     user_prompt = build_selection_prompt(
-        targets, allowed, config, feedback, duration_days=duration_days, phase=phase
+        targets,
+        visible,
+        config,
+        feedback,
+        habits=habits,
     )
-    raw = await selector.select_plan(
-        system=prompt.text, prompt=user_prompt, schema=schema, model=model
-    )
+    try:
+        raw = await selector.select_plan(
+            system=prompt.text, prompt=user_prompt, schema=schema, model=model
+        )
+    except LLMError as exc:
+        # Quedarse sin cuota, o que el modelo no quepa en ella, no puede dejar a
+        # nadie sin menú: el motor de platos determinista lo arma igual. Se pierde
+        # el toque del modelo en la SELECCIÓN, no el menú.
+        if offline:
+            raise
+        logger.warning("selection_fell_back_to_engine", error=str(exc))
+        selector = _selector_for(None, allowed, targets, config, variant, catalog)
+        schema = build_selection_schema(allowed, slots)
+        raw = await selector.select_plan(
+            system=prompt.text,
+            prompt=build_selection_prompt(targets, allowed, config, feedback),
+            schema=schema,
+            model="engine-v1",
+        )
     selection = PlanSelection.model_validate(raw.model_dump())
     # El selector emite las cinco comidas del día: no sabe de comidas libres, ni
     # tiene por qué. La celda se quita aquí, en la frontera, y de aquí para adentro
@@ -323,13 +353,13 @@ async def _generate_phase_week(
     selection = drop_free_meal(selection, free_meal)
 
     problems = [
-        f"fase {phase.value}, día {v.day_index}, {v.slot.value}: {v.reason}"
+        f"día {v.day_index}, {v.slot.value}: {v.reason}"
         for v in validate_selection_structure(
             selection, foods_by_id, slots, free_meal=free_meal
         )
     ]
     problems += [
-        f"fase {phase.value}, variedad: {v.food_name} usado {v.times_used} veces "
+        f"variedad: {v.food_name} usado {v.times_used} veces "
         f"(máx. {v.limit})"
         for v in check_variety(
             selection,
@@ -344,15 +374,15 @@ async def _generate_phase_week(
     ]
     days, solve_problems = _selection_to_days(
         selection,
-        phase=phase,
         foods_by_id=foods_by_id,
         targets=targets,
         config=config,
         free_meal=free_meal,
+        dishes=getattr(selector, "last_dishes", None),
     )
     problems += solve_problems
     if len(days) != 7:
-        problems.append(f"fase {phase.value}: faltan días resueltos ({len(days)}/7)")
+        problems.append(f"faltan días resueltos ({len(days)}/7)")
     return days, problems
 
 
@@ -366,13 +396,9 @@ async def generate_cycle(
     prompts_dir: Path,
     model: str,
     variant: int = 0,
-    duration_days: int = 15,
     catalog: MealCatalog | None = None,
 ) -> PlanCycle:
-    if duration_days not in (15, 30):
-        raise GenerationError("duration_days debe ser 15 o 30")
-
-    prompt = load_prompt(prompts_dir, "plan_generation")
+    prompt = load_prompt(prompts_dir, "plan_generation", PLAN_PROMPT_VERSION)
     # El hash con el que se GUARDA tiene que ser el mismo con el que se BUSCA
     # (`generate_plan_for_client`). Sin `catalog_version` aquí, el plan se guardaba
     # con un hash que nadie consulta: la caché no acertaba nunca y, al regenerar el
@@ -381,56 +407,50 @@ async def generate_cycle(
         client,
         targets,
         config.version,
-        prompt.version,
+        f"{prompt.version}+review.v{REVIEW_PROMPT_VERSION}" if llm else prompt.version,
         allowed,
         variant,
-        duration_days=duration_days,
         catalog_version=catalog.version if catalog else "",
     )
 
     feedback: str | None = None
     failures: list[str] = []
-    phases = [PlanPhase.FIRST_15]
-    if duration_days >= 30:
-        phases.append(PlanPhase.NEXT_15)
 
     for attempt in range(1 + config.generation.max_retries):
-        all_days: list[DayPlan] = []
-        problems: list[str] = []
-        for phase in phases:
-            days, phase_problems = await _generate_phase_week(
-                client=client,
-                targets=targets,
-                allowed=allowed,
-                config=config,
-                llm=llm,
-                prompts_dir=prompts_dir,
-                model=model,
-                variant=variant,
-                phase=phase,
-                duration_days=duration_days,
-                feedback=feedback,
-                catalog=catalog,
-            )
-            problems += phase_problems
-            all_days += days
+        days, problems = await _generate_week(
+            client=client,
+            targets=targets,
+            allowed=allowed,
+            config=config,
+            llm=llm,
+            prompts_dir=prompts_dir,
+            model=model,
+            variant=variant,
+            feedback=feedback,
+            catalog=catalog,
+        )
 
-        expected = 7 * len(phases)
-        if not problems and len(all_days) == expected:
+        if not problems and len(days) == DAYS_PER_WEEK:
+            # La pasada de sabor. Devuelve None sin LLM o si el proveedor falla,
+            # y entonces el menú se queda exactamente como lo dejó el solver.
+            refined = await refine_week(
+                days=days, client=client, allowed=allowed, config=config,
+                daily=targets.daily, llm=llm, prompts_dir=prompts_dir, model=model,
+            )
+            if refined is not None:
+                days = refined.days
             logger.info(
                 "plan_generated",
                 attempts=attempt + 1,
                 input_hash=input_hash[:12],
-                duration_days=duration_days,
-                phases=len(phases),
+                refined=refined is not None,
             )
             return PlanCycle(
                 id=uuid4(),
                 tenant_id=client.tenant_id,
                 client_id=client.id,
                 targets_id=targets.id,
-                days=all_days,
-                duration_days=duration_days,
+                days=days,
                 variant=variant,
                 status=PlanStatus.DRAFT,
                 config_version=config.version,
@@ -438,6 +458,11 @@ async def generate_cycle(
                 model=model,
                 input_hash=input_hash,
                 created_at=datetime.now(UTC),
+                refined_at=datetime.now(UTC) if refined is not None else None,
+                refine_model=model if refined is not None else None,
+                refine_prompt_version=(
+                    f"plan_review.v{REVIEW_PROMPT_VERSION}" if refined is not None else None
+                ),
             )
 
         failures = problems
@@ -449,6 +474,7 @@ async def generate_cycle(
         f"{1 + config.generation.max_retries} intentos. Detalle: "
         + "; ".join(failures[:10])
     )
+
 
 
 async def generate_plan_for_client(
@@ -463,20 +489,19 @@ async def generate_plan_for_client(
     prompts_dir: Path,
     model: str,
     variant: int = 0,
-    duration_days: int = 15,
     catalog: MealCatalog | None = None,
 ) -> PlanCycle:
-    """Orquesta el plan: 15 días (1 semana) o 30 días (2 semanas en 2 fases)."""
-    liked = await food_repo.get_by_ids(client.liked_food_ids)
-    banned = set(await client_repo.list_banned_food_ids(client.id))
-    allowed = allowed_foods(liked, client.restrictions, banned)
+    """Orquesta el menú de la semana, de punta a punta."""
+    allowed = await resolve_allowed_foods(
+        client, food_repo=food_repo, client_repo=client_repo
+    )
     if not allowed:
         raise GenerationError(
-            "El conjunto permitido quedó vacío: revisa alimentos que le gustan, "
-            "restricciones y vetos del cliente."
+            "No quedó ningún alimento disponible: revisa tus restricciones y "
+            "lo que marcaste que no quieres ver."
         )
 
-    prompt = load_prompt(prompts_dir, "plan_generation")
+    prompt = load_prompt(prompts_dir, "plan_generation", PLAN_PROMPT_VERSION)
     input_hash = compute_input_hash(
         client,
         targets,
@@ -484,7 +509,6 @@ async def generate_plan_for_client(
         prompt.version,
         allowed,
         variant,
-        duration_days=duration_days,
         catalog_version=catalog.version if catalog else "",
     )
     existing = await plan_repo.find_by_input_hash(input_hash)
@@ -495,11 +519,11 @@ async def generate_plan_for_client(
         await client_repo.set_active_plan(client.id, existing[0].id)
         return existing[0]
 
-    # La versión siguiente del cliente. `variant` es su gemelo técnico y entra en el
-    # input_hash, así que dos versiones nunca colisionan en la caché aunque los
-    # macros no hayan cambiado.
-    previous = await plan_repo.list_for_client(client.id)
-    version = 1 + max((p.version for p in previous), default=0)
+    # Número provisional del borrador: la siguiente versión DEFINITIVA. Los
+    # borradores no consumen número; se confirma al aprobar. `variant` es su gemelo
+    # técnico y entra en el input_hash, así que dos borradores nunca colisionan en
+    # la caché aunque los macros no hayan cambiado.
+    version = 1 + await plan_repo.count_approved_for_client(client.id)
 
     cycle = await generate_cycle(
         client=client,
@@ -510,10 +534,12 @@ async def generate_plan_for_client(
         prompts_dir=prompts_dir,
         model=model,
         variant=variant,
-        duration_days=duration_days,
         catalog=catalog,
     )
     cycle = cycle.model_copy(update={"version": version})
+    # Solo lo definitivo se guarda: hay un único borrador vivo por cliente, y este
+    # nuevo lo reemplaza. Regenerar no acumula borradores.
+    await plan_repo.delete_draft_for_client(client.id)
     await plan_repo.add(cycle)
     # El plan recién hecho es EL plan; el anterior queda archivado y consultable.
     await client_repo.set_active_plan(client.id, cycle.id)

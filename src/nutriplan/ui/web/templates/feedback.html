@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Opinar{% endblock %}
+
+{% block content %}
+<h1>Cuéntanos</h1>
+<p class="muted">Esto es una BETA: lo que nos digas cambia lo que viene.</p>
+
+{% if enviado %}
+<div class="alert alert-ok" role="status">
+  <span class="icon">check_circle</span>
+  Gracias. Lo leemos todo, de verdad.
+</div>
+{% endif %}
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+
+<form method="post" action="/feedback" class="card form-card">
+  <fieldset class="field">
+    <legend>¿De qué nos hablas?</legend>
+    <div class="chips">
+      {% for key, label in categories %}
+      <label class="chip">
+        <input type="radio" name="category" value="{{ key }}"
+               {% if loop.first %}checked{% endif %}>{{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <label class="field">
+    <span>Tu mensaje</span>
+    <textarea name="message" required maxlength="4000" rows="6"
+      placeholder="¿Qué plato no te convenció? ¿Qué te faltó? ¿Qué sí funcionó?"></textarea>
+  </label>
+
+  <label class="field">
+    <span>¿Nos recomendarías? (0 a 10, opcional)</span>
+    <input name="nps" type="number" min="0" max="10" inputmode="numeric">
+  </label>
+
+  <button class="btn btn-primary btn-block btn-big" type="submit">
+    <span class="icon">send</span>Enviar
+  </button>
+</form>
+{% endblock %}

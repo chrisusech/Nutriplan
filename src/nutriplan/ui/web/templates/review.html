@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Revisar plan · {{ client.name }}{% endblock %}
 {% block content %}
+{% if error %}
+<div class="badge badge-warn" style="justify-content:flex-start;margin-bottom:14px;padding:10px 12px">
+  <span class="icon" style="font-size:16px">error</span>{{ error }}
+</div>
+{% endif %}
 <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px">
   <a class="back-btn" href="/planes"><span class="icon">arrow_back</span></a>
   <div style="flex:1">
@@ -38,24 +43,14 @@
   <div class="review-main card" style="padding:22px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
       <span style="font:700 16px Poppins;color:var(--ink)">
-        {% if cycle.duration_days >= 30 %}Plan · 30 días (2 semanas){% else %}Plan · 15 días (1 semana){% endif %}
+        Tu semana
       </span>
       <span style="font:500 12px Poppins;color:var(--muted-2)">Toca un día para ajustarlo</span>
     </div>
-    {% if phases|length > 1 %}
-    <div class="day-tabs" style="margin-bottom:12px">
-      {% for ph in phases %}
-      <a class="day-pill {% if ph.value == fase %}on{% endif %}"
-         href="/planes/{{ cycle.id }}?fase={{ ph.value }}">
-        <span class="d">{{ PHASE_LABELS[ph] }}</span>
-      </a>
-      {% endfor %}
-    </div>
-    {% endif %}
     <div class="grid7">
       {% for cell in grid %}
       <a class="day-cell" style="background:{{ cell.soft }}"
-         href="/generador?cliente={{ client.id }}&dia={{ cell.day_index }}&fase={{ cell.fase }}&editar=1"
+         href="/generador?cliente={{ client.id }}&dia={{ cell.day_index }}&editar=1"
          onmouseover="this.style.borderColor='{{ cell.color }}'" onmouseout="this.style.borderColor='transparent'">
         <span class="n">{{ cell.label }}</span>
         <span class="dot" style="background:{{ cell.color }}"></span>
@@ -84,67 +79,25 @@
       {% endfor %}
     </div>
 
-    <div class="card" style="padding:20px">
-      <div style="font:700 15px Poppins;color:var(--ink);margin-bottom:14px">Exportar con tu marca</div>
-      <div class="pdf-preview">
-        <div class="head">
-          <div class="mini"><span class="icon" style="font-size:18px">restaurant</span></div>
-          <div>
-            <div style="font:700 13px Poppins">{{ branding.tenant_name }}</div>
-            <div style="font:500 10px Poppins;opacity:.85">Plan nutricional · {{ client.name.split(' ')[0] }} {{ client.name.split(' ')[1][0] ~ '.' if client.name.split(' ')|length > 1 else '' }}</div>
-          </div>
-        </div>
-        <div class="body">
-          <div class="ln strong" style="width:60%"></div>
-          <div class="ln" style="width:85%"></div>
-          <div class="ln" style="width:72%"></div>
-        </div>
-      </div>
-
-      {% if approved %}
-      <div style="display:flex;gap:8px">
-        <a class="btn btn-primary" style="flex:1;padding:12px;font-size:13.5px" href="/planes/{{ cycle.id }}/export.pdf">
-          <span class="icon" style="font-size:18px">picture_as_pdf</span>PDF · {{ cycle.duration_days }} días
-        </a>
-        <a class="btn btn-outline" style="padding:12px 14px;font-size:13.5px" href="/planes/{{ cycle.id }}/export.docx" title="Word editable">
-          <span class="icon" style="font-size:18px">description</span>DOCX
-        </a>
-      </div>
-      {% endif %}
-    </div>
-
     <div style="display:flex;flex-direction:column;gap:10px">
       {% if not approved %}
       <form method="post" action="/planes/{{ cycle.id }}/aprobar">
         <button class="btn btn-primary btn-big" style="width:100%;border-radius:18px;padding:16px;font-size:16px" type="submit">
-          <span class="icon" style="font-size:22px">check_circle</span>Aprobar y exportar PDF
+          <span class="icon" style="font-size:22px">check_circle</span>Aprobar este menú
         </button>
       </form>
-      <a class="btn btn-outline" style="border-radius:18px;padding:14px" href="/generador?cliente={{ client.id }}&editar=1&fase={{ fase }}">
+      <a class="btn btn-outline" style="border-radius:18px;padding:14px" href="/generador?cliente={{ client.id }}&editar=1">
         <span class="icon" style="font-size:20px">tune</span>Seguir ajustando
       </a>
       {% else %}
       <div class="badge badge-ok" style="justify-content:center;padding:13px;font:700 14px Poppins;border-radius:18px">
         <span class="icon fill" style="font-size:20px">verified</span>Plan aprobado — listo para entregar
       </div>
-      <form method="post" action="/planes/{{ cycle.id }}/reabrir">
-        <button class="btn btn-outline" style="width:100%;border-radius:18px;padding:13px" type="submit"
-                title="Volver a borrador para ajustar o quitar comidas">
-          <span class="icon" style="font-size:20px">edit</span>Reabrir para corregir
-        </button>
-      </form>
-      {% endif %}
-      {% if cycle.duration_days < 30 %}
-      <div class="card" style="padding:14px;border-color:#F1E4DD;background:#FBF7F4">
-        <div style="font:700 13.5px Poppins;color:var(--ink);margin-bottom:6px">¿Necesitas 2 semanas?</div>
-        <p style="font:500 12.5px Poppins;color:var(--muted);margin:0 0 12px;line-height:1.45">
-          Este plan cubre <b>1 semana</b> (15 días). Para un PDF con Semana 1 y Semana 2, genera un plan de 30 días.
-        </p>
-        <a class="btn btn-primary" style="width:100%;padding:12px;font-size:13.5px;border-radius:14px"
-           href="/generador?cliente={{ client.id }}#duracion">
-          <span class="icon" style="font-size:18px">calendar_month</span>Generar plan 30 días
-        </a>
-      </div>
+      <a class="btn btn-outline" style="width:100%;border-radius:18px;padding:13px"
+         href="/generador?cliente={{ client.id }}&editar=1"
+         title="Cambiar o quitar un alimento puntual del plan definitivo">
+        <span class="icon" style="font-size:20px">edit</span>Corregir un alimento
+      </a>
       {% endif %}
     </div>
   </div>

@@ -1,42 +1,56 @@
-"""Alta y login de entrenadores (Workstream G). Sesión por cookie firmada."""
+"""Alta pública, login (correo, Google o Apple) y baja de cuenta."""
 
 from typing import Annotated
+from urllib.parse import quote
 
+import structlog
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import TenantRow
+from nutriplan.adapters.oauth import (
+    OAuthError,
+    verify_apple_id_token,
+    verify_google_id_token,
+)
 from nutriplan.adapters.password_reset_token import verify_token
-from nutriplan.application.auth import SignupError, authenticate, signup_trainer
+from nutriplan.application.account_lifecycle import (
+    confirm_email,
+    delete_account,
+    deletion_receipt,
+    send_verification_email,
+)
+from nutriplan.application.auth import (
+    SignupError,
+    authenticate,
+    register,
+    sign_in_with_provider,
+)
 from nutriplan.application.password_reset import complete_password_reset, request_password_reset
-from nutriplan.config.settings import Environment
-from nutriplan.domain.models import Trainer
-from nutriplan.ui.web.deps import container_of, db_session, render
+from nutriplan.domain.models import Account, AuthProvider
+from nutriplan.ui.web.deps import (
+    account_id_of,
+    container_of,
+    db_session,
+    render,
+    tenant_of,
+)
 
 router = APIRouter()
+logger = structlog.get_logger(__name__)
 
 
-def _set_session(request: Request, trainer: Trainer) -> None:
-    request.session["tenant_id"] = str(trainer.tenant_id)
-    request.session["name"] = trainer.name
-    request.session["email"] = trainer.email
-    request.session["role"] = trainer.role
-    request.session["client_id"] = str(trainer.client_id) if trainer.client_id else ""
-
-
-def _home_for(trainer: Trainer) -> str:
-    return "/portal" if trainer.role == "client" else "/"
-
-
-def _local_only(request: Request) -> bool:
-    return container_of(request).settings.env is Environment.LOCAL
+def _set_session(request: Request, account: Account) -> None:
+    request.session["user_id"] = str(account.id)
+    request.session["tenant_id"] = str(account.tenant_id)
+    request.session["name"] = account.name
+    request.session["email"] = account.email
+    request.session["role"] = account.role.value
 
 
 @router.get("/recuperar", response_model=None)
 async def password_reset_page(request: Request) -> HTMLResponse | RedirectResponse:
-    if not _local_only(request):
-        return RedirectResponse("/login", status_code=303)
     return render(request, "password_reset_request.html")
 
 
@@ -46,8 +60,6 @@ async def password_reset_request(
     session: Annotated[AsyncSession, Depends(db_session)],
     email: Annotated[str, Form()],
 ) -> HTMLResponse | RedirectResponse:
-    if not _local_only(request):
-        return RedirectResponse("/login", status_code=303)
     container = container_of(request)
     try:
         link = await request_password_reset(
@@ -57,17 +69,29 @@ async def password_reset_request(
         )
     except SignupError as exc:
         return render(request, "password_reset_request.html", error=str(exc), email=email)
-    if link is None:
-        return render(request, "password_reset_request.html", not_found=True, email=email)
-    return render(request, "password_reset_request.html", reset_link=link, email=email)
+    # La respuesta es la MISMA exista o no la cuenta: distinguirlas convierte
+    # este formulario en un detector de correos registrados.
+    if link is not None:
+        url = f"{container.settings.base_url.rstrip('/')}{link.url_path}"
+        try:
+            await container.mailer.send(
+                to=link.email,
+                subject="Recupera tu contraseña · NutriPlan",
+                body=(
+                    f"Para elegir una contraseña nueva entra aquí:\n{url}\n\n"
+                    f"El enlace vence en {link.expires_minutes} minutos.\n"
+                    "Si no fuiste tú, ignora este mensaje."
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - no revelar fallos de entrega
+            logger.warning("password_reset_email_failed", error=str(exc))
+    return render(request, "password_reset_request.html", sent=True, email=email)
 
 
 @router.get("/recuperar/{token}", response_model=None)
 async def password_reset_confirm_page(
     request: Request, token: str
 ) -> HTMLResponse | RedirectResponse:
-    if not _local_only(request):
-        return RedirectResponse("/login", status_code=303)
     container = container_of(request)
     email = verify_token(token, secret=container.settings.session_secret)
     if email is None:
@@ -87,8 +111,6 @@ async def password_reset_confirm(
     password: Annotated[str, Form()],
     password_confirm: Annotated[str, Form()],
 ) -> HTMLResponse | RedirectResponse:
-    if not _local_only(request):
-        return RedirectResponse("/login", status_code=303)
     if password != password_confirm:
         email = verify_token(token, secret=container_of(request).settings.session_secret)
         return render(
@@ -127,7 +149,7 @@ async def password_reset_confirm(
             email=email or "",
             error=str(exc),
         )
-    return RedirectResponse(_home_for(trainer), status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -156,42 +178,148 @@ async def login(request: Request,
             request,
             "auth.html",
             mode="login",
-            error=(
-                "Tu cuenta quedó desincronizada con la base de datos. "
-                "Regístrate de nuevo con otro correo."
-            ),
+            error="Tu cuenta quedó desincronizada con la base de datos. Contacta al administrador.",
+        )
+    if not trainer.is_active:
+        return render(
+            request,
+            "auth.html",
+            mode="login",
+            error="Tu cuenta está bloqueada. Contacta al administrador.",
         )
     _set_session(request, trainer)
-    return RedirectResponse(_home_for(trainer), status_code=303)
-
-
-@router.get("/signup", response_class=HTMLResponse)
-async def signup_page(request: Request) -> HTMLResponse:
-    return render(request, "auth.html", mode="signup", error=None)
-
-
-@router.post("/signup", response_model=None)
-async def signup(request: Request,
-                 session: Annotated[AsyncSession, Depends(db_session)],
-                 name: Annotated[str, Form()],
-                 business_name: Annotated[str, Form()],
-                 email: Annotated[str, Form()],
-                 password: Annotated[str, Form()]) -> HTMLResponse | RedirectResponse:
-    container = container_of(request)
-    try:
-        trainer = await signup_trainer(
-            name=name, email=email, password=password, business_name=business_name,
-            auth_repo=container.auth_repo(session),
-            branding_dir=container.settings.branding_dir,
-            admin_email=container.settings.admin_email,
-        )
-    except SignupError as exc:
-        return render(request, "auth.html", mode="signup", error=str(exc))
-    _set_session(request, trainer)
-    return RedirectResponse(_home_for(trainer), status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 
 @router.post("/logout")
 async def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+# --- Alta pública -----------------------------------------------------------
+
+
+@router.get("/registro", response_class=HTMLResponse)
+async def signup_page(request: Request) -> HTMLResponse:
+    settings = container_of(request).settings
+    return render(
+        request, "auth.html", mode="signup",
+        google_client_id=settings.google_client_id,
+        apple_client_id=settings.apple_client_id,
+    )
+
+
+@router.post("/registro", response_model=None)
+async def signup(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    name: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+) -> HTMLResponse | RedirectResponse:
+    container = container_of(request)
+    try:
+        account = await register(
+            name=name, email=email, password=password,
+            auth_repo=container.auth_repo(session),
+            branding_dir=container.settings.branding_dir,
+        )
+    except SignupError as exc:
+        return render(request, "auth.html", mode="signup", error=str(exc))
+
+    # Que el correo no llegue no puede tumbar el alta: la cuenta ya existe y se
+    # puede reenviar. Bloquear aquí regalaría cuentas a medias.
+    try:
+        await send_verification_email(
+            email=account.email, name=account.name,
+            base_url=container.settings.base_url,
+            secret=container.settings.session_secret,
+            mailer=container.mailer,
+        )
+    except Exception as exc:  # noqa: BLE001 - el correo es best-effort
+        logger.warning("verification_email_failed", error=str(exc))
+
+    _set_session(request, account)
+    return RedirectResponse("/onboarding", status_code=303)
+
+
+@router.get("/verificar/{token}", response_model=None)
+async def verify_email(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    token: str,
+) -> HTMLResponse | RedirectResponse:
+    container = container_of(request)
+    try:
+        await confirm_email(
+            token=token, secret=container.settings.session_secret,
+            auth_repo=container.auth_repo(session),
+        )
+    except SignupError as exc:
+        return render(request, "auth.html", mode="login", error=str(exc))
+    return RedirectResponse("/login?verificado=1", status_code=303)
+
+
+# --- Google y Apple ---------------------------------------------------------
+
+
+@router.post("/auth/oauth/{provider}", response_model=None)
+async def oauth_sign_in(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    provider: str,
+    id_token: Annotated[str, Form()],
+) -> HTMLResponse | RedirectResponse:
+    """Canjea el ID token del cliente nativo por una sesión.
+
+    El token SIEMPRE se verifica contra el proveedor: sin eso, mandar un correo
+    ajeno en el formulario sería suficiente para entrar como esa persona.
+    """
+    container = container_of(request)
+    settings = container.settings
+    try:
+        if provider == AuthProvider.GOOGLE:
+            identity = await verify_google_id_token(
+                id_token, client_id=settings.google_client_id
+            )
+        elif provider == AuthProvider.APPLE:
+            identity = await verify_apple_id_token(
+                id_token, client_id=settings.apple_client_id
+            )
+        else:
+            return render(request, "auth.html", mode="login",
+                          error="Ese proveedor no está disponible.")
+        account = await sign_in_with_provider(
+            provider=identity.provider, subject=identity.subject,
+            email=identity.email, name=identity.name,
+            email_verified=identity.email_verified,
+            auth_repo=container.auth_repo(session),
+            branding_dir=settings.branding_dir,
+        )
+    except (OAuthError, SignupError) as exc:
+        return render(request, "auth.html", mode="login", error=str(exc))
+
+    _set_session(request, account)
+    profile = await container.repos(session, tenant_id=account.tenant_id).clients.get_by_user(
+        account.id
+    )
+    return RedirectResponse("/" if profile else "/onboarding", status_code=303)
+
+
+# --- Baja de cuenta ---------------------------------------------------------
+
+
+@router.post("/perfil/eliminar", response_model=None)
+async def delete_my_account(
+    request: Request, session: Annotated[AsyncSession, Depends(db_session)]
+) -> RedirectResponse:
+    """Borra la cuenta y sus datos. Requisito de tienda (Apple 5.1.1(v))."""
+    container = container_of(request)
+    await delete_account(
+        user_id=account_id_of(request),
+        tenant_id=tenant_of(request),
+        eraser=container.account_eraser(session),
+    )
+    request.session.clear()
+    return RedirectResponse(f"/login?baja={quote(deletion_receipt())}", status_code=303)

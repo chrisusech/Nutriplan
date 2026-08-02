@@ -1,0 +1,107 @@
+/* Tokens del diseño "Generador v2 con Recetas".
+   Móvil primero: los tamaños son fluidos y las medidas van en rem, para que
+   quien tenga el texto del sistema en grande siga pudiendo usar la app. */
+
+:root {
+  /* Superficies */
+  --bg: #F3EAE4;
+  --panel: #FBF6F3;
+  --card: #FFFFFF;
+  --line: #F1E4DD;
+  --line-strong: #EEDFD8;
+  --wash: #F6ECE7;
+  --wash-2: #FBF7F4;
+  --chip: #F4E9E3;
+
+  /* Texto */
+  --ink: #3B2E2B;
+  --ink-2: #5C4A44;
+  --ink-3: #6B564E;
+  --muted: #8A756C;
+  --muted-2: #9A857C;
+  --muted-3: #95817A;
+  --faint: #B0968C;
+  --faint-2: #C4A99E;
+
+  /* Estado */
+  --ok: #2E9E6E;
+  --ok-soft: #E3F4EA;
+  --warn: #C9852E;
+  --warn-soft: #FBF0DA;
+  --danger: #D2544A;
+
+  /* Marca — la sobreescribe el servidor por tenant */
+  --brand: #F26D5B;
+  --brand-soft: #FDE8E2;
+
+  /* Macros */
+  --kcal: #F2704F;
+  --protein: #E8607A;
+  --carb: #E0A537;
+  --fat: #B08968;
+
+  /* Escala de texto. clamp() = crece con la pantalla sin pasarse. */
+  --t-xs: clamp(0.6875rem, 0.66rem + 0.14vw, 0.75rem);
+  --t-sm: clamp(0.75rem, 0.72rem + 0.16vw, 0.8125rem);
+  --t-md: clamp(0.8125rem, 0.78rem + 0.18vw, 0.875rem);
+  --t-lg: clamp(0.9375rem, 0.9rem + 0.2vw, 1rem);
+  --t-xl: clamp(1.125rem, 1.05rem + 0.35vw, 1.375rem);
+  --t-2xl: clamp(1.375rem, 1.25rem + 0.6vw, 1.75rem);
+
+  /* Espaciado */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+
+  /* Radios del diseño */
+  --r-sm: 0.75rem;
+  --r-md: 1rem;
+  --r-lg: 1.125rem;
+  --r-xl: 1.375rem;
+  --r-2xl: 1.75rem;
+  --r-pill: 999px;
+
+  /* Sombras: cálidas, no grises — el fondo es crema */
+  --sh-1: 0 0.375rem 1.375rem rgba(180, 120, 100, 0.05);
+  --sh-2: 0 0.75rem 1.75rem rgba(242, 109, 91, 0.28);
+  --sh-3: 0 1.875rem 4.375rem rgba(150, 100, 80, 0.13);
+
+  /* Lo que el pulgar necesita para acertar */
+  --tap: 2.75rem;
+
+  /* Alto de la barra inferior + el notch del teléfono */
+  --nav-h: 4rem;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* El sistema en oscuro no debe dar un blanco en la cara a las 6 am. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1C1614;
+    --panel: #241D1A;
+    --card: #2B2320;
+    --line: #3A2F2B;
+    --line-strong: #453833;
+    --wash: #2B2320;
+    --wash-2: #241D1A;
+    --chip: #332A26;
+
+    --ink: #F5EDE9;
+    --ink-2: #E4D6D0;
+    --ink-3: #D2C1B9;
+    --muted: #B0998F;
+    --muted-2: #A08C82;
+    --muted-3: #9A857C;
+    --faint: #8A756C;
+    --faint-2: #75625A;
+
+    --ok-soft: #1E3A2C;
+    --warn-soft: #3A2F1A;
+    --sh-1: 0 0.375rem 1.375rem rgba(0, 0, 0, 0.3);
+    --sh-3: 0 1.875rem 4.375rem rgba(0, 0, 0, 0.4);
+  }
+}

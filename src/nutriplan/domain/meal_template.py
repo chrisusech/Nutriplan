@@ -100,6 +100,8 @@ class MealTemplate:
     slots: tuple[MealSlot, ...]
     components: tuple[Component, ...]
     free_salad: bool = False
+    # Cómo se prepara, escrita a mano. Sin esto el modo offline no tiene receta.
+    recipe: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -373,3 +375,12 @@ def _raw_matches(
         return [f for f in universe if f.name_es == name]
     food_class = catalog.classes[selector.lstrip("@")]
     return [f for f in universe if food_class.matches(f, slot)]
+
+
+def static_recipes(catalog: MealCatalog) -> dict[str, list[str]]:
+    """Las recetas escritas a mano, por id de plantilla.
+
+    Son el suelo: sin IA, o cuando el modelo no contesta, la app sigue sabiendo
+    explicar cómo se prepara cada plato.
+    """
+    return {t.id: list(t.recipe) for t in catalog.templates if t.recipe}

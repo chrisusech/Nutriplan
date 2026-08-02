@@ -14,13 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.llm.prompts import load_prompt
 from nutriplan.application.compute_targets import compute_and_store_targets
+from nutriplan.application.food_pool import resolve_allowed_foods
 from nutriplan.application.generate_plan import compute_input_hash
 from nutriplan.application.jobs import new_job, run_generation_job
 from nutriplan.container import Container
 from nutriplan.domain.calculation import apply_overrides, validate_daily
 from nutriplan.domain.calculation import compute_targets as compute_targets_domain
 from nutriplan.domain.errors import CalculationError
-from nutriplan.domain.food_filter import allowed_foods, forbidden_tags
+from nutriplan.domain.food_filter import forbidden_tags
 from nutriplan.domain.models import (
     CORE_MEAL_SLOTS,
     Client,
@@ -28,10 +29,18 @@ from nutriplan.domain.models import (
     MacroFormula,
     MealSlot,
     NutritionTargets,
+    Role,
 )
-from nutriplan.ports.job_repository import JobKind, JobStatus
+from nutriplan.ports.job_repository import JobStatus
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
+from nutriplan.ui.web.deps import (
+    acting_trainer,
+    container_of,
+    db_session,
+    render,
+    repos_of,
+    tenant_of,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -65,14 +74,12 @@ async def _generator_context(request: Request, session: AsyncSession,
                              client: Client, dia: int, editar: bool,
                              job_id: str | None = None,
                              formula_error: str | None = None,
-                             fase: str = "first_15") -> dict[str, Any]:
-    from nutriplan.domain.models import PlanPhase
+                             ) -> dict[str, Any]:
 
     container = container_of(request)
     repos = repos_of(request, session)
     config = container.nutrition_config(client)
     targets = await _fresh_targets(request, session, client)
-    phase = presenter.parse_plan_phase(fase)
 
     universe = await repos.foods.list_universe()
     tags, _ = forbidden_tags(client.restrictions)
@@ -97,16 +104,12 @@ async def _generator_context(request: Request, session: AsyncSession,
     )
     stale = False
     day_view = None
-    phases: list[PlanPhase] = []
 
     # El conjunto permitido se calcula SIEMPRE (antes solo si ya había plan): el
     # aviso de pobreza de pool tiene que verse ANTES de gastar una generación,
     # para que el entrenador arregle la lista en vez de recibir yogur siete días.
-    banned = set(await repos.clients.list_banned_food_ids(client.id))
-    allowed = allowed_foods(
-        await repos.foods.get_by_ids(client.liked_food_ids),
-        client.restrictions,
-        banned,
+    allowed = await resolve_allowed_foods(
+        client, food_repo=repos.foods, client_repo=repos.clients
     )
     catalog = container.meal_catalog
     pool_warnings = presenter.pool_warnings(allowed, catalog, targets.daily, config)
@@ -115,13 +118,10 @@ async def _generator_context(request: Request, session: AsyncSession,
         prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
         current = compute_input_hash(
             client, targets, config.version, prompt.version, allowed,
-            plan.variant, duration_days=plan.duration_days,
+            plan.variant,
             catalog_version=catalog.version,
         )
         stale = plan.input_hash != current
-        phases = presenter.plan_phases(plan)
-        if phase not in phases:
-            phase = phases[0]
 
         dia = max(0, min(dia, 6))
         food_ids = {
@@ -132,7 +132,7 @@ async def _generator_context(request: Request, session: AsyncSession,
         swap_pool = {f.id: f for f in allowed}
         for f in allowed:
             foods_by_id.setdefault(f.id, f)
-        day = presenter.get_plan_day(plan, phase, dia)
+        day = presenter.get_plan_day(plan, dia)
         if day is not None:
             day_view = presenter.day_view(
                 day, targets, config, foods_by_id, swap_pool=list(swap_pool.values())
@@ -141,7 +141,7 @@ async def _generator_context(request: Request, session: AsyncSession,
     goal_meta = presenter.GOAL_META[client.goal]
     return {
         "client": client,
-        "clients": await repos.clients.list(),
+        "clients": await repos.clients.list_all(),
         "client_avatar": presenter.avatar_colors(client.id),
         "client_meta": (f"{presenter.SEX_LABELS[client.sex.value]} · "
                         f"{client.age_years} años · {presenter.fmt_g(client.weight_kg)} kg"),
@@ -157,11 +157,11 @@ async def _generator_context(request: Request, session: AsyncSession,
         "weight_history": history,
         "stale": stale,
         "dia": max(0, min(dia, 6)),
-        "fase": phase.value,
-        "phases": [{"value": p.value, "label": presenter.PHASE_LABELS[p]} for p in phases],
-        "duration_label": presenter.duration_label(plan) if plan else "15 días",
         "dv": day_view,
-        "editar": editar and plan is not None and plan.status.value == "draft",
+        # Se puede editar el borrador y también corregir alimentos sobre la
+        # definitiva (APPROVED); lo que no se puede es regenerar sin cupo.
+        "editar": editar and plan is not None
+        and plan.status.value in ("draft", "approved"),
         "job_id": job_id,
         "loading_msg": None,
     }
@@ -171,16 +171,16 @@ async def _generator_context(request: Request, session: AsyncSession,
 async def generator_page(request: Request,
                          session: Annotated[AsyncSession, Depends(db_session)],
                          cliente: str = "", dia: int = 0,
-                         editar: int = 0, fase: str = "first_15") -> HTMLResponse:
+                         editar: int = 0) -> HTMLResponse:
     repos = repos_of(request, session)
-    clients = await repos.clients.list()
+    clients = await repos.clients.list_all()
     if not clients:
         return render(request, "generator.html", active_tab="generador", ctx=None)
     client = None
     if cliente:
         client = await repos.clients.get(UUID(cliente))
     client = client or clients[0]
-    ctx = await _generator_context(request, session, client, dia, bool(editar), fase=fase)
+    ctx = await _generator_context(request, session, client, dia, bool(editar))
     template = ("partials/generator_body.html"
                 if request.headers.get("HX-Request") else "generator.html")
     return render(request, template, active_tab="generador", ctx=ctx)
@@ -424,7 +424,6 @@ async def toggle_restriction(request: Request,
 
 async def _run_generation(
     container: Container, job_id: UUID, client_id: UUID, variant: int, tenant_id: UUID,
-    duration_days: int = 15,
 ) -> None:
     """Tarea de fondo: sesión propia, job persistido, commit al final."""
     async with container.session_factory() as session:
@@ -441,8 +440,8 @@ async def _run_generation(
             config=container.config_provider.get_nutrition_config(),
             llm=container.llm_client,
             prompts_dir=container.settings.prompts_dir, model=model, variant=variant,
-            duration_days=duration_days,
             catalog=container.meal_catalog,
+            recipe_repo=container.dish_recipe_repo(session),
         )
         await session.commit()
 
@@ -457,17 +456,31 @@ def _spawn(request: Request, coro: Coroutine[Any, Any, None]) -> None:
 
 async def _launch_generation(request: Request, session: AsyncSession,
                              client: Client, variant: int,
-                             duration_days: int = 15) -> HTMLResponse:
+                             ) -> HTMLResponse:
     container = container_of(request)
     repos = repos_of(request, session)
+
+    # Cupo de versiones definitivas: el super_user no tiene tope. Para el entrenador,
+    # al llegar al tope no puede generar un plan nuevo (solo corregir alimentos sobre
+    # la definitiva). Los borradores no cuentan; solo las versiones aprobadas.
+    actor = await acting_trainer(request, session)
+    if actor is not None and actor.role == Role.USER and actor.max_menus is not None:
+        approved = await repos.plans.count_approved_for_client(client.id)
+        if approved >= actor.max_menus:
+            return render(
+                request, "partials/gen_error.html", client=client,
+                error=(
+                    f"Este cliente ya usó sus {actor.max_menus} versiones "
+                    "definitivas. Puedes corregir alimentos puntuales del plan, pero no "
+                    "generar uno nuevo. Pide al administrador ampliar el cupo."
+                ),
+            )
+
     targets = await _fresh_targets(request, session, client)
     config = container.nutrition_config(client)
 
-    banned = set(await repos.clients.list_banned_food_ids(client.id))
-    allowed = allowed_foods(
-        await repos.foods.get_by_ids(client.liked_food_ids),
-        client.restrictions,
-        banned,
+    allowed = await resolve_allowed_foods(
+        client, food_repo=repos.foods, client_repo=repos.clients
     )
     if not allowed:
         return render(request, "partials/gen_error.html", client=client,
@@ -477,7 +490,6 @@ async def _launch_generation(request: Request, session: AsyncSession,
     prompt = load_prompt(container.settings.prompts_dir, "plan_generation")
     input_hash = compute_input_hash(
         client, targets, config.version, prompt.version, allowed, variant,
-        duration_days=duration_days,
         catalog_version=container.meal_catalog.version,
     )
     key = f"gen:{client.id}:{input_hash[:16]}"
@@ -485,7 +497,7 @@ async def _launch_generation(request: Request, session: AsyncSession,
 
     job = await repos.jobs.get_by_idempotency_key(key)
     if job is None:
-        job = new_job(tenant_id=tenant_id, kind=JobKind.GENERATE, idempotency_key=key)
+        job = new_job(tenant_id=tenant_id, idempotency_key=key)
         try:
             await repos.jobs.add(job)
             await session.commit()
@@ -496,7 +508,7 @@ async def _launch_generation(request: Request, session: AsyncSession,
                 raise
         if job.status in (JobStatus.QUEUED, JobStatus.FAILED):
             _spawn(request, _run_generation(
-                container, job.id, client.id, variant, tenant_id, duration_days
+                container, job.id, client.id, variant, tenant_id
             ))
     elif job.status == JobStatus.FAILED:
         job = job.model_copy(update={"status": JobStatus.QUEUED, "error": None,
@@ -504,7 +516,7 @@ async def _launch_generation(request: Request, session: AsyncSession,
         await repos.jobs.update(job)
         await session.commit()
         _spawn(request, _run_generation(
-            container, job.id, client.id, variant, tenant_id, duration_days
+            container, job.id, client.id, variant, tenant_id
         ))
 
     return render(request, "partials/gen_loading.html", client=client,
@@ -516,11 +528,10 @@ async def _launch_generation(request: Request, session: AsyncSession,
 async def start_generation(request: Request,
                            session: Annotated[AsyncSession, Depends(db_session)],
                            cid: str,
-                           duracion: Annotated[str, Form()] = "15") -> HTMLResponse:
+                           ) -> HTMLResponse:
     client = await _get_client(request, session, cid)
-    duration_days = 30 if str(duracion).strip() == "30" else 15
     return await _launch_generation(
-        request, session, client, variant=0, duration_days=duration_days
+        request, session, client, variant=0
     )
 
 
@@ -528,14 +539,13 @@ async def start_generation(request: Request,
 async def new_version(request: Request,
                       session: Annotated[AsyncSession, Depends(db_session)],
                       cid: str,
-                      duracion: Annotated[str, Form()] = "15") -> HTMLResponse:
+                      ) -> HTMLResponse:
     """Otra versión del plan (mes siguiente): menú distinto al historial."""
     repos = repos_of(request, session)
     client = await _get_client(request, session, cid)
     variant = len(await repos.plans.list_for_client(client.id))
-    duration_days = 30 if str(duracion).strip() == "30" else 15
     return await _launch_generation(
-        request, session, client, variant=variant, duration_days=duration_days
+        request, session, client, variant=variant
     )
 
 

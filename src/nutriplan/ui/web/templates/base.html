@@ -2,88 +2,61 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}NutriPlan{% endblock %} · Generador Nutricional</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/app.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="{{ brand }}">
+  <title>{% block title %}Mi semana{% endblock %} · NutriPlan</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="preload" href="/static/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/poppins-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
+  {# El color de marca es lo único dinámico del estilo. Va en un atributo y no
+     en un <style>, para que la CSP pueda prohibir el CSS inline entero. #}
   <script src="/static/htmx.min.js" defer></script>
-  <script>
-    // Los controles del generador reemplazan el contenido de #gen-root, que es la
-    // pantalla ENTERA. Al vaciarlo, el documento se encoge, el navegador recorta el
-    // scroll a lo que queda de página, y al reinsertar el contenido ya no vuelve a su
-    // sitio: cambiar un macro te mandaba al fondo. Se guarda dónde estabas y se vuelve.
-    //
-    // Las dos columnas del generador scrollean por su cuenta, y el swap las DESTRUYE:
-    // sus divs son nuevos y nacen con scrollTop 0. Sin restaurarlas, tocar un macro
-    // te devolvía al principio de la lista de alimentos — el mismo salto de antes,
-    // sólo que dentro del panel. Se guardan las dos, no sólo la ventana.
-    const COLS = '.gen-controls, .gen-preview';
-    document.addEventListener('htmx:beforeSwap', () => {
-      window.__scrollY = window.scrollY;
-      window.__cols = [...document.querySelectorAll(COLS)].map(e => e.scrollTop);
-    });
-    document.addEventListener('htmx:afterSettle', () => {
-      if (window.__scrollY !== undefined) window.scrollTo(0, window.__scrollY);
-      const cols = window.__cols || [];
-      document.querySelectorAll(COLS).forEach((e, i) => {
-        if (cols[i] != null) e.scrollTop = cols[i];
-      });
-    });
-  </script>
-  <style>:root { --brand: {{ brand }}; --brand-soft: {{ brand_soft }}; }</style>
+  <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </head>
-<body class="{% block page_class %}{% endblock %}" hx-headers='{"X-Requested-With":"htmx"}'>
-  <header class="topbar">
-    <a class="logo" href="/">
-      <div class="logo-badge"><span class="icon" style="font-size:22px">restaurant</span></div>
-      <span class="logo-word">Nutri<b>Plan</b></span>
+<body class="{% block page_class %}{% endblock %}"
+      data-brand="{{ brand }}" data-brand-soft="{{ brand_soft }}"
+      hx-headers='{"X-Requested-With":"htmx"}'>
+
+  <div class="app">
+    <header class="app-head">
+      <a class="logo" href="/">
+        <span class="logo-badge"><span class="icon">restaurant</span></span>
+        <span>Nutri<span class="brand-word">Plan</span></span>
+      </a>
+      {% block head_action %}{% endblock %}
+    </header>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% if trainer %}
+  <nav class="nav" aria-label="Navegación principal">
+    <a href="/" class="{% if active_tab == 'semana' %}on{% endif %}"
+       {% if active_tab == 'semana' %}aria-current="page"{% endif %}>
+      <span class="icon {% if active_tab == 'semana' %}fill{% endif %}">restaurant_menu</span>
+      Mi semana
     </a>
-    <nav class="tabs">
-      <a class="tab {% if active_tab == 'clientes' %}active{% endif %}" href="/">Clientes</a>
-      <a class="tab {% if active_tab == 'generador' %}active{% endif %}" href="/generador">Generador</a>
-      <a class="tab {% if active_tab == 'planes' %}active{% endif %}" href="/planes">Planes</a>
-      <a class="tab {% if active_tab == 'recetas' %}active{% endif %}" href="/recetas">Recetas</a>
-      {% if role == 'admin' %}
-      <a class="tab {% if active_tab == 'verificar' %}active{% endif %}" href="/admin/recetas">Verificar</a>
-      {% endif %}
-    </nav>
-    <div class="topbar-right">
-      <details class="brand-picker">
-        <summary title="Color de marca">
-          <span class="icon" style="font-size:22px;color:#B0968C">palette</span>
-        </summary>
-        <div class="brand-pop">
-          <div class="title">Color de marca</div>
-          <div class="hint">Se aplica a toda la app y a los PDF exportados</div>
-          <form class="swatches" method="post" action="/marca">
-            {% for name, hex in BRAND_SWATCHES %}
-            <button class="swatch {% if hex == brand %}on{% endif %}" name="color" value="{{ hex }}"
-                    style="background:{{ hex }};--sw:{{ hex }}" title="{{ name }}"></button>
-            {% endfor %}
-          </form>
-        </div>
-      </details>
-      <details class="brand-picker">
-        <summary title="{{ trainer.name if trainer else branding.tenant_name }}">
-          <div class="avatar">{{ trainer_initials }}</div>
-        </summary>
-        <div class="brand-pop" style="right:0;left:auto">
-          <div class="title">{{ branding.tenant_name }}</div>
-          {% if trainer %}<div class="hint">{{ trainer.email }}</div>{% endif %}
-          <form method="post" action="/logout" style="margin-top:10px">
-            <button class="btn btn-outline" style="width:100%;justify-content:center;padding:9px" type="submit">
-              <span class="icon" style="font-size:18px">logout</span>Cerrar sesión
-            </button>
-          </form>
-        </div>
-      </details>
-    </div>
-  </header>
-  <main class="page">
-    {% block content %}{% endblock %}
-  </main>
+    <a href="/feedback" class="{% if active_tab == 'feedback' %}on{% endif %}"
+       {% if active_tab == 'feedback' %}aria-current="page"{% endif %}>
+      <span class="icon {% if active_tab == 'feedback' %}fill{% endif %}">forum</span>
+      Opinar
+    </a>
+    <a href="/perfil" class="{% if active_tab == 'perfil' %}on{% endif %}"
+       {% if active_tab == 'perfil' %}aria-current="page"{% endif %}>
+      <span class="icon {% if active_tab == 'perfil' %}fill{% endif %}">person</span>
+      Perfil
+    </a>
+    {% if role == 'super_user' %}
+    <a href="/admin/metricas" class="{% if active_tab == 'metricas' %}on{% endif %}">
+      <span class="icon">insights</span>
+      Métricas
+    </a>
+    {% endif %}
+  </nav>
+  {% endif %}
 </body>
 </html>

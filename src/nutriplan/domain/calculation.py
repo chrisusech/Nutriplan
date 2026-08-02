@@ -18,7 +18,7 @@ AHA/ACC/TOS marca 1200–1500 kcal en mujeres y 1500–1800 en hombres.
 La fibra sale de las kcal (14 g por 1000 kcal, estándar DRI).
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from nutriplan.domain.errors import CalculationError
@@ -40,19 +40,6 @@ KCAL_PER_G_FAT = 9.0
 OVERRIDABLE_FIELDS = ("kcal", "protein_g", "carb_g", "fat_g")
 
 
-def resolve_age_years(client: Client, *, today: date | None = None) -> int:
-    """Edad desde birthdate (preferida) o age_years; sin ambas → error claro."""
-    if client.birthdate is not None:
-        ref = today or date.today()
-        years = ref.year - client.birthdate.year
-        if (ref.month, ref.day) < (client.birthdate.month, client.birthdate.day):
-            years -= 1
-        return years
-    if client.age_years is not None:
-        return client.age_years
-    raise CalculationError(f"Cliente {client.id}: falta fecha de nacimiento o edad")
-
-
 def bmr_mifflin_st_jeor(sex: Sex, weight_kg: float, height_cm: float, age_years: int) -> float:
     base = 10.0 * weight_kg + 6.25 * height_cm - 5.0 * age_years
     return base + 5.0 if sex == Sex.MALE else base - 161.0
@@ -60,7 +47,7 @@ def bmr_mifflin_st_jeor(sex: Sex, weight_kg: float, height_cm: float, age_years:
 
 def kcal_floor_for(client: Client, config: NutritionConfig) -> float:
     """El suelo energético del cliente: ni bajo su basal, ni bajo el mínimo de la guía."""
-    age = resolve_age_years(client)
+    age = client.age_years
     bmr = bmr_mifflin_st_jeor(client.sex, client.weight_kg, client.height_cm, age)
     return max(bmr, config.kcal_floor[client.sex])
 
@@ -100,7 +87,7 @@ def compute_daily_macros(
     esos mandan; el carbohidrato siempre cierra el resto hasta las kcal.
     """
     formula = formula or MacroFormula()
-    age = resolve_age_years(client)
+    age = client.age_years
     bmr = bmr_mifflin_st_jeor(client.sex, client.weight_kg, client.height_cm, age)
     tdee = bmr * config.activity_factors[client.activity_level]
 

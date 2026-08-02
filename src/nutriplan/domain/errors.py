@@ -44,3 +44,9 @@ class LLMError(NutriPlanError):
 
 class TenantIsolationError(NutriPlanError):
     """Acceso cruzado entre tenants — nunca debería pasar (HTTP 403)."""
+
+
+class QuotaExceededError(NutriPlanError):
+    """El entrenador superó su cupo (clientes o versiones definitivas) — HTTP 403.
+
+    El super_user no tiene cupo, así que nunca la dispara."""

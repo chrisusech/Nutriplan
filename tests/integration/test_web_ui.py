@@ -14,12 +14,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from tests.integration.test_parse_intake import ANA
 
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.adapters.llm.mock_client import MockLLMClient
 from nutriplan.config.settings import Settings
 from nutriplan.container import Container
+from nutriplan.domain.models import MealSlot
 from nutriplan.ui.web.app import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,26 +40,40 @@ def _failure_reason(html: str) -> str:
 
 @pytest.fixture
 def container(tmp_path, monkeypatch) -> Container:
-    """Container de prueba: base efímera, branding/exports en tmp, modo offline."""
-    monkeypatch.setattr(
-        Settings, "exports_dir", property(lambda _self: tmp_path / "exports")
-    )  # sin esto los tests dejan PDFs en data/exports del repo
+    """Container de prueba: base efímera, branding en tmp, modo offline."""
     monkeypatch.setattr(
         Settings, "branding_dir", property(lambda _self: tmp_path / "branding")
     )
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path}/web.db",
         anthropic_api_key="",  # explícito: gana sobre un .env local del desarrollador
-        admin_email="admin@nutriplan.test",  # este correo, al registrarse, es admin
+        admin_email=SUPER_EMAIL,  # se siembra un super_user al arrancar
+        admin_password=SUPER_PASSWORD,
     )
     return Container(settings=settings, tenant_id=DEFAULT_TENANT_ID)
 
 
-def _signup(client: TestClient) -> None:
-    """Registra e inicia sesión como entrenador (el guard exige login)."""
-    resp = client.post("/signup", data={
-        "name": "Valeria Vega", "business_name": "Valeria Fit",
-        "email": "valeria@fit.com", "password": "supersecreta",
+# Ya no hay alta pública: el super_user se siembra al arrancar (bootstrap) y crea
+# a los entrenadores. Los tests entran como ese super_user (sin cupos), que es
+# quien puede hacer todo el flujo sin toparse con límites.
+SUPER_EMAIL = "admin@nutriplan.test"
+SUPER_PASSWORD = "super-secreta-1"
+
+
+def _login(client: TestClient, email: str = SUPER_EMAIL, password: str = SUPER_PASSWORD) -> None:
+    resp = client.post(
+        "/login", data={"email": email, "password": password}, follow_redirects=False
+    )
+    assert resp.status_code == 303, resp.text
+
+
+def _create_trainer(
+    client: TestClient, *, name: str, email: str, password: str,
+    max_menus: str = "",
+) -> None:
+    """El super_user da de alta una cuenta desde el módulo de administración."""
+    resp = client.post("/admin/entrenadores", data={
+        "name": name, "email": email, "password": password, "max_menus": max_menus,
     }, follow_redirects=False)
     assert resp.status_code == 303, resp.text
 
@@ -68,7 +82,7 @@ def _signup(client: TestClient) -> None:
 def offline(container):
     """App en modo offline: la generación cae en el HeuristicSelector."""
     with TestClient(create_app(container)) as client:
-        _signup(client)
+        _login(client)
         yield client, container
 
 
@@ -79,32 +93,38 @@ def with_llm(container):
     # cached_property: sembrar el __dict__ evita construir el AnthropicClient real
     container.__dict__["llm_client"] = mock
     with TestClient(create_app(container)) as client:
-        _signup(client)
+        _login(client)
         yield client, mock
 
 
-def _food_ids(client: TestClient) -> list[str]:
-    """Todos los alimentos del catálogo sembrado, leídos de los chips del form."""
-    html = client.get("/clientes/nuevo").text
+def _food_ids(client: TestClient, cid: str | None = None) -> list[str]:
+    """Los alimentos del catálogo, leídos de los chips que estén a la vista.
+
+    Antes del onboarding están en su formulario; después, en el generador (una
+    vez hay perfil, /onboarding redirige y ya no tiene chips que leer).
+    """
+    if cid:
+        html = client.get(f"/generador?cliente={cid}").text
+        return re.findall(r'"food_id":"([^"]+)"', html)
+    html = client.get("/onboarding").text
     return re.findall(r'name="food_ids" value="([^"]+)"', html)
 
 
-def _create_client(client: TestClient, name: str = "Ana Pérez") -> str:
-    """Alta manual (no requiere LLM). Devuelve el id del cliente creado."""
-    response = client.post(
-        "/clientes",
-        data={
-            "name": name,
-            "sex": "female",
-            "age_years": 28,
-            "height_cm": 165.0,
-            "weight_kg": 62.0,
-            "goal": "lose_fat",
-            "activity_level": "moderate",
-            "food_ids": _food_ids(client),
-        },
-        follow_redirects=False,
-    )
+def _create_client(client: TestClient, name: str = "Ana Pérez", **overrides) -> str:
+    """Completa el onboarding. Devuelve el id del perfil creado."""
+    data = {
+        "name": name,
+        "sex": "female",
+        "age_years": 28,
+        "height_cm": 165.0,
+        "weight_kg": 62.0,
+        "goal": "lose_fat",
+        "activity_level": "moderate",
+        "meal_slots": [s.value for s in MealSlot],
+        "eating_pattern_raw": "Desayuno rápido, almuerzo fuera, ceno ligero.",
+    }
+    data.update(overrides)
+    response = client.post("/onboarding", data=data, follow_redirects=False)
     assert response.status_code == 303, response.text
     return response.headers["location"].split("cliente=")[1]
 
@@ -147,11 +167,20 @@ def test_failure_marker_matches_the_error_template() -> None:
     assert FAILURE_MARKER in template.read_text(encoding="utf-8")
 
 
-def test_dashboard_without_clients_renders_empty_state(offline) -> None:
+def test_quien_entra_sin_perfil_va_derecho_al_onboarding(offline) -> None:
+    """La app no tiene lista de clientes: tiene a quien está mirando."""
     client, _ = offline
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/onboarding"
+
+
+def test_con_perfil_pero_sin_menu_se_ofrece_generarlo(offline) -> None:
+    client, _ = offline
+    _create_client(client)
     response = client.get("/")
     assert response.status_code == 200
-    assert "Aún no hay" in response.text or "Nuevo cliente" in response.text
+    assert "Generar mi menú" in response.text
 
 
 def test_plans_page_without_plans_renders_empty_state(offline) -> None:
@@ -159,31 +188,6 @@ def test_plans_page_without_plans_renders_empty_state(offline) -> None:
     response = client.get("/planes")
     assert response.status_code == 200
     assert "Aún no hay planes por aquí" in response.text
-
-
-# --- Ingesta ---------------------------------------------------------------
-
-
-def test_intake_word_upload_renders_review(with_llm) -> None:
-    client, mock = with_llm
-    mock.enqueue(ANA)
-    response = client.post(
-        "/intake",
-        files={"archivo": ("intake_limpio.docx", (FIXTURES / "intake_limpio.docx").read_bytes())},
-    )
-    assert response.status_code == 200
-    assert "Ana Pérez" in response.text  # el form de revisión viene precargado
-    assert mock.calls and mock.calls[0]["kind"] == "extract"
-
-
-def test_intake_offline_explains_instead_of_crashing(offline) -> None:
-    client, _ = offline
-    response = client.post(
-        "/intake",
-        files={"archivo": ("intake_limpio.docx", (FIXTURES / "intake_limpio.docx").read_bytes())},
-    )
-    assert response.status_code == 200
-    assert "ANTHROPIC_API_KEY" in response.text
 
 
 # --- Generador: controles --------------------------------------------------
@@ -346,7 +350,7 @@ def test_manual_kcal_override_sticks(offline) -> None:
 def test_food_and_restriction_toggles_flip_state(offline) -> None:
     client, _ = offline
     cid = _create_client(client)
-    food = _food_ids(client)[0]
+    food = _food_ids(client, cid)[0]
 
     off = client.post(f"/generador/{cid}/alimento", data={"food_id": food})
     assert off.status_code == 200
@@ -369,8 +373,9 @@ def test_generation_job_completes_and_shows_preview(offline) -> None:
 
     page = client.get("/generador", params={"cliente": cid}).text
     assert "Vista previa del plan" in page
-    assert "Duración del plan" in page
-    assert "Plan 30 días" in page
+    assert "Generar mi menú" in page
+    # Ya no se elige duración: el producto es una semana
+    assert "30 días" not in page
 
     listed = client.get("/planes")
     assert "Ana Pérez" in listed.text
@@ -389,7 +394,7 @@ def test_regenerating_same_inputs_reuses_the_job(offline) -> None:
     assert len(rows) == 1
 
 
-# --- Revisión, aprobación y export -----------------------------------------
+# --- Revisión y aprobación -------------------------------------------------
 
 
 def _cycle_id(client: TestClient) -> str:
@@ -398,73 +403,57 @@ def _cycle_id(client: TestClient) -> str:
     return match.group(1)
 
 
-def test_draft_cannot_be_exported_until_approved(offline) -> None:
+def test_un_plan_en_borrador_no_se_puede_aprobar_dos_veces(offline) -> None:
+    """La compuerta humana: el plan nace borrador y alguien decide aprobarlo."""
     client, _ = offline
     cid = _create_client(client)
     _generate_and_wait(client, cid)
     cycle = _cycle_id(client)
 
-    # compuerta humana: el borrador redirige a la revisión en vez de descargar
-    blocked = client.get(f"/planes/{cycle}/export.pdf", follow_redirects=False)
-    assert blocked.status_code == 303
-    assert blocked.headers["location"] == f"/planes/{cycle}"
+    review = client.get(f"/planes/{cycle}")
+    assert "Plan aprobado" not in review.text
 
     approved = client.post(f"/planes/{cycle}/aprobar", follow_redirects=False)
     assert approved.status_code == 303
-
-    review = client.get(f"/planes/{cycle}")
-    assert "Plan aprobado" in review.text
-
-    pdf = client.get(f"/planes/{cycle}/export.pdf")
-    assert pdf.status_code == 200
-    assert pdf.headers["content-type"] == "application/pdf"
-    assert pdf.content[:5] == b"%PDF-"
-    # El nombre con el que aterriza en el escritorio del cliente. "Ana Pérez" no cabe
-    # cruda en un header HTTP: ASCII + parámetro RFC 6266.
-    disposition = pdf.headers["content-disposition"]
-    assert 'filename="Plan nutricional Ana Perez.pdf"' in disposition
-    assert "filename*=UTF-8''Plan%20nutricional%20Ana%20P%C3%A9rez.pdf" in disposition
-
-    docx = client.get(f"/planes/{cycle}/export.docx")
-    assert docx.status_code == 200
-    assert docx.content[:2] == b"PK"  # zip → docx
+    assert "Plan aprobado" in client.get(f"/planes/{cycle}").text
 
 
-def test_approved_plan_can_be_reopened_and_corrected(offline) -> None:
+def test_approved_plan_allows_per_food_correction(offline) -> None:
+    """Tras aprobar, el plan NO se regenera completo: solo se corrige un alimento
+    puntual (el entrenador metió algo que el cliente no come), sin volver a borrador."""
     client, _ = offline
     cid = _create_client(client)
     _generate_and_wait(client, cid)
     cycle = _cycle_id(client)
 
     client.post(f"/planes/{cycle}/aprobar", follow_redirects=False)
-    assert "Reabrir para corregir" in client.get(f"/planes/{cycle}").text
+    review = client.get(f"/planes/{cycle}").text
+    assert "Plan aprobado" in review
+    assert "Corregir un alimento" in review  # ya no hay "reabrir"
 
-    # reabrir → vuelve a borrador y lleva al editor
-    reopened = client.post(f"/planes/{cycle}/reabrir", follow_redirects=False)
-    assert reopened.status_code == 303
-    assert "editar=1" in reopened.headers["location"]
-
-    # ahora sí se puede editar (estado draft) y volver a aprobar
+    # el editor abre sobre la definitiva (APPROVED), sin reabrir a borrador
     page = client.get("/generador", params={"cliente": cid, "editar": 1}).text
     field = re.search(r'name="(grams_[0-9a-f-]{36})" value="([\d.]+)"', page)
-    assert field is not None
+    assert field is not None, "el editor no abre sobre la definitiva"
     edit = client.post(
         f"/planes/{cycle}/dia/0/porciones",
         data={"slot": "desayuno", "cliente": cid, field.group(1): float(field.group(2)) + 25},
     )
     assert edit.status_code == 200
-    assert client.post(f"/planes/{cycle}/aprobar", follow_redirects=False).status_code == 303
+    # sigue aprobado tras la corrección: no volvió a borrador
+    assert "Plan aprobado" in client.get(f"/planes/{cycle}").text
 
 
-def test_review_page_shows_the_week_grid(offline) -> None:
+def test_la_revision_muestra_los_siete_dias_y_ninguna_descarga(offline) -> None:
+    """El menú se lee en la app: no hay PDF que ofrecer."""
     client, _ = offline
     cid = _create_client(client)
     _generate_and_wait(client, cid)
 
     review = client.get(f"/planes/{_cycle_id(client)}").text
-    assert "Plan · 15 días (1 semana)" in review
     assert review.count('class="day-cell"') == 7  # una semana
-    assert "Generar plan 30 días" in review
+    assert "export.pdf" not in review
+    assert "export.docx" not in review
 
 
 # --- Multi-entrenador: login y aislamiento por tenant (Workstream G) --------
@@ -481,41 +470,47 @@ def test_guard_redirects_anonymous_to_login(container) -> None:
         assert anon.get("/login").status_code == 200
 
 
-def test_two_trainers_do_not_see_each_others_clients(container) -> None:
-    """Dos entrenadores registrados quedan aislados por tenant, y cada uno
-    conserva su propia marca."""
+def test_una_persona_no_puede_ver_el_perfil_de_otra(container) -> None:
+    """Dos cuentas quedan aisladas por tenant: cada quien ve lo suyo y nada más."""
     app = create_app(container)
-    with TestClient(app) as a:
-        b = TestClient(app)  # segunda sesión (cookie jar propio), misma app
+    with TestClient(app) as admin:
+        _login(admin)  # super_user
+        _create_trainer(admin, name="Ana Coach", email="ana@fit.com",
+                        password="clave-ana-1")
+        _create_trainer(admin, name="Beto Coach", email="beto@fit.com",
+                        password="clave-beto-1")
 
-        assert a.post("/signup", data={
-            "name": "Ana Coach", "business_name": "Estudio Ana",
-            "email": "ana@fit.com", "password": "clave-ana-1",
-        }, follow_redirects=False).status_code == 303
-        assert b.post("/signup", data={
-            "name": "Beto Coach", "business_name": "Estudio Beto",
-            "email": "beto@fit.com", "password": "clave-beto-1",
-        }, follow_redirects=False).status_code == 303
+        a = TestClient(app)
+        _login(a, "ana@fit.com", "clave-ana-1")
+        b = TestClient(app)
+        _login(b, "beto@fit.com", "clave-beto-1")
 
         _create_client(a, name="Cliente De Ana")
 
-        # B no ve al cliente de A; A sí lo ve
-        assert "Cliente De Ana" not in b.get("/").text
-        assert "Cliente De Ana" in a.get("/").text
+        # A tiene perfil y llega a su pantalla de menú
+        assert a.get("/", follow_redirects=False).status_code == 200
+        perfil_de_a = a.get("/perfil").text
+        assert "ana@fit.com" in perfil_de_a
+        assert "beto@fit.com" not in perfil_de_a
 
-        # cada entrenador lleva su propia marca
-        assert "Estudio Ana" in a.get("/").text
-        assert "Estudio Beto" in b.get("/").text
-        assert "Estudio Beto" not in a.get("/").text
+        # B no hereda el perfil de A: sigue sin uno
+        sin_perfil = b.get("/", follow_redirects=False)
+        assert sin_perfil.status_code == 303
+        assert sin_perfil.headers["location"] == "/onboarding"
+        assert "ana@fit.com" not in b.get("/perfil").text
+
+        # Y B, que no tiene perfil, ni siquiera llega a una pantalla de menú
+        sin_perfil = b.get("/", follow_redirects=False)
+        assert sin_perfil.status_code == 303
+        assert sin_perfil.headers["location"] == "/onboarding"
 
 
 def test_login_rejects_bad_password_and_accepts_good_one(container) -> None:
     app = create_app(container)
     with TestClient(app) as client:
-        client.post("/signup", data={
-            "name": "Carla", "business_name": "Estudio Carla",
-            "email": "carla@fit.com", "password": "clave-carla-1",
-        }, follow_redirects=False)
+        _login(client)  # super_user
+        _create_trainer(client, name="Carla", email="carla@fit.com",
+                        password="clave-carla-1")
         client.post("/logout", follow_redirects=False)
 
         bad = client.post("/login", data={"email": "carla@fit.com", "password": "no-es"},
@@ -528,13 +523,16 @@ def test_login_rejects_bad_password_and_accepts_good_one(container) -> None:
         assert good.headers["location"] == "/"
 
 
-# --- Portal del cliente + recetas verificadas (Workstream H) ----------------
+# --- Recetas verificadas por el super_user (Workstream H) -------------------
 
 
 def test_recipe_upload_pending_then_admin_verifies_and_it_becomes_a_food(offline) -> None:
-    trainer, _ = offline
-    foods = _food_ids(trainer)[:2]
+    admin, _ = offline  # super_user (lo siembra el bootstrap)
+    _create_trainer(admin, name="Vale", email="vale@fit.com", password="clave-vale-1")
+    trainer = TestClient(admin.app)
+    _login(trainer, "vale@fit.com", "clave-vale-1")
 
+    foods = _food_ids(trainer)[:2]
     created = trainer.post("/recetas", data={
         "name": "Bowl de prueba",
         "food_id": [foods[0], foods[1]],
@@ -545,15 +543,10 @@ def test_recipe_upload_pending_then_admin_verifies_and_it_becomes_a_food(offline
     assert "Bowl de prueba" in trainer.get("/recetas").text
     assert "Pendiente" in trainer.get("/recetas").text
 
-    # el trainer normal no puede entrar a la cola de admin
+    # el entrenador normal no puede entrar a la cola de admin
     assert trainer.get("/admin/recetas", follow_redirects=False).status_code == 303
 
-    # un admin (correo designado en settings) verifica
-    admin = TestClient(trainer.app)
-    admin.post("/signup", data={
-        "name": "Admin", "business_name": "Plataforma",
-        "email": "admin@nutriplan.test", "password": "clave-admin-1",
-    }, follow_redirects=False)
+    # el super_user verifica (ve las recetas de todos los tenants)
     queue = admin.get("/admin/recetas").text
     assert "Bowl de prueba" in queue
     rid = re.search(r"/admin/recetas/([0-9a-f-]{36})/verificar", queue).group(1)
@@ -561,7 +554,7 @@ def test_recipe_upload_pending_then_admin_verifies_and_it_becomes_a_food(offline
 
     # ahora la receta figura verificada y aparece como alimento del entrenador
     assert "Verificada" in trainer.get("/recetas").text
-    assert "Bowl de prueba" in trainer.get("/clientes/nuevo").text
+    assert "Bowl de prueba" in trainer.get("/onboarding").text
 
 
 def test_a_restaurant_dish_is_registered_by_its_macros_with_no_ingredients(offline) -> None:
@@ -570,7 +563,10 @@ def test_a_restaurant_dish_is_registered_by_its_macros_with_no_ingredients(offli
     Antes esto no se podía registrar: `create_recipe` exigía al menos un
     ingrediente, así que un cliente que come fuera no tenía forma de contarlo.
     """
-    trainer, _ = offline
+    admin, _ = offline  # super_user
+    _create_trainer(admin, name="Vale", email="vale@fit.com", password="clave-vale-1")
+    trainer = TestClient(admin.app)
+    _login(trainer, "vale@fit.com", "clave-vale-1")
 
     created = trainer.post("/recetas", data={
         "modo": "macros",
@@ -588,18 +584,13 @@ def test_a_restaurant_dish_is_registered_by_its_macros_with_no_ingredients(offli
     # Las kcal no se piden: 4·42 + 4·55 + 9·18 = 550.
     assert "550 kcal" in page
 
-    admin = TestClient(trainer.app)
-    admin.post("/signup", data={
-        "name": "Admin", "business_name": "Plataforma",
-        "email": "admin@nutriplan.test", "password": "clave-admin-1",
-    }, follow_redirects=False)
     queue = admin.get("/admin/recetas").text
     rid = re.search(r"/admin/recetas/([0-9a-f-]{36})/verificar", queue).group(1)
     admin.post(f"/admin/recetas/{rid}/verificar", follow_redirects=False)
 
     # Verificada, se vuelve un alimento del entrenador y se puede poner en un plan.
     assert "Verificada" in trainer.get("/recetas").text
-    assert "Hamburguesa del restaurante" in trainer.get("/clientes/nuevo").text
+    assert "Hamburguesa del restaurante" in trainer.get("/onboarding").text
 
 
 def test_a_dish_with_neither_ingredients_nor_macros_says_so(offline) -> None:
@@ -612,39 +603,6 @@ def test_a_dish_with_neither_ingredients_nor_macros_says_so(offline) -> None:
     assert "error=" in resp.headers["location"]
     assert "macros" in trainer.get(resp.headers["location"]).text
     assert "Aire" not in trainer.get("/recetas").text
-
-
-def test_client_portal_shows_plan_read_only_and_blocks_trainer_routes(offline) -> None:
-    trainer, _ = offline
-    cid = _create_client(trainer)
-    _generate_and_wait(trainer, cid)
-    cycle = _cycle_id(trainer)
-    trainer.post(f"/planes/{cycle}/aprobar", follow_redirects=False)
-
-    # el entrenador da acceso al cliente
-    granted = trainer.post(f"/clientes/{cid}/acceso",
-                           data={"email": "ana@correo.com", "password": "clave-ana-11"},
-                           follow_redirects=False)
-    assert granted.status_code == 303
-
-    # el cliente entra: login lo lleva al portal
-    portal = TestClient(trainer.app)
-    login = portal.post("/login", data={"email": "ana@correo.com", "password": "clave-ana-11"},
-                        follow_redirects=False)
-    assert login.status_code == 303
-    assert login.headers["location"] == "/portal"
-
-    view = portal.get("/portal")
-    assert view.status_code == 200
-    assert "Tu plan de la semana" in view.text
-    assert "Lunes" in view.text  # las tarjetas de día se renderizan
-    # PDF descargable
-    pdf = portal.get("/portal/plan.pdf")
-    assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"
-
-    # el cliente no puede tocar rutas del entrenador: lo devuelven al portal
-    assert portal.get("/", follow_redirects=False).headers["location"] == "/portal"
-    assert portal.get("/planes", follow_redirects=False).headers["location"] == "/portal"
 
 
 # --- Edición de porciones (update_day por día) --------------------------------
@@ -662,14 +620,14 @@ def test_editing_portions_recomputes_macros_and_persists(offline) -> None:
     field, original = grams_field.group(1), float(grams_field.group(2))
 
     response = client.post(
-        f"/planes/{cycle}/dia/0/porciones?fase=first_15",
-        data={"slot": "desayuno", "cliente": cid, "fase": "first_15", field: original + 30},
+        f"/planes/{cycle}/dia/0/porciones",
+        data={"slot": "desayuno", "cliente": cid, field: original + 30},
     )
     assert response.status_code == 200
 
     again = client.post(
-        f"/planes/{cycle}/dia/0/porciones?fase=first_15",
-        data={"slot": "desayuno", "cliente": cid, "fase": "first_15", field: original + 60},
+        f"/planes/{cycle}/dia/0/porciones",
+        data={"slot": "desayuno", "cliente": cid, field: original + 60},
     )
     assert again.status_code == 200
 
@@ -677,33 +635,19 @@ def test_editing_portions_recomputes_macros_and_persists(offline) -> None:
     assert f'name="{field}" value="{original + 60:g}"' in reloaded
 
 
-def test_create_client_tolerates_bad_food_ids(offline) -> None:
-    """IDs de alimento inválidos o inexistentes no deben tumbar el POST /clientes."""
+def test_un_id_de_alimento_corrupto_no_tumba_el_onboarding(offline) -> None:
     client, _ = offline
-    response = client.post(
-        "/clientes",
-        data={
-            "name": "Cliente robusto",
-            "sex": "female",
-            "age_years": 30,
-            "height_cm": 165.0,
-            "weight_kg": 60.0,
-            "goal": "maintain",
-            "activity_level": "moderate",
-            "food_ids": ["not-a-uuid", "00000000-0000-0000-0000-000000000099"],
-            "intake_id": "tampoco-es-uuid",
-        },
-        headers={"HX-Request": "true"},
-        follow_redirects=False,
+    cid = _create_client(
+        client, name="Cliente robusto",
+        food_ids=["not-a-uuid", "00000000-0000-0000-0000-000000000099"],
     )
-    assert response.status_code == 303, response.text
-    assert "cliente=" in response.headers.get("HX-Redirect", "")
+    assert cid
 
 
-def test_create_client_invalid_sex_shows_form_error(offline) -> None:
+def test_un_sexo_invalido_devuelve_el_formulario_con_el_error(offline) -> None:
     client, _ = offline
     response = client.post(
-        "/clientes",
+        "/onboarding",
         data={
             "name": "Ana",
             "sex": "otro",
@@ -733,7 +677,7 @@ def test_stale_session_redirects_to_login(offline) -> None:
     async def delete_tenant() -> None:
         async with container.session_factory() as s:
             user = (
-                await s.execute(select(UserRow).where(UserRow.email == "valeria@fit.com"))
+                await s.execute(select(UserRow).where(UserRow.email == SUPER_EMAIL))
             ).scalar_one()
             tenant = await s.get(TenantRow, user.tenant_id)
             if tenant is not None:
@@ -747,30 +691,21 @@ def test_stale_session_redirects_to_login(offline) -> None:
     assert response.headers["location"] == "/login?sesion=expirada"
 
 
-def test_password_reset_flow(offline) -> None:
-    """Recuperación local: enlace en pantalla → nueva clave → login."""
-    client, _ = offline
+def test_quien_olvida_su_clave_recibe_un_enlace_y_puede_entrar_de_nuevo(offline) -> None:
+    client, container = offline  # super_user
     email = "reset-me@fit.com"
-    client.post(
-        "/signup",
-        data={
-            "name": "Reset Me",
-            "business_name": "Reset Fit",
-            "email": email,
-            "password": "original12",
-        },
-        follow_redirects=False,
-    )
+    _create_trainer(client, name="Reset Me", email=email, password="original12")
     client.post("/logout")
 
     page = client.post("/recuperar", data={"email": email})
     assert page.status_code == 200
-    assert "Enlace listo" in page.text
-    import re
+    # El enlace ya NO se pinta en pantalla: viaja por correo.
+    assert "/recuperar/" not in page.text
+    assert "Si ese correo tiene una cuenta" in page.text
 
-    match = re.search(r'href="(/recuperar/[^"]+)"', page.text)
-    assert match is not None
-    reset_path = match.group(1)
+    enviado = container.mailer.sent[-1]
+    assert enviado["to"] == email
+    reset_path = "/recuperar/" + re.search(r"/recuperar/(\S+)", enviado["body"]).group(1)
 
     confirm = client.get(reset_path)
     assert confirm.status_code == 200
@@ -816,6 +751,9 @@ def test_a_second_month_is_a_new_version_and_the_first_one_stays(offline) -> Non
     cid = _create_client(trainer)
     _generate_and_wait(trainer, cid)
     v1 = _cycle_id(trainer)
+    # Solo lo DEFINITIVO se guarda: v1 se aprueba antes de pasar al mes 2. Un borrador
+    # sin aprobar se pisa al regenerar; aprobar lo vuelve permanente.
+    assert trainer.post(f"/planes/{v1}/aprobar", follow_redirects=False).status_code == 303
 
     # Mes 2: el cliente bajó de peso. Los macros se recalculan con el peso nuevo.
     before = _macros(trainer.get(f"/generador?cliente={cid}").text)
@@ -824,7 +762,7 @@ def test_a_second_month_is_a_new_version_and_the_first_one_stays(offline) -> Non
     after = _macros(resp.text)
     assert after != before, "el peso nuevo mueve los macros"
 
-    # Y se genera la versión siguiente.
+    # Y se genera la versión siguiente, que también se aprueba (mes 2 definitivo).
     started = trainer.post(f"/generador/{cid}/nueva-version")
     job = re.search(r"job=([0-9a-f-]{36})", started.text).group(1)
     deadline = time.monotonic() + GENERATION_TIMEOUT_S
@@ -834,6 +772,9 @@ def test_a_second_month_is_a_new_version_and_the_first_one_stays(offline) -> Non
             break
         assert FAILURE_MARKER not in html, f"la v2 falló: {_failure_reason(html)}"
         time.sleep(0.05)
+    v2 = _cycle_id(trainer)
+    assert v2 != v1
+    assert trainer.post(f"/planes/{v2}/aprobar", follow_redirects=False).status_code == 303
 
     # La v2 es la activa; la v1 NO desapareció.
     history = trainer.get(f"/planes/cliente/{cid}")
@@ -851,3 +792,137 @@ def test_a_second_month_is_a_new_version_and_the_first_one_stays(offline) -> Non
     back = trainer.post(f"/planes/{v1}/activar", follow_redirects=False)
     assert back.status_code == 303
     assert "Plan definitivo" in trainer.get(f"/planes/{v1}").text
+
+
+# --- Lógica de negocio: cupos y bloqueo (solo rol user) ---------------------
+
+
+def _trainer_id(admin: TestClient, email: str) -> str:
+    """Saca el id del entrenador de la página de administración."""
+    page = admin.get("/admin/entrenadores").text
+    # cada tarjeta trae el correo y un form /admin/entrenadores/{id}/bloquear|desbloquear
+    ids = re.findall(r"/admin/entrenadores/([0-9a-f-]{36})/(?:bloquear|desbloquear)", page)
+    assert ids, "no se encontró ningún entrenador en el panel"
+    return ids[-1]
+
+
+def _become_trainer(client: TestClient, **kwargs) -> None:
+    """El super_user (sesión actual) da de alta un entrenador y se re-loguea como él.
+
+    Se reusa el MISMO TestClient a propósito: su event loop persiste, y la tarea de
+    fondo de generación necesita ese loop vivo para terminar (un segundo TestClient
+    sin `with` la dejaría huérfana)."""
+    _create_trainer(client, **kwargs)
+    client.post("/logout", follow_redirects=False)
+    _login(client, kwargs["email"], kwargs["password"])
+
+
+def test_version_quota_blocks_a_second_definitive(offline) -> None:
+    """Una versión definitiva por cliente: aprobada la v1, no se regenera el plan
+    completo (solo correcciones). Así uno no genera planes infinitos."""
+    client, _ = offline  # super_user; luego nos volvemos el entrenador
+    _become_trainer(client, name="Dos", email="dos@fit.com", password="clave-dos-11",
+                    max_menus="1")
+
+    cid = _create_client(client, name="Cliente Cupo")
+    _generate_and_wait(client, cid)
+    cycle = _cycle_id(client)
+    assert client.post(f"/planes/{cycle}/aprobar", follow_redirects=False).status_code == 303
+
+    # Ya usó su única versión definitiva: regenerar el plan completo se bloquea.
+    started = client.post(f"/generador/{cid}/nueva-version")
+    assert started.status_code == 200
+    assert "versiones definitivas" in started.text.lower()
+
+    # Pero corregir un alimento sobre la definitiva sí se permite.
+    page = client.get("/generador", params={"cliente": cid, "editar": 1}).text
+    field = re.search(r'name="(grams_[0-9a-f-]{36})" value="([\d.]+)"', page)
+    assert field is not None
+    edit = client.post(
+        f"/planes/{cycle}/dia/0/porciones",
+        data={"slot": "desayuno", "cliente": cid, field.group(1): float(field.group(2)) + 20},
+    )
+    assert edit.status_code == 200
+
+
+def test_approving_beyond_the_version_quota_is_rejected(offline) -> None:
+    """Aprobar la misma versión dos veces es idempotente y no dispara el cupo."""
+    client, _ = offline
+    _become_trainer(client, name="Tres", email="tres@fit.com", password="clave-tres-1",
+                    max_menus="1")
+
+    cid = _create_client(client, name="Otro Cupo")
+    _generate_and_wait(client, cid)
+    v1 = _cycle_id(client)
+    assert client.post(f"/planes/{v1}/aprobar", follow_redirects=False).status_code == 303
+    # aprobar de nuevo la misma es idempotente (sigue aprobada, no dispara el cupo)
+    again = client.post(f"/planes/{v1}/aprobar", follow_redirects=False)
+    assert again.status_code == 303
+    assert "error=" not in again.headers["location"]
+
+
+def test_blocked_trainer_cannot_login(offline) -> None:
+    """El super_user bloquea a un entrenador que ya no está en el programa."""
+    admin, _ = offline
+    _create_trainer(admin, name="Baja", email="baja@fit.com", password="clave-baja-1")
+    tid = _trainer_id(admin, "baja@fit.com")
+    assert admin.post(f"/admin/entrenadores/{tid}/bloquear",
+                      follow_redirects=False).status_code == 303
+
+    trainer = TestClient(admin.app)
+    denied = trainer.post("/login", data={"email": "baja@fit.com", "password": "clave-baja-1"},
+                          follow_redirects=False)
+    assert denied.status_code == 200
+    assert "bloqueada" in denied.text.lower()
+
+    # Y desbloquear lo deja entrar de nuevo.
+    assert admin.post(f"/admin/entrenadores/{tid}/desbloquear",
+                      follow_redirects=False).status_code == 303
+    ok = trainer.post("/login", data={"email": "baja@fit.com", "password": "clave-baja-1"},
+                      follow_redirects=False)
+    assert ok.status_code == 303
+
+
+def test_el_super_user_no_tiene_tope_de_menus(offline) -> None:
+    """El tope del BETA no aplica a la cuenta dueña de la plataforma."""
+    admin, _ = offline  # super_user, sin cupos
+    cid = _create_client(admin, name="Dueño de la plataforma")
+    _generate_and_wait(admin, cid)
+    cycle = _cycle_id(admin)
+    assert admin.post(f"/planes/{cycle}/aprobar", follow_redirects=False).status_code == 303
+    # y puede seguir generando: sin `max_menus`, la regla del BETA no le aplica
+    assert _generate_and_wait(admin, cid)
+
+
+def test_quien_ya_tiene_perfil_no_vuelve_a_pasar_por_el_onboarding(offline) -> None:
+    """El onboarding es una vez: al segundo intento lleva directo a su menú."""
+    client, _ = offline
+    cid = _create_client(client)
+    again = client.get("/onboarding", follow_redirects=False)
+    assert again.status_code == 303
+    assert cid in again.headers["location"]
+
+
+def test_quien_no_marca_ningun_alimento_igual_recibe_un_menu_completo(offline) -> None:
+    """"Sorpréndeme" es una respuesta válida: no marcar nada abre el catálogo.
+
+    Obligar a marcar decenas de ingredientes era justo lo que agobiaba, y antes
+    dejaba el conjunto permitido vacío en vez de generar.
+    """
+    client, _ = offline
+    cid = _create_client(client, food_ids=[])
+    _generate_and_wait(client, cid)
+    assert "Todo listo" in client.get(f"/generador?cliente={cid}").text or _cycle_id(client)
+
+
+def test_lo_que_alguien_dice_que_no_quiere_ver_no_aparece_en_su_menu(offline) -> None:
+    """Los dislikes son texto libre y sí filtran el catálogo.
+
+    Antes se guardaban en `notes` y no los leía nadie.
+    """
+    client, _ = offline
+    cid = _create_client(client, dislikes="huevo, atún")
+    _generate_and_wait(client, cid)
+    plan = client.get(f"/planes/{_cycle_id(client)}").text.lower()
+    assert "huevo" not in plan
+    assert "atún" not in plan

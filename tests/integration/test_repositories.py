@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
+from nutriplan.adapters.db.models import UserRow
 from nutriplan.adapters.db.repositories import (
     SqlClientRepository,
     SqlFoodRepository,
@@ -30,11 +31,10 @@ from nutriplan.domain.models import (
     MealItem,
     MealSlot,
     PlanCycle,
-    PlanPhase,
     PlanStatus,
     Sex,
 )
-from nutriplan.ports.job_repository import Job, JobKind, JobStatus
+from nutriplan.ports.job_repository import Job, JobStatus
 
 CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
 OTHER_TENANT = uuid4()
@@ -57,10 +57,22 @@ async def session(session_factory):
         await s.commit()
 
 
+async def seed_account(session, client: Client, name: str = "Cliente Uno") -> None:
+    """Un perfil sin su cuenta no es un perfil: el nombre vive en `users`."""
+    session.add(
+        UserRow(
+            id=client.user_id, tenant_id=client.tenant_id, name=name,
+            email=f"{client.user_id}@test.local", created_at=datetime.now(UTC),
+        )
+    )
+    await session.flush()
+
+
 def make_client(tenant_id=DEFAULT_TENANT_ID, **overrides) -> Client:
     base = dict(
         id=uuid4(),
         tenant_id=tenant_id,
+        user_id=uuid4(),
         name="Cliente Uno",
         sex=Sex.FEMALE,
         age_years=30,
@@ -89,6 +101,7 @@ async def test_client_roundtrip_with_preferences(session) -> None:
     client = make_client(liked_food_ids=liked)
 
     repo = SqlClientRepository(session, DEFAULT_TENANT_ID)
+    await seed_account(session, client)
     await repo.add(client)
     fetched = await repo.get(client.id)
     assert fetched is not None
@@ -101,16 +114,45 @@ async def test_client_roundtrip_with_preferences(session) -> None:
     assert again.weight_kg == 60.0
 
 
+async def test_el_sexo_y_la_altura_no_cambian_pero_el_peso_si(session) -> None:
+    """Sexo y altura se fijan al crear el perfil: son la base del Mifflin-St Jeor
+    sobre el que se compararon las versiones. El peso cambia: es el seguimiento.
+
+    El nombre ya no se guarda aquí — vive en la cuenta —, así que editar el
+    perfil no puede tocarlo ni por accidente.
+    """
+    await seed_local(session, CSV_PATH)
+    repo = SqlClientRepository(session, DEFAULT_TENANT_ID)
+    client = make_client(sex=Sex.FEMALE, height_cm=165.0, weight_kg=62.0)
+    await seed_account(session, client, name="Ana Original")
+    await repo.add(client)
+
+    # Intento de cambiar lo inamovible + algo legítimo (peso) en el mismo update.
+    tampered = await repo.get(client.id)
+    tampered.name = "Nombre Cambiado"
+    tampered.sex = Sex.MALE
+    tampered.height_cm = 180.0
+    tampered.weight_kg = 58.0
+    await repo.update(tampered)
+
+    saved = await repo.get(client.id)
+    assert saved.name == "Ana Original"      # lo manda la cuenta, no el perfil
+    assert saved.sex == Sex.FEMALE           # inamovible
+    assert saved.height_cm == 165.0          # inamovible
+    assert saved.weight_kg == 58.0           # el peso sí se actualiza
+
+
 async def test_tenant_isolation_clients(session) -> None:
     repo_a = SqlClientRepository(session, DEFAULT_TENANT_ID)
     repo_b = SqlClientRepository(session, OTHER_TENANT)
 
     client_a = make_client()
+    await seed_account(session, client_a)
     await repo_a.add(client_a)
 
     # B no ve ni puede tocar los datos de A — por construcción
     assert await repo_b.get(client_a.id) is None
-    assert await repo_b.list() == []
+    assert await repo_b.list_all() == []
     with pytest.raises(TenantIsolationError):
         await repo_b.update(client_a)
     # y A no puede insertar entidades de otro tenant
@@ -340,7 +382,7 @@ async def test_update_day_preserves_matching_item_ids(session) -> None:
         ],
         totals=macro,
     )
-    await plan_repo.update_day(plan.id, PlanPhase.FIRST_15, 0, updated_day, mark_edited=True)
+    await plan_repo.update_day(plan.id, 0, updated_day, mark_edited=True)
 
     after = await plan_repo.get(plan.id)
     assert after is not None
@@ -407,7 +449,6 @@ async def test_job_repository_idempotency_key(session) -> None:
     job = Job(
         id=uuid4(),
         tenant_id=DEFAULT_TENANT_ID,
-        kind=JobKind.GENERATE,
         idempotency_key="gen:cliente1:hash-1",
         created_at=now,
         updated_at=now,
@@ -429,10 +470,7 @@ async def test_job_repository_idempotency_key(session) -> None:
     assert await other.get_by_idempotency_key("gen:cliente1:hash-1") is None
 
 
-async def test_thirty_day_plan_persists_both_phases(session) -> None:
-    """30 días = 14 filas day_plans (7 × first_15 + 7 × next_15)."""
-    from nutriplan.domain.models import PlanPhase
-
+async def test_un_menu_va_y_vuelve_de_la_base_con_sus_siete_dias(session) -> None:
     await seed_local(session, CSV_PATH)
     foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
     macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
@@ -441,24 +479,16 @@ async def test_thirty_day_plan_persists_both_phases(session) -> None:
         portions=[MealFoodPortion(food_id=foods[0].id, grams=120)],
         computed=macro,
     )
-    days = [
-        DayPlan(day_index=i, phase=PlanPhase.FIRST_15, totals=macro, meals=[meal])
-        for i in range(7)
-    ] + [
-        DayPlan(day_index=i, phase=PlanPhase.NEXT_15, totals=macro, meals=[meal])
-        for i in range(7)
-    ]
     plan = PlanCycle(
         id=uuid4(),
         tenant_id=DEFAULT_TENANT_ID,
         client_id=uuid4(),
         targets_id=uuid4(),
-        duration_days=30,
-        days=days,
+        days=[DayPlan(day_index=i, totals=macro, meals=[meal]) for i in range(7)],
         config_version="test",
-        prompt_version="plan_generation.v1",
+        prompt_version="plan_generation.v2",
         model="test",
-        input_hash="hash-30d",
+        input_hash="hash-semana",
         created_at=datetime.now(UTC),
     )
     plan_repo = SqlPlanRepository(session, DEFAULT_TENANT_ID)
@@ -466,9 +496,8 @@ async def test_thirty_day_plan_persists_both_phases(session) -> None:
 
     loaded = await plan_repo.get(plan.id)
     assert loaded is not None
-    assert loaded.duration_days == 30
-    assert len(loaded.days) == 14
-    assert sum(1 for d in loaded.days if d.phase is PlanPhase.NEXT_15) == 7
+    assert len(loaded.days) == 7
+    assert [d.day_index for d in loaded.days] == list(range(7))
 
 
 async def test_only_one_plan_is_the_active_one_and_the_others_stay(session) -> None:
@@ -480,6 +509,7 @@ async def test_only_one_plan_is_the_active_one_and_the_others_stay(session) -> N
     await seed_local(session, CSV_PATH)
     clients = SqlClientRepository(session, DEFAULT_TENANT_ID)
     client = make_client()
+    await seed_account(session, client)
     await clients.add(client)
     assert (await clients.get(client.id)).active_plan_id is None
 

@@ -5,11 +5,10 @@ plantillas Jinja2 pintan tal cual. Los números siempre vienen del dominio.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from nutriplan.adapters.render.color import MACRO_COLORS
-from nutriplan.adapters.render.view import DAY_LABELS, natural_units, portion_text
 from nutriplan.domain.macro_split import (
     daily_minus_free_meal,
     free_meal_slot_of,
@@ -27,7 +26,6 @@ from nutriplan.domain.models import (
     MealSlot,
     NutritionTargets,
     PlanCycle,
-    PlanPhase,
     PlanStatus,
     UnitGranularity,
 )
@@ -38,58 +36,21 @@ from nutriplan.domain.nutrition_config import (
 )
 from nutriplan.domain.portioning import fits_protein, macros_of
 from nutriplan.domain.validation import fiber_shortfall, validate_day
-
-DAY_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-
-PHASE_LABELS: dict[PlanPhase, str] = {
-    PlanPhase.FIRST_15: "Semana 1",
-    PlanPhase.NEXT_15: "Semana 2",
-}
-
-
-def plan_phases(cycle: PlanCycle) -> list[PlanPhase]:
-    from nutriplan.adapters.render.view import plan_phases_in
-
-    return plan_phases_in(cycle)
+from nutriplan.ui.web.format import (
+    DAY_LABELS,
+    DAY_SHORT,
+    MACRO_COLORS,
+    natural_units,
+    portion_text,
+)
 
 
-def parse_plan_phase(raw: str | None) -> PlanPhase:
-    if not raw:
-        return PlanPhase.FIRST_15
-    try:
-        return PlanPhase(raw)
-    except ValueError:
-        return PlanPhase.FIRST_15
+def week_days(cycle: PlanCycle) -> list[DayPlan]:
+    return sorted(cycle.days, key=lambda d: d.day_index)
 
 
-def days_in_phase(cycle: PlanCycle, phase: PlanPhase) -> list[DayPlan]:
-    return sorted(
-        [d for d in cycle.days if d.phase is phase],
-        key=lambda d: d.day_index,
-    )
-
-
-def get_plan_day(cycle: PlanCycle, phase: PlanPhase, day_index: int) -> DayPlan | None:
-    for d in cycle.days:
-        if d.phase is phase and d.day_index == day_index:
-            return d
-    return None
-
-
-def duration_label(cycle: PlanCycle) -> str:
-    if cycle.duration_days >= 30:
-        return "30 días · 2 semanas"
-    return "15 días · 1 semana"
-
-
-def soft_of(hex_color: str, mix: float = 0.87) -> str:
-    """Tinte suave de la marca: cada canal mezclado con blanco (87%)."""
-    c = (hex_color or "#F26D5B").lstrip("#")
-    try:
-        r, g, b = (int(c[i : i + 2], 16) for i in (0, 2, 4))
-    except ValueError:
-        r, g, b = 242, 109, 91
-    return "#" + "".join(f"{round(x + (255 - x) * mix):02X}" for x in (r, g, b))
+def get_plan_day(cycle: PlanCycle, day_index: int) -> DayPlan | None:
+    return next((d for d in cycle.days if d.day_index == day_index), None)
 
 
 def initials(name: str) -> str:
@@ -114,9 +75,6 @@ SLOT_META: dict[MealSlot, dict[str, str]] = {
     MealSlot.DINNER: {"name": "Cena", "time": "7:30 pm", "icon": "dinner_dining"},
 }
 
-# La paleta la manda `adapters.render.color`, que también la usa el PDF: si vive
-# solo aquí, el PDF no puede pintar los colores por macro sin que un adapter
-# importe de la UI. El icono sí es de la web (Material Symbols).
 _MACRO_ICONS = {
     "kcal": "local_fire_department",
     "protein_g": "egg_alt",
@@ -465,16 +423,75 @@ def weight_history(
     return rows
 
 
+# Lienzo de la gráfica de progreso. Fijo: el SVG escala con su contenedor.
+_CHART_W = 320.0
+_CHART_H = 120.0
+_PLOT_LEFT = 30.0     # sitio para las etiquetas de peso (eje Y)
+_PLOT_RIGHT = 310.0
+_PLOT_TOP = 14.0
+_PLOT_BOTTOM = 96.0   # sitio para las fechas (eje X)
+
+
+def weight_progress_chart(
+    points: list[tuple[datetime, float, int]],
+) -> dict[str, Any] | None:
+    """Geometría de la gráfica de peso en el tiempo, sin nada de HTML.
+
+    `points` son `(fecha, peso_kg, version)` en orden cronológico (el más viejo
+    primero). Devuelve coordenadas normalizadas en un viewBox fijo para que la
+    plantilla solo dibuje `<polyline>`, `<circle>` y `<text>`. Con menos de dos
+    versiones no hay línea que trazar: devuelve `None` y la pantalla lo dice.
+    """
+    if len(points) < 2:
+        return None
+
+    weights = [w for _dt, w, _v in points]
+    w_min, w_max = min(weights), max(weights)
+    span = w_max - w_min
+    n = len(points)
+
+    plotted = []
+    for i, (dt, weight, version) in enumerate(points):
+        x = _PLOT_LEFT + (_PLOT_RIGHT - _PLOT_LEFT) * i / (n - 1)
+        if span == 0:  # todos igual: una línea horizontal en el centro
+            y = (_PLOT_TOP + _PLOT_BOTTOM) / 2
+        else:
+            y = _PLOT_BOTTOM - (weight - w_min) / span * (_PLOT_BOTTOM - _PLOT_TOP)
+        plotted.append({
+            "x": round(x, 1),
+            "y": round(y, 1),
+            "weight": f"{weight:g}",
+            "label": f"v{version} · {dt.strftime('%d %b')}",
+        })
+
+    delta = weights[-1] - weights[0]
+    sign = "−" if delta < 0 else "+"  # signo tipográfico (U+2212) para el negativo
+
+    return {
+        "width": _CHART_W,
+        "height": _CHART_H,
+        "polyline": " ".join(f"{p['x']},{p['y']}" for p in plotted),
+        "points": plotted,
+        "w_max": f"{w_max:g}",
+        "w_min": f"{w_min:g}",
+        "y_top": _PLOT_TOP,
+        "y_bottom": _PLOT_BOTTOM,
+        "first_date": points[0][0].strftime("%d %b"),
+        "last_date": points[-1][0].strftime("%d %b"),
+        "delta": f"{sign}{abs(delta):g} kg" if delta != 0 else "0 kg",
+        "delta_down": delta < 0,
+    }
+
+
 def week_grid(
     cycle: PlanCycle,
     targets: NutritionTargets,
     config: NutritionConfig,
-    phase: PlanPhase = PlanPhase.FIRST_15,
     foods: dict[UUID, FoodItem] | None = None,
 ) -> list[dict[str, Any]]:
-    """Los 7 días de una fase: cada celda marca si el día cuadra."""
+    """Los 7 días de la semana: cada celda marca si el día cuadra."""
     cells = []
-    for day in days_in_phase(cycle, phase):
+    for day in week_days(cycle):
         shares = day_shares(day, foods, config) if foods else None
         # Contra el objetivo del día, que en el de la comida libre es menor.
         day_daily = daily_minus_free_meal(targets.daily, config, free_meal_slot_of(day))
@@ -483,7 +500,6 @@ def week_grid(
             "n": day.day_index + 1,
             "cycle_id": str(cycle.id),
             "day_index": day.day_index,
-            "fase": phase.value,
             "label": DAY_SHORT[day.day_index],
             "fit": ok,
             "color": "#45B37E" if ok else "#E0982E",
@@ -495,16 +511,15 @@ def week_grid(
 def adherence(
     cycle: PlanCycle,
     targets: NutritionTargets,
-    phase: PlanPhase = PlanPhase.FIRST_15,
     config: NutritionConfig | None = None,
 ) -> list[dict[str, Any]]:
-    """Cumplimiento promedio por macro sobre los días de la fase.
+    """Cumplimiento promedio por macro sobre la semana.
 
     Cada día se mide contra SU objetivo, no contra el diario: el día de la comida
     libre apunta más bajo a propósito, y compararlo con el objetivo completo lo
     contaría como un incumplimiento del 26% cuando está exactamente como se diseñó.
     """
-    days = days_in_phase(cycle, phase)
+    days = week_days(cycle)
     rows = []
     for m in MACRO_META:
         ratios = []

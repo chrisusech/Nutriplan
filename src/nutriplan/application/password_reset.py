@@ -1,4 +1,4 @@
-"""Recuperación de contraseña en local: token en pantalla, sin correo."""
+"""Recuperación de contraseña por correo."""
 
 from dataclasses import dataclass
 
@@ -29,6 +29,8 @@ async def request_password_reset(
     email = email.strip().lower()
     if not email or "@" not in email:
         raise SignupError("Correo inválido")
+    # get_by_email exige hash: quien entró con Google no tiene contraseña que
+    # recuperar, y pedirlo no debe decir si la cuenta existe.
     if await auth_repo.get_by_email(email) is None:
         return None
     token = issue_token(email=email, secret=session_secret, ttl_seconds=ttl_seconds)
@@ -54,7 +56,7 @@ async def complete_password_reset(
     if email is None:
         raise SignupError("El enlace expiró o no es válido. Pide uno nuevo.")
     if await auth_repo.get_by_email(email) is None:
-        raise SignupError("La cuenta ya no existe.")
+        raise SignupError("El enlace expiró o no es válido. Pide uno nuevo.")
     updated = await auth_repo.set_password_hash(email, hash_password(new_password))
     if not updated:
         raise SignupError("No se pudo actualizar la contraseña.")

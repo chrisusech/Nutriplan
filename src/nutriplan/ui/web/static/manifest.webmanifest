@@ -1,0 +1,17 @@
+{
+  "name": "NutriPlan",
+  "short_name": "NutriPlan",
+  "description": "Tu menú de la semana, hecho para ti.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F3EAE4",
+  "theme_color": "#F26D5B",
+  "lang": "es",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

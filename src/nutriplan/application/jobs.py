@@ -11,33 +11,29 @@ from uuid import UUID, uuid4
 
 import structlog
 
-from nutriplan.application.export_plan import export_plan
+from nutriplan.application.dish_recipes import DishRecipeRepository, recipes_for_week
 from nutriplan.application.generate_plan import generate_plan_for_client
 from nutriplan.domain.errors import GenerationError
-from nutriplan.domain.meal_template import MealCatalog
-from nutriplan.domain.models import Branding
+from nutriplan.domain.meal_template import MealCatalog, static_recipes
+from nutriplan.domain.models import PlanCycle
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.ports.food_repository import FoodRepository
 from nutriplan.ports.job_repository import (
-    ArtifactRepository,
     Job,
-    JobKind,
     JobRepository,
     JobStatus,
 )
 from nutriplan.ports.llm_client import LLMClient
-from nutriplan.ports.renderer import Renderer
 from nutriplan.ports.repository import ClientRepository, PlanRepository, TargetsRepository
 
 logger = structlog.get_logger(__name__)
 
 
-def new_job(*, tenant_id: UUID, kind: JobKind, idempotency_key: str) -> Job:
+def new_job(*, tenant_id: UUID, idempotency_key: str) -> Job:
     now = datetime.now(UTC)
     return Job(
         id=uuid4(),
         tenant_id=tenant_id,
-        kind=kind,
         status=JobStatus.QUEUED,
         idempotency_key=idempotency_key,
         created_at=now,
@@ -65,8 +61,8 @@ async def run_generation_job(
     prompts_dir: Path,
     model: str,
     variant: int = 0,
-    duration_days: int = 15,
     catalog: MealCatalog | None = None,
+    recipe_repo: DishRecipeRepository | None = None,
 ) -> Job:
     job = await _finish(job, job_repo, status=JobStatus.RUNNING)
     try:
@@ -91,9 +87,15 @@ async def run_generation_job(
             prompts_dir=prompts_dir,
             model=model,
             variant=variant,
-            duration_days=duration_days,
             catalog=catalog,
         )
+        # Las recetas van después del plan y nunca lo tumban: si fallan, la app
+        # muestra los ingredientes y ya.
+        if recipe_repo is not None:
+            await _resolve_recipes(
+                cycle=cycle, food_repo=food_repo, repo=recipe_repo, llm=llm,
+                prompts_dir=prompts_dir, model=model, catalog=catalog,
+            )
         return await _finish(
             job,
             job_repo,
@@ -106,34 +108,26 @@ async def run_generation_job(
         return await _finish(job, job_repo, status=JobStatus.FAILED, error=str(exc))
 
 
-async def run_export_job(
+async def _resolve_recipes(
     *,
-    job: Job,
-    job_repo: JobRepository,
-    plan_id: UUID,
-    fmt: str,
-    plan_repo: PlanRepository,
+    cycle: PlanCycle,
     food_repo: FoodRepository,
-    artifact_repo: ArtifactRepository,
-    renderer: Renderer,
-    branding: Branding,
-    exports_dir: Path,
-) -> Job:
-    job = await _finish(job, job_repo, status=JobStatus.RUNNING)
+    repo: DishRecipeRepository,
+    llm: LLMClient | None,
+    prompts_dir: Path,
+    model: str,
+    catalog: MealCatalog | None,
+) -> None:
+    meals = [m for d in cycle.days for m in d.meals]
+    ids = sorted({i.food_id for m in meals for i in m.items if i.food_id}, key=str)
+    if not ids:
+        return
+    foods = {f.id: f for f in await food_repo.get_by_ids(ids)}
     try:
-        if fmt not in ("pdf", "docx"):
-            raise ValueError(f"Formato no soportado: {fmt}")
-        artifact, _ = await export_plan(
-            plan_id=plan_id,
-            fmt=fmt,  # type: ignore[arg-type]
-            plan_repo=plan_repo,
-            food_repo=food_repo,
-            artifact_repo=artifact_repo,
-            renderer=renderer,
-            branding=branding,
-            exports_dir=exports_dir,
+        await recipes_for_week(
+            meals=meals, catalog=foods, repo=repo, llm=llm,
+            prompts_dir=prompts_dir, model=model,
+            static=static_recipes(catalog) if catalog else None,
         )
-        return await _finish(job, job_repo, status=JobStatus.DONE, result_id=artifact.id)
-    except Exception as exc:
-        logger.warning("export_job_failed", job_id=str(job.id), error=str(exc))
-        return await _finish(job, job_repo, status=JobStatus.FAILED, error=str(exc))
+    except Exception as exc:  # noqa: BLE001 - una receta que falta no es un fallo
+        logger.warning("dish_recipes_failed", plan_id=str(cycle.id), error=str(exc))

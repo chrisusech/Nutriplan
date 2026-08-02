@@ -1,5 +1,5 @@
 {% set cycle = ctx.plan %}
-{% set qs = "cliente=" ~ ctx.client.id ~ "&fase=" ~ ctx.fase %}
+{% set qs = "cliente=" ~ ctx.client.id %}
 {% if ctx.celebrate %}
 <div class="card pop-in" style="display:flex;align-items:center;gap:14px;margin-bottom:14px;border-color:#CBE9D8;background:#F4FBF7">
   <div style="width:44px;height:44px;border-radius:999px;background:var(--ok-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -20,7 +20,6 @@
     <div class="row">
       <div style="display:flex;align-items:center;gap:10px">
         <span class="preview-title">Vista previa del plan</span>
-        <span class="pill" style="color:var(--brand);background:var(--brand-soft);font-weight:700">{{ ctx.duration_label }}</span>
         {% if ctx.stale %}
         <span class="badge badge-warn" title="Cambiaste datos del cliente después de generar">
           <span class="icon" style="font-size:15px">history</span>Desactualizado
@@ -31,18 +30,6 @@
         <span class="icon" style="font-size:16px">edit_note</span>Editable en línea
       </span>
     </div>
-    {% if ctx.phases|length > 1 %}
-    <div class="day-tabs" style="margin-top:8px">
-      {% for ph in ctx.phases %}
-      <a class="day-pill {% if ph.value == ctx.fase %}on{% endif %}"
-         href="/generador?{{ qs|replace('&fase=' ~ ctx.fase, '&fase=' ~ ph.value) }}&dia={{ ctx.dia }}{% if ctx.editar %}&editar=1{% endif %}"
-         hx-get="/generador?cliente={{ ctx.client.id }}&fase={{ ph.value }}&dia={{ ctx.dia }}{% if ctx.editar %}&editar=1{% endif %}"
-         hx-target="#gen-root" hx-swap="innerHTML" hx-push-url="true">
-        <span class="d">{{ ph.label }}</span>
-      </a>
-      {% endfor %}
-    </div>
-    {% endif %}
     <div class="day-tabs">
       {% for n in range(7) %}
       <a class="day-pill {% if n == ctx.dia %}on{% endif %}"
@@ -113,8 +100,8 @@
           </div>
         </div>
         {% if ctx.editar %}
-        <form id="grams-{{ ml.slot.value }}" class="portion-grams-form"
-              hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/porciones?fase={{ ctx.fase }}"
+        <form id="grams-{{ ml.slot.value }}" class="portion-grams-form" novalidate
+              hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/porciones"
               hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}"}'
               hx-trigger="change" hx-target="#gen-root" hx-swap="innerHTML"></form>
         <ul class="portion-list">
@@ -133,7 +120,7 @@
             <div class="portion-tools">
               {% if p.swap_options %}
               <form class="swap-form"
-                    hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/cambiar?fase={{ ctx.fase }}"
+                    hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/cambiar"
                     hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}","old_food_id":"{{ p.food_id }}"}'
                     hx-target="#gen-root" hx-swap="innerHTML">
                 <select name="new_food_id" class="swap-select" aria-label="Cambiar {{ p.name }}"
@@ -146,7 +133,7 @@
               </form>
               {% endif %}
               <form class="icon-form"
-                    hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/quitar?fase={{ ctx.fase }}"
+                    hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/quitar"
                     hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}","food_id":"{{ p.food_id }}"}'
                     hx-target="#gen-root" hx-swap="innerHTML"
                     hx-confirm="¿Quitar {{ p.name }} de esta comida?">
@@ -156,7 +143,7 @@
                 </button>
               </form>
               <form class="icon-form"
-                    hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/quitar?fase={{ ctx.fase }}"
+                    hx-post="/planes/{{ cycle.id }}/dia/{{ ctx.dv.index }}/quitar"
                     hx-vals='{"cliente":"{{ ctx.client.id }}","slot":"{{ ml.slot.value }}","food_id":"{{ p.food_id }}","ban":"1"}'
                     hx-target="#gen-root" hx-swap="innerHTML"
                     hx-confirm="¿Vetar {{ p.name }}? No volverá a salir en planes nuevos.">
@@ -201,20 +188,12 @@
     {% endif %}
     <button class="btn btn-outline"
             hx-post="/generador/{{ ctx.client.id }}/nueva-version"
-            hx-vals='{"duracion":"15"}'
             hx-target="#preview-col" hx-swap="innerHTML"
-            title="Otra semana distinta (15 días)">
-      <span class="icon" style="font-size:20px">refresh</span>Nueva versión · 15 d
-    </button>
-    <button class="btn btn-outline"
-            hx-post="/generador/{{ ctx.client.id }}/nueva-version"
-            hx-vals='{"duracion":"30"}'
-            hx-target="#preview-col" hx-swap="innerHTML"
-            title="Dos semanas distintas (30 días)">
-      <span class="icon" style="font-size:20px">calendar_month</span>Nueva versión · 30 d
+            title="Otra semana distinta">
+      <span class="icon" style="font-size:20px">refresh</span>Otra semana
     </button>
     <a class="btn btn-primary" href="/planes/{{ cycle.id }}">
-      <span class="icon" style="font-size:20px">picture_as_pdf</span>Exportar PDF
+      <span class="icon" style="font-size:20px">visibility</span>Ver mi semana
     </a>
   </div>
   {% if ctx.history_count > 1 %}

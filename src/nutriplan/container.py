@@ -18,29 +18,29 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from nutriplan.adapters.branding_store import load_branding
 from nutriplan.adapters.config_yaml import YamlConfigProvider
 from nutriplan.adapters.db.repositories import (
-    SqlArtifactRepository,
+    SqlAccountEraser,
     SqlAuditLogRepository,
     SqlAuthRepository,
     SqlClientRepository,
+    SqlDishRecipeRepository,
     SqlFoodRepository,
-    SqlIntakeRepository,
     SqlJobRepository,
     SqlPlanRepository,
+    SqlRatingRepository,
     SqlRecipeRepository,
     SqlTargetsRepository,
 )
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.adapters.db.session import create_engine, create_session_factory
+from nutriplan.adapters.email import ConsoleEmailSender, SmtpEmailSender
 from nutriplan.adapters.meals.template_store import cached_meal_catalog
-from nutriplan.adapters.render.docx_renderer import DocxRenderer
-from nutriplan.adapters.render.pdf_weasyprint import WeasyPrintRenderer
 from nutriplan.config.settings import Settings, get_settings
 from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import Branding, Client
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.observability.logging import configure_logging
+from nutriplan.ports.email_sender import EmailSender
 from nutriplan.ports.llm_client import LLMClient
-from nutriplan.ports.renderer import Renderer
 
 
 @dataclass
@@ -49,13 +49,12 @@ class Repos:
 
     clients: SqlClientRepository
     foods: SqlFoodRepository
-    intakes: SqlIntakeRepository
     targets: SqlTargetsRepository
     plans: SqlPlanRepository
     jobs: SqlJobRepository
-    artifacts: SqlArtifactRepository
     audit: SqlAuditLogRepository
     recipes: SqlRecipeRepository
+    ratings: SqlRatingRepository
 
 
 @dataclass
@@ -79,14 +78,20 @@ class Container:
         return Repos(
             clients=SqlClientRepository(session, t),
             foods=SqlFoodRepository(session, t),
-            intakes=SqlIntakeRepository(session, t),
             targets=SqlTargetsRepository(session, t),
             plans=SqlPlanRepository(session, t),
             jobs=SqlJobRepository(session, t),
-            artifacts=SqlArtifactRepository(session, t),
             audit=SqlAuditLogRepository(session, t),
             recipes=SqlRecipeRepository(session, t),
+            ratings=SqlRatingRepository(session, t),
         )
+
+    def account_eraser(self, session: AsyncSession) -> SqlAccountEraser:
+        return SqlAccountEraser(session)
+
+    def dish_recipe_repo(self, session: AsyncSession) -> SqlDishRecipeRepository:
+        """Sin tenant: la caché de recetas es de todos."""
+        return SqlDishRecipeRepository(session)
 
     def auth_repo(self, session: AsyncSession) -> SqlAuthRepository:
         return SqlAuthRepository(session)
@@ -118,23 +123,43 @@ class Container:
 
     @cached_property
     def llm_client(self) -> LLMClient | None:
-        """AnthropicClient si hay API key; None = modo offline (heurístico)."""
-        if not self.settings.anthropic_api_key:
+        """La cadena de proveedores, en orden de preferencia.
+
+        `None` = modo offline: la generación cae al `TemplateSelector`
+        determinista y el crítico se salta. La app funciona igual, solo que
+        con menos sabor.
+        """
+        from nutriplan.adapters.llm.fallback_client import FallbackLLMClient
+        from nutriplan.adapters.llm.openai_compat_client import OpenAICompatClient
+
+        chain: list[tuple[str, LLMClient]] = []
+        s = self.settings
+        if s.llm_base_url and s.llm_api_key:
+            chain.append(("primary", OpenAICompatClient(s.llm_api_key, base_url=s.llm_base_url)))
+        if s.llm_fallback_base_url and s.llm_fallback_api_key:
+            chain.append((
+                "fallback",
+                OpenAICompatClient(s.llm_fallback_api_key, base_url=s.llm_fallback_base_url),
+            ))
+        if s.anthropic_api_key:
+            from nutriplan.adapters.llm.anthropic_client import AnthropicClient
+
+            chain.append(("anthropic", AnthropicClient(s.anthropic_api_key)))
+
+        if not chain:
             return None
-        from nutriplan.adapters.llm.anthropic_client import AnthropicClient
-
-        return AnthropicClient(self.settings.anthropic_api_key)
+        return chain[0][1] if len(chain) == 1 else FallbackLLMClient(chain)
 
     @cached_property
-    def pdf_renderer(self) -> Renderer:
-        return WeasyPrintRenderer()
-
-    @cached_property
-    def docx_renderer(self) -> Renderer:
-        return DocxRenderer()
-
-    def renderer_for(self, fmt: str) -> Renderer:
-        return self.pdf_renderer if fmt == "pdf" else self.docx_renderer
+    def mailer(self) -> EmailSender:
+        """SMTP si está configurado; si no, el correo se escribe en el log."""
+        if self.settings.smtp_host:
+            return SmtpEmailSender(
+                host=self.settings.smtp_host, port=self.settings.smtp_port,
+                username=self.settings.smtp_user, password=self.settings.smtp_password,
+                sender=self.settings.smtp_from,
+            )
+        return ConsoleEmailSender()
 
     def branding(self, tenant_id: UUID | None = None) -> Branding:
         """Marca del entrenador (por tenant). Sin caché: el selector de color de

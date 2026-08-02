@@ -11,13 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.container import Container, Repos
+from nutriplan.domain.models import Account, Role
+from nutriplan.ui.web import format as fmt
 from nutriplan.ui.web import presenter
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent / "static"
+
+# Cache-busting del CSS: al cambiar el archivo cambia su mtime, así que la URL del
+# `<link>` cambia y el navegador re-descarga en vez de quedarse con una copia vieja.
+ASSET_VERSION = int((STATIC_DIR / "app.css").stat().st_mtime)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals.update(
-    soft_of=presenter.soft_of,
+    asset_v=ASSET_VERSION,
+    soft_of=fmt.soft_of,
     initials=presenter.initials,
     BRAND_SWATCHES=presenter.BRAND_SWATCHES,
     GOAL_META=presenter.GOAL_META,
@@ -26,9 +34,8 @@ templates.env.globals.update(
     MEAL_TOGGLES=presenter.MEAL_TOGGLES,
     ACTIVITY_LABELS=presenter.ACTIVITY_LABELS,
     SEX_LABELS=presenter.SEX_LABELS,
-    DAY_SHORT=presenter.DAY_SHORT,
+    DAY_SHORT=fmt.DAY_SHORT,
     SLOT_META=presenter.SLOT_META,
-    PHASE_LABELS=presenter.PHASE_LABELS,
 )
 
 
@@ -55,8 +62,16 @@ def current_trainer(request: Request) -> dict[str, str] | None:
     sess = request.session if "session" in request.scope else {}
     if sess.get("tenant_id"):
         return {"name": sess.get("name", ""), "email": sess.get("email", ""),
-                "role": sess.get("role", "trainer")}
+                "role": sess.get("role", "user")}
     return None
+
+
+def account_id_of(request: Request) -> UUID:
+    """La cuenta en sesión. El guard global ya garantizó que hay una."""
+    raw = request.session.get("user_id") if "session" in request.scope else None
+    if not raw:
+        raise RuntimeError("Ruta protegida sin cuenta en sesión")
+    return UUID(str(raw))
 
 
 def role_of(request: Request) -> str:
@@ -64,15 +79,18 @@ def role_of(request: Request) -> str:
     return str(sess.get("role", "")) if sess else ""
 
 
-def client_id_of(request: Request) -> UUID | None:
-    """El Client asociado a la cuenta logueada (solo cuentas de cliente)."""
-    raw = request.session.get("client_id") if "session" in request.scope else None
-    if raw:
-        try:
-            return UUID(raw)
-        except ValueError:
-            pass
-    return None
+def is_super_user(request: Request) -> bool:
+    """El super_user no tiene cupos: pasa de largo todo el enforcement."""
+    return role_of(request) == Role.SUPER_USER
+
+
+async def acting_trainer(request: Request, session: AsyncSession) -> Account | None:
+    """La cuenta logueada, con sus cupos, para el enforcement. `None` si no hay sesión."""
+    email = request.session.get("email") if "session" in request.scope else None
+    if not email:
+        return None
+    repo = container_of(request).auth_repo(session)
+    return await repo.get_by_email_any_provider(str(email))
 
 
 async def db_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -101,7 +119,7 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
         context={
             "branding": branding,
             "brand": branding.primary_color,
-            "brand_soft": presenter.soft_of(branding.primary_color),
+            "brand_soft": fmt.soft_of(branding.primary_color),
             "trainer_initials": presenter.initials(branding.tenant_name),
             "trainer": current_trainer(request),
             "role": role_of(request),

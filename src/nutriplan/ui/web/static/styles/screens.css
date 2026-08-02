@@ -1,0 +1,58 @@
+/* Onboarding, perfil y opinar. */
+
+.brand-word { color: var(--brand); }
+
+/* --- Onboarding ----------------------------------------------------------- */
+
+.onb-head { margin-bottom: var(--s-5); }
+.onb-head p { margin-top: var(--s-2); }
+
+.onb-form { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.onb-step {
+  padding: var(--s-5) var(--s-4);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line);
+  background: var(--card);
+  display: flex; flex-direction: column; gap: var(--s-4);
+}
+.onb-step > h2 { font-size: var(--t-lg); }
+.onb-step > summary { cursor: pointer; list-style: none; }
+.onb-step > summary::-webkit-details-marker { display: none; }
+.onb-step > summary h2 { display: inline; }
+
+/* Tres campos numéricos caben en fila incluso en el móvil más estrecho. */
+.onb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+
+.food-group + .food-group { margin-top: var(--s-4); }
+.food-group h3 { font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--s-2); }
+
+/* --- Perfil --------------------------------------------------------------- */
+
+.profile-card, .form-card, .danger-zone {
+  padding: var(--s-5) var(--s-4);
+  margin-top: var(--s-4);
+  display: flex; flex-direction: column; gap: var(--s-4);
+}
+
+.facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-4); margin: 0; }
+.facts dt { font: 600 var(--t-xs) Poppins, sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.facts dd { margin: var(--s-1) 0 0; font: 700 var(--t-lg) Poppins, sans-serif; color: var(--ink); }
+
+.habits { padding-top: var(--s-4); border-top: 1px solid var(--line); }
+.habits h3 { font-size: var(--t-sm); margin-bottom: var(--s-2); }
+
+.btn-danger { background: var(--danger); color: #fff; }
+.delete > summary {
+  cursor: pointer; min-height: var(--tap);
+  display: flex; align-items: center;
+  font: 600 var(--t-sm) Poppins, sans-serif; color: var(--danger);
+}
+.delete { display: flex; flex-direction: column; gap: var(--s-3); }
+
+/* --- Opinar --------------------------------------------------------------- */
+
+fieldset.field { border: none; padding: 0; margin: 0; }
+fieldset.field legend { padding: 0; font: 600 var(--t-sm) Poppins, sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+
+.regen { margin-top: var(--s-5); }

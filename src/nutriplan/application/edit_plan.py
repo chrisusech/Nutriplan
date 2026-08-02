@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from nutriplan.application.food_pool import resolve_allowed_foods
 from nutriplan.domain import meal_affinity
 from nutriplan.domain.errors import GenerationError
-from nutriplan.domain.food_filter import allowed_foods
 from nutriplan.domain.generation_rules import SLOT_STRUCTURE
 from nutriplan.domain.macro_split import daily_minus_free_meal, free_meal_slot_of
 from nutriplan.domain.models import (
@@ -18,7 +18,6 @@ from nutriplan.domain.models import (
     MealSlot,
     NutritionTargets,
     PlanCycle,
-    PlanPhase,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import (
@@ -34,11 +33,11 @@ from nutriplan.ports.repository import ClientRepository, PlanRepository
 _SLOT_ORDER = list(MealSlot)
 
 
-def _day_of(cycle: PlanCycle, phase: PlanPhase, day_index: int) -> DayPlan:
+def _day_of(cycle: PlanCycle, day_index: int) -> DayPlan:
     for day in cycle.days:
-        if day.phase is phase and day.day_index == day_index:
+        if day.day_index == day_index:
             return day
-    raise GenerationError(f"Día {day_index} de fase {phase.value} no existe en el plan")
+    raise GenerationError(f"El día {day_index} no existe en este menú")
 
 
 def _locked_keys(
@@ -90,7 +89,6 @@ def _needs_full_solve(day: DayPlan) -> bool:
 
 def _solved_to_day(
     day_index: int,
-    phase: PlanPhase,
     solved: list[SolvedMeal],
     *,
     free_flags: dict[MealSlot, bool],
@@ -140,7 +138,7 @@ def _solved_to_day(
         meals.append(free_meal)
         meals.sort(key=lambda m: _SLOT_ORDER.index(m.slot))
 
-    return DayPlan(day_index=day_index, phase=phase, meals=meals, totals=day_totals(solved))
+    return DayPlan(day_index=day_index, meals=meals, totals=day_totals(solved))
 
 
 async def resolve_day(
@@ -194,7 +192,6 @@ async def resolve_day(
 
     return _solved_to_day(
         day.day_index,
-        day.phase,
         solved,
         free_flags=free_flags,
         preserve=day,
@@ -205,7 +202,6 @@ async def resolve_day(
 async def swap_food_in_slot(
     *,
     cycle: PlanCycle,
-    phase: PlanPhase,
     day_index: int,
     slot: MealSlot,
     old_food_id: UUID,
@@ -214,7 +210,7 @@ async def swap_food_in_slot(
     targets: NutritionTargets,
     config: NutritionConfig,
 ) -> DayPlan:
-    day = _day_of(cycle, phase, day_index)
+    day = _day_of(cycle, day_index)
     meal = next((m for m in day.meals if m.slot is slot), None)
     if meal is None:
         raise GenerationError(f"Slot {slot.value} no existe en el día")
@@ -249,7 +245,6 @@ async def swap_food_in_slot(
 async def remove_food_from_slot(
     *,
     cycle: PlanCycle,
-    phase: PlanPhase,
     day_index: int,
     slot: MealSlot,
     food_id: UUID,
@@ -257,7 +252,7 @@ async def remove_food_from_slot(
     targets: NutritionTargets,
     config: NutritionConfig,
 ) -> DayPlan:
-    day = _day_of(cycle, phase, day_index)
+    day = _day_of(cycle, day_index)
     meal = next((m for m in day.meals if m.slot is slot), None)
     if meal is None:
         raise GenerationError(f"Slot {slot.value} no existe en el día")
@@ -292,9 +287,9 @@ async def validate_swap_food(
     slot: MealSlot,
 ) -> None:
     """El reemplazo debe estar permitido y encajar en la comida."""
-    liked = await food_repo.get_by_ids(client.liked_food_ids)
-    banned = set(await client_repo.list_banned_food_ids(client.id))
-    pool = allowed_foods(liked, client.restrictions, banned)
+    pool = await resolve_allowed_foods(
+        client, food_repo=food_repo, client_repo=client_repo
+    )
     if not any(f.id == new_food.id for f in pool):
         raise GenerationError("Ese alimento no está permitido para este cliente")
     if not meal_affinity.allows(new_food, slot):
@@ -305,14 +300,8 @@ async def persist_day_edit(
     *,
     plan_repo: PlanRepository,
     cycle: PlanCycle,
-    phase: PlanPhase,
     day_index: int,
     day: DayPlan,
-    edited_by: UUID | None = None,
 ) -> None:
-    await plan_repo.update_day(
-        cycle.id, phase, day_index, day, mark_edited=True, edited_by=edited_by
-    )
+    await plan_repo.update_day(cycle.id, day_index, day, mark_edited=True)
     cycle.edited_at = datetime.now(UTC)
-    if edited_by:
-        cycle.edited_by = edited_by

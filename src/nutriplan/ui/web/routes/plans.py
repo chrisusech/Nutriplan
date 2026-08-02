@@ -1,6 +1,6 @@
 """Planes: listado, revisión y aprobación (pantalla 1d), export y edición."""
 
-import unicodedata
+from datetime import datetime
 from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID
@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutriplan.application.approve_plan import approve_plan, reopen_plan
+from nutriplan.application.approve_plan import approve_plan
 from nutriplan.application.edit_plan import (
     persist_day_edit,
     remove_food_from_slot,
@@ -17,39 +17,30 @@ from nutriplan.application.edit_plan import (
     swap_food_in_slot,
     validate_swap_food,
 )
-from nutriplan.application.export_plan import export_plan
-from nutriplan.domain.errors import GenerationError
+from nutriplan.domain.errors import GenerationError, QuotaExceededError
 from nutriplan.domain.models import (
     DayPlan,
     MealEntry,
     MealItem,
     MealSlot,
-    PlanPhase,
+    PlanCycle,
     PlanStatus,
+    Role,
 )
 from nutriplan.ui.web import presenter
-from nutriplan.ui.web.deps import container_of, db_session, render, repos_of, tenant_of
+from nutriplan.ui.web.deps import (
+    acting_trainer,
+    container_of,
+    db_session,
+    render,
+    repos_of,
+)
 from nutriplan.ui.web.routes.generator import _generator_context
 
 router = APIRouter()
 
-MEDIA_TYPES = {
-    "pdf": "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
-
-
-def _parse_phase(raw: str | None) -> PlanPhase:
-    return presenter.parse_plan_phase(raw)
-
-
-async def _phase_from_request(request: Request, query_fase: str) -> PlanPhase:
-    form = await request.form()
-    return _parse_phase(str(form.get("fase") or query_fase or ""))
-
-
-def _find_day(cycle, phase: PlanPhase, day_index: int) -> DayPlan | None:
-    return presenter.get_plan_day(cycle, phase, day_index)
+def _find_day(cycle: PlanCycle, day_index: int) -> DayPlan | None:
+    return presenter.get_plan_day(cycle, day_index)
 
 
 def _find_meal(day: DayPlan, slot_value: str) -> MealEntry | None:
@@ -64,30 +55,17 @@ async def _edit_response(
     request: Request,
     session: AsyncSession,
     *,
-    cycle,
+    cycle: PlanCycle,
     client_id: UUID,
     day_index: int,
-    phase: PlanPhase,
 ) -> Response:
     client = await repos_of(request, session).clients.get(client_id)
     if client is None:
         return RedirectResponse("/generador", status_code=303)
     ctx = await _generator_context(
-        request, session, client, day_index, editar=True, fase=phase.value
+        request, session, client, day_index, editar=True
     )
     return render(request, "partials/generator_body.html", active_tab="generador", ctx=ctx)
-
-
-def _attachment(filename: str) -> str:
-    """Content-Disposition seguro para nombres con tilde ("Ana Pérez").
-
-    Los headers HTTP no son UTF-8: se manda un fallback ASCII y el nombre real
-    en el parámetro extendido de la RFC 6266, que es lo que lee el navegador.
-    """
-    ascii_name = (
-        unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode() or "plan"
-    )
-    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
 @router.get("/planes", response_class=HTMLResponse)
@@ -95,7 +73,7 @@ async def plans_index(request: Request,
                       session: Annotated[AsyncSession, Depends(db_session)]) -> HTMLResponse:
     repos = repos_of(request, session)
     rows = []
-    for client in await repos.clients.list():
+    for client in await repos.clients.list_all():
         cycles = await repos.plans.list_for_client(client.id)
         # El plan ACTIVO, no "el último": es el que el cliente está siguiendo.
         plan = presenter.active_plan(client, cycles)
@@ -129,8 +107,16 @@ async def plan_history(request: Request,
 
     cycles = await repos.plans.list_for_client(client.id)
     rows = []
+    # Puntos de la gráfica: solo versiones aprobadas (las definitivas), con peso.
+    progress: list[tuple[datetime, float, int]] = []
     for cycle in cycles:  # DESC: la versión más nueva primero
         targets = await repos.targets.get(cycle.targets_id)
+        if (
+            cycle.status == PlanStatus.APPROVED
+            and targets is not None
+            and targets.weight_kg is not None
+        ):
+            progress.append((cycle.created_at, targets.weight_kg, cycle.version))
         rows.append({
             "id": str(cycle.id),
             "version": cycle.version,
@@ -139,7 +125,6 @@ async def plan_history(request: Request,
             "ago": presenter.time_ago(cycle.created_at),
             "status": cycle.status.value,
             "approved": cycle.status == PlanStatus.APPROVED,
-            "duration": presenter.duration_label(cycle),
             # El peso y los macros DE ENTONCES, no los de hoy: es el seguimiento.
             "weight": f"{targets.weight_kg:g}" if targets and targets.weight_kg else "—",
             "kcal": presenter.fmt_kcal(targets.daily.kcal) if targets else "—",
@@ -149,8 +134,10 @@ async def plan_history(request: Request,
                 if targets else "—"
             ),
         })
+    # Cronológico (los cycles vienen DESC): la gráfica va del más viejo al más nuevo.
+    chart = presenter.weight_progress_chart(list(reversed(progress)))
     return render(request, "plan_history.html", active_tab="planes",
-                  client=client, rows=rows)
+                  client=client, rows=rows, chart=chart)
 
 
 @router.post("/planes/{cycle_id}/activar")
@@ -169,8 +156,7 @@ async def activate(request: Request,
 @router.get("/planes/{cycle_id}", response_model=None)
 async def review_plan(request: Request,
                       session: Annotated[AsyncSession, Depends(db_session)],
-                      cycle_id: str,
-                      fase: str = "first_15") -> Response:
+                      cycle_id: str) -> Response:
     container = container_of(request)
     repos = repos_of(request, session)
     cycle = await repos.plans.get(UUID(cycle_id))
@@ -187,30 +173,25 @@ async def review_plan(request: Request,
         return RedirectResponse("/planes", status_code=303)
     config = container.nutrition_config(client)
 
-    phases = presenter.plan_phases(cycle)
-    phase = _parse_phase(fase)
-    if phase not in phases:
-        phase = phases[0]
 
     # Los alimentos hacen falta para saber CON QUÉ reparto se porcionó cada día:
     # sin ellos, un día con snack de solo fruta se pintaría como "no cuadra".
     all_ids = {item.food_id for d in cycle.days for m in d.meals
                for item in m.items if item.food_id}
     foods_map = {f.id: f for f in await repos.foods.get_by_ids(sorted(all_ids, key=str))}
-    grid = presenter.week_grid(cycle, targets, config, phase, foods=foods_map)
+    grid = presenter.week_grid(cycle, targets, config, foods=foods_map)
     fit_days = sum(1 for cell in grid if cell["fit"])
     approved = cycle.status == PlanStatus.APPROVED
     goal_meta = presenter.GOAL_META[client.goal]
-    phase_label = presenter.PHASE_LABELS.get(phase, "Semana 1")
-    span_label = phase_label if len(phases) > 1 else "7 días"
     return render(
         request, "review.html", active_tab="planes",
         client=client, cycle=cycle, grid=grid, fit_days=fit_days,
-        adh=presenter.adherence(cycle, targets, phase, config),
-        approved=approved, phases=phases, fase=phase.value,
+        adh=presenter.adherence(cycle, targets, config),
+        approved=approved,
+        error=request.query_params.get("error"),
         is_active=client.active_plan_id == cycle.id,
         subtitle=(f"{goal_meta['label']} · {presenter.fmt_kcal(targets.daily.kcal)} kcal · "
-                  f"{presenter.duration_label(cycle)} · generado {presenter.time_ago(cycle.created_at)}"),
+                  f"generado {presenter.time_ago(cycle.created_at)}"),
     )
 
 
@@ -220,77 +201,42 @@ async def approve(request: Request,
                   cycle_id: str) -> RedirectResponse:
     repos = repos_of(request, session)
     cycle = await repos.plans.get(UUID(cycle_id))
-    if cycle is not None:
-        await approve_plan(plan_id=cycle.id, plan_repo=repos.plans, audit_repo=repos.audit)
-    return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
-
-
-@router.post("/planes/{cycle_id}/reabrir")
-async def reopen(request: Request,
-                 session: Annotated[AsyncSession, Depends(db_session)],
-                 cycle_id: str) -> RedirectResponse:
-    """Reabre un plan aprobado para corregirlo, y lleva al editor del generador."""
-    repos = repos_of(request, session)
-    cycle = await repos.plans.get(UUID(cycle_id))
     if cycle is None:
-        return RedirectResponse("/planes", status_code=303)
-    await reopen_plan(plan_id=cycle.id, plan_repo=repos.plans, audit_repo=repos.audit)
-    return RedirectResponse(f"/generador?cliente={cycle.client_id}&editar=1", status_code=303)
-
-
-@router.get("/planes/{cycle_id}/export.{fmt}")
-async def export(request: Request,
-                 session: Annotated[AsyncSession, Depends(db_session)],
-                 cycle_id: str, fmt: str) -> Response:
-    if fmt not in MEDIA_TYPES:
         return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
-    container = container_of(request)
-    repos = repos_of(request, session)
-    cycle = await repos.plans.get(UUID(cycle_id))
-    if cycle is None or cycle.status != PlanStatus.APPROVED:
-        return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
-    client = await repos.clients.get(cycle.client_id)
-    targets = await repos.targets.get(cycle.targets_id)
-
-    _, content = await export_plan(
-        plan_id=cycle.id, fmt=fmt,  # type: ignore[arg-type]
-        plan_repo=repos.plans, food_repo=repos.foods, artifact_repo=repos.artifacts,
-        renderer=container.renderer_for(fmt), branding=container.branding(tenant_of(request)),
-        exports_dir=container.settings.exports_dir,
-        client_name=client.name if client else None,
-        daily_targets=targets.daily if targets else None,
-    )
-    # El nombre con el que aterriza en el escritorio del cliente: "Plan nutricional Ana
-    # Pérez.pdf". `_attachment` ya resuelve tildes y espacios (manda un nombre ASCII y
-    # otro UTF-8).
-    who = client.name if client else "cliente"
-    return Response(
-        content=content, media_type=MEDIA_TYPES[fmt],
-        headers={"Content-Disposition": _attachment(f"Plan nutricional {who}.{fmt}")},
-    )
+    # El super_user no tiene cupo; el entrenador aprueba hasta su tope de versiones.
+    actor = await acting_trainer(request, session)
+    limit = None if (actor is None or actor.role == Role.SUPER_USER) else actor.max_menus
+    try:
+        await approve_plan(
+            plan_id=cycle.id, plan_repo=repos.plans, audit_repo=repos.audit,
+            max_menus=limit,
+        )
+    except QuotaExceededError as exc:
+        return RedirectResponse(
+            f"/planes/{cycle_id}?error={quote(str(exc))}", status_code=303
+        )
+    return RedirectResponse(f"/planes/{cycle_id}", status_code=303)
 
 
 @router.post("/planes/{cycle_id}/dia/{day_index}/porciones", response_model=None)
 async def edit_portions(request: Request,
                         session: Annotated[AsyncSession, Depends(db_session)],
-                        cycle_id: str, day_index: int,
-                        fase: str = "first_15") -> Response:
+                        cycle_id: str, day_index: int) -> Response:
     """Edición en línea: nuevos gramos → recálculo → persistir vía update_day."""
     repos = repos_of(request, session)
     form = await request.form()
     slot_value = str(form.get("slot", ""))
     cliente = str(form.get("cliente", ""))
-    phase = await _phase_from_request(request, fase)
 
     cycle = await repos.plans.get(UUID(cycle_id))
-    if cycle is None or cycle.status != PlanStatus.DRAFT:
+    if cycle is None or cycle.status not in (PlanStatus.DRAFT, PlanStatus.APPROVED):
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 
-    day = _find_day(cycle, phase, day_index)
+    day = _find_day(cycle, day_index)
     meal = _find_meal(day, slot_value) if day else None
     if day is None or meal is None:
         return RedirectResponse(
-            f"/generador?cliente={cliente}&editar=1&fase={phase.value}", status_code=303
+            f"/generador?cliente={cliente}&editar=1", status_code=303
         )
     edited_slot = meal.slot
 
@@ -318,7 +264,7 @@ async def edit_portions(request: Request,
     if not new_items:
         return await _edit_response(
             request, session, cycle=cycle, client_id=cycle.client_id,
-            day_index=day_index, phase=phase,
+            day_index=day_index,
         )
 
     meal.items = new_items
@@ -340,27 +286,25 @@ async def edit_portions(request: Request,
         except GenerationError:
             return await _edit_response(
                 request, session, cycle=cycle, client_id=cycle.client_id,
-                day_index=day_index, phase=phase,
+                day_index=day_index,
             )
         await persist_day_edit(
             plan_repo=repos.plans,
             cycle=cycle,
-            phase=phase,
             day_index=day_index,
             day=day,
         )
 
     return await _edit_response(
         request, session, cycle=cycle, client_id=cycle.client_id,
-        day_index=day_index, phase=phase,
+        day_index=day_index,
     )
 
 
 @router.post("/planes/{cycle_id}/dia/{day_index}/cambiar", response_model=None)
 async def swap_food(request: Request,
                     session: Annotated[AsyncSession, Depends(db_session)],
-                    cycle_id: str, day_index: int,
-                    fase: str = "first_15") -> Response:
+                    cycle_id: str, day_index: int) -> Response:
     """Sustituye un alimento en un slot y re-solve solo ese día."""
     repos = repos_of(request, session)
     form = await request.form()
@@ -371,10 +315,9 @@ async def swap_food(request: Request,
         new_food_id = UUID(str(form.get("new_food_id", "")))
     except ValueError:
         return RedirectResponse(f"/generador?cliente={cliente}&editar=1", status_code=303)
-    phase = await _phase_from_request(request, fase)
 
     cycle = await repos.plans.get(UUID(cycle_id))
-    if cycle is None or cycle.status != PlanStatus.DRAFT:
+    if cycle is None or cycle.status not in (PlanStatus.DRAFT, PlanStatus.APPROVED):
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 
     client = await repos.clients.get(cycle.client_id)
@@ -390,7 +333,7 @@ async def swap_food(request: Request,
     new_foods = await repos.foods.get_by_ids([new_food_id])
     if not new_foods:
         return RedirectResponse(
-            f"/generador?cliente={cliente}&editar=1&fase={phase.value}", status_code=303
+            f"/generador?cliente={cliente}&editar=1", status_code=303
         )
     new_food = new_foods[0]
 
@@ -406,7 +349,7 @@ async def swap_food(request: Request,
     except GenerationError:
         return await _edit_response(
             request, session, cycle=cycle, client_id=cycle.client_id,
-            day_index=day_index, phase=phase,
+            day_index=day_index,
         )
 
     all_ids = {
@@ -422,7 +365,6 @@ async def swap_food(request: Request,
     try:
         day = await swap_food_in_slot(
             cycle=cycle,
-            phase=phase,
             day_index=day_index,
             slot=slot,
             old_food_id=old_food_id,
@@ -432,22 +374,21 @@ async def swap_food(request: Request,
             config=config,
         )
         await persist_day_edit(
-            plan_repo=repos.plans, cycle=cycle, phase=phase, day_index=day_index, day=day
+            plan_repo=repos.plans, cycle=cycle, day_index=day_index, day=day
         )
     except GenerationError:
         pass
 
     return await _edit_response(
         request, session, cycle=cycle, client_id=cycle.client_id,
-        day_index=day_index, phase=phase,
+        day_index=day_index,
     )
 
 
 @router.post("/planes/{cycle_id}/dia/{day_index}/quitar", response_model=None)
 async def remove_food(request: Request,
                       session: Annotated[AsyncSession, Depends(db_session)],
-                      cycle_id: str, day_index: int,
-                      fase: str = "first_15") -> Response:
+                      cycle_id: str, day_index: int) -> Response:
     """Quita un alimento del slot, re-solve el día y opcionalmente lo banea."""
     from nutriplan.application.edit_plan import ban_for_client
 
@@ -460,10 +401,9 @@ async def remove_food(request: Request,
     except ValueError:
         return RedirectResponse(f"/generador?cliente={cliente}&editar=1", status_code=303)
     do_ban = str(form.get("ban", "")).lower() in ("1", "true", "on")
-    phase = await _phase_from_request(request, fase)
 
     cycle = await repos.plans.get(UUID(cycle_id))
-    if cycle is None or cycle.status != PlanStatus.DRAFT:
+    if cycle is None or cycle.status not in (PlanStatus.DRAFT, PlanStatus.APPROVED):
         return RedirectResponse(f"/generador?cliente={cliente}", status_code=303)
 
     container = container_of(request)
@@ -487,7 +427,6 @@ async def remove_food(request: Request,
     try:
         day = await remove_food_from_slot(
             cycle=cycle,
-            phase=phase,
             day_index=day_index,
             slot=MealSlot(slot_value),
             food_id=food_id,
@@ -496,7 +435,7 @@ async def remove_food(request: Request,
             config=config,
         )
         await persist_day_edit(
-            plan_repo=repos.plans, cycle=cycle, phase=phase, day_index=day_index, day=day
+            plan_repo=repos.plans, cycle=cycle, day_index=day_index, day=day
         )
         if do_ban:
             await ban_for_client(
@@ -507,5 +446,5 @@ async def remove_food(request: Request,
 
     return await _edit_response(
         request, session, cycle=cycle, client_id=cycle.client_id,
-        day_index=day_index, phase=phase,
+        day_index=day_index,
     )

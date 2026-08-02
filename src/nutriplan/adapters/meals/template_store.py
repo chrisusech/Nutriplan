@@ -58,6 +58,7 @@ def _template(raw: dict[str, Any]) -> MealTemplate:
             for c in raw["components"]
         ),
         free_salad=bool(raw.get("free_salad", False)),
+        recipe=tuple(raw.get("recipe") or ()),
     )
 
 
