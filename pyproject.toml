@@ -45,6 +45,8 @@ dev = [
     # Solo para generar los .docx de fixture del intake; la app ya no exporta Word.
     "python-docx>=1.1",
     "playwright>=1.62.0",
+    # Extra `apple` también en CI: los tests de OAuth Apple necesitan jwt.
+    "pyjwt[crypto]>=2.9",
 ]
 
 [project.scripts]
@@ -66,6 +68,9 @@ addopts = "--cov=nutriplan --cov-branch --cov-report=term-missing"
 [tool.coverage.run]
 source = ["src/nutriplan"]
 omit = ["*/adapters/food/cli.py"]
+# FastAPI + SQLAlchemy async corren bajo greenlet: sin esto, coverage marca
+# como "miss" código que los tests de integración sí ejecutaron.
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 exclude_also = [

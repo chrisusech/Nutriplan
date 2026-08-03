@@ -22,6 +22,7 @@ from nutriplan.adapters.db.repositories import (
     SqlAuditLogRepository,
     SqlAuthRepository,
     SqlClientRepository,
+    SqlDeviceTokenRepository,
     SqlDishRecipeRepository,
     SqlEventRepository,
     SqlFoodRepository,
@@ -102,6 +103,9 @@ class Container:
 
     def auth_repo(self, session: AsyncSession) -> SqlAuthRepository:
         return SqlAuthRepository(session)
+
+    def device_token_repo(self, session: AsyncSession) -> SqlDeviceTokenRepository:
+        return SqlDeviceTokenRepository(session)
 
     @cached_property
     def config_provider(self) -> YamlConfigProvider:

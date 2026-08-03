@@ -102,3 +102,76 @@ async def test_si_google_no_responde_no_se_deja_entrar_por_las_dudas(monkeypatch
     )
     with pytest.raises(OAuthError, match="No se pudo verificar"):
         await verify_google_id_token("t", client_id=CLIENT_ID)
+
+
+# --- Apple -----------------------------------------------------------------
+
+
+APPLE_CLIENT = "com.nutriplan.app"
+
+
+async def test_sin_apple_client_id_no_se_verifica_nada() -> None:
+    from nutriplan.adapters.oauth import verify_apple_id_token
+
+    with pytest.raises(OAuthError, match="APPLE_CLIENT_ID"):
+        await verify_apple_id_token("t", client_id="")
+
+
+async def test_un_token_de_apple_invalido_no_pasa(monkeypatch) -> None:
+    from nutriplan.adapters.oauth import verify_apple_id_token
+
+    class _BrokenKeys:
+        def get_signing_key_from_jwt(self, _token: str) -> object:
+            raise ValueError("firma rota")
+
+    monkeypatch.setattr(
+        "jwt.PyJWKClient", lambda *_a, **_k: _BrokenKeys()
+    )
+    with pytest.raises(OAuthError, match="no es válido"):
+        await verify_apple_id_token("basura", client_id=APPLE_CLIENT)
+
+
+async def test_un_token_de_apple_sin_subject_se_rechaza(monkeypatch) -> None:
+    from nutriplan.adapters.oauth import verify_apple_id_token
+
+    class _Key:
+        key = "k"
+
+    class _Keys:
+        def get_signing_key_from_jwt(self, _token: str) -> _Key:
+            return _Key()
+
+    monkeypatch.setattr("jwt.PyJWKClient", lambda *_a, **_k: _Keys())
+    monkeypatch.setattr(
+        "jwt.decode",
+        lambda *_a, **_k: {"email": "ana@icloud.com", "email_verified": True},
+    )
+    with pytest.raises(OAuthError, match="identidad utilizable"):
+        await verify_apple_id_token("t", client_id=APPLE_CLIENT)
+
+
+async def test_un_token_bueno_de_apple_devuelve_identidad(monkeypatch) -> None:
+    from nutriplan.adapters.oauth import verify_apple_id_token
+
+    class _Key:
+        key = "k"
+
+    class _Keys:
+        def get_signing_key_from_jwt(self, _token: str) -> _Key:
+            return _Key()
+
+    monkeypatch.setattr("jwt.PyJWKClient", lambda *_a, **_k: _Keys())
+    monkeypatch.setattr(
+        "jwt.decode",
+        lambda *_a, **_k: {
+            "sub": "apple.sub.1",
+            "email": "ana@icloud.com",
+            "email_verified": True,
+        },
+    )
+    identity = await verify_apple_id_token("t", client_id=APPLE_CLIENT)
+    assert identity.provider is AuthProvider.APPLE
+    assert identity.subject == "apple.sub.1"
+    assert identity.email == "ana@icloud.com"
+    assert identity.name == ""
+    assert identity.email_verified is True

@@ -415,3 +415,20 @@ class AppEventRow(Base):
     platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
     app_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class DeviceTokenRow(Base):
+    """Token APNs/FCM de un dispositivo. Uno por (usuario, token)."""
+
+    __tablename__ = "device_tokens"
+    __table_args__ = (
+        UniqueConstraint("user_id", "token", name="device_tokens_user_token"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(20))  # ios | android
+    token: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

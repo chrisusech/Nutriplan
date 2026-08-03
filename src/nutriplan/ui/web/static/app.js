@@ -19,7 +19,13 @@
   const haptics = window.Capacitor?.Plugins?.Haptics;
   const sharePlugin = window.Capacitor?.Plugins?.Share;
   const social = window.Capacitor?.Plugins?.SocialLogin;
+  const push = window.Capacitor?.Plugins?.PushNotifications;
   const bootScript = document.querySelector('script[data-google-client-id]');
+
+  const csrf = () =>
+    document.querySelector('meta[name="csrf-token"]')?.content
+    || document.querySelector('input[name="_csrf"]')?.value
+    || '';
 
   // --- Puente nativo ------------------------------------------------------
   if (native) {
@@ -32,6 +38,30 @@
         google: googleId ? { webClientId: googleId } : undefined,
         apple: appleId ? { clientId: appleId } : undefined,
       }).catch(() => {});
+    }
+
+    // Push: pedir permiso, registrar, mandar el token al servidor.
+    if (push) {
+      push.requestPermissions().then((perm) => {
+        if (perm.receive !== 'granted') return;
+        push.register();
+      }).catch(() => {});
+      push.addListener('registration', (ev) => {
+        const body = new URLSearchParams({
+          platform: (window.Capacitor.getPlatform?.() || 'ios'),
+          token: ev.value,
+          _csrf: csrf(),
+        });
+        fetch('/device-tokens', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-Token': csrf(),
+          },
+          body,
+          credentials: 'same-origin',
+        }).catch(() => {});
+      });
     }
 
     for (const shareBtn of document.querySelectorAll('[data-share-day]')) {

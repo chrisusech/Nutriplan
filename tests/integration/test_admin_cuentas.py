@@ -177,6 +177,18 @@ def test_puede_regalarle_mas_semanas_a_alguien(app) -> None:
     assert "5" in app.get("/admin/cuentas").text
 
 
+def test_un_cupo_que_no_es_numero_no_tumba_la_consola(app) -> None:
+    _como_usuaria(app, "ana@correo.com")
+    _como_admin(app)
+    resp = app.post(
+        f"/admin/cuentas/{_id_de(app, 'ana@correo.com')}/limites",
+        data={"max_menus": "nope"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert app.get("/admin/cuentas").status_code == 200
+
+
 def test_un_id_que_no_es_un_id_no_tumba_la_consola(app) -> None:
     _como_admin(app)
     resp = app.post("/admin/cuentas/no-soy-un-uuid/bloquear", follow_redirects=False)

@@ -24,5 +24,11 @@ Estado al 3 de agosto de 2026 — plan de lanzamiento beta en curso.
 - [ ] GoogleService-Info.plist / google-services.json; capturas; TestFlight /
       Play Internal (ver `docs/store-listing.md`).
 - [ ] Invites 10–50 + canal de feedback; QA en iPhone y Android reales.
-- [ ] Subir cobertura de rutas `menu`/`auth`/`week` a ≥90 % (hoy 87 % global).
+
+## Hecho después (cobertura + push MVP)
+
+- [x] Cobertura ≥90 % global (92 %): `concurrency = greenlet,thread` + bordes
+      auth / password reset / Apple OAuth / generate_plan.
+- [x] Push MVP: tabla `device_tokens`, `POST /device-tokens`, registro en
+      Capacitor `PushNotifications` (sin envío de notificaciones todavía).
 

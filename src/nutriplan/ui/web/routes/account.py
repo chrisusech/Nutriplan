@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.application.analytics import Event
@@ -13,6 +13,7 @@ from nutriplan.ui.web.deps import (
     db_session,
     render,
     repos_of,
+    tenant_of,
     track_event,
 )
 
@@ -117,3 +118,23 @@ async def submit_feedback(
         request, session, Event.FEEDBACK_SENT, category=category, tiene_nps=bool(nps)
     )
     return RedirectResponse("/feedback?gracias=1", status_code=303)
+
+
+@router.post("/device-tokens", response_model=None)
+async def register_device_token(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    platform: Annotated[str, Form()],
+    token: Annotated[str, Form()],
+) -> PlainTextResponse:
+    """Registra el token APNs/FCM que envía Capacitor PushNotifications."""
+    try:
+        await container_of(request).device_token_repo(session).upsert(
+            tenant_id=tenant_of(request),
+            user_id=account_id_of(request),
+            platform=platform,
+            token=token,
+        )
+    except ValueError:
+        return PlainTextResponse("token inválido", status_code=400)
+    return PlainTextResponse("ok", status_code=204)

@@ -7,6 +7,7 @@ reexportan aqui para que quien los importa no se entere del cambio.
 from nutriplan.adapters.db.repositories.audit import SqlAuditLogRepository
 from nutriplan.adapters.db.repositories.auth import SqlAccountEraser, SqlAuthRepository
 from nutriplan.adapters.db.repositories.client import SqlClientRepository
+from nutriplan.adapters.db.repositories.device_token import SqlDeviceTokenRepository
 from nutriplan.adapters.db.repositories.event import SqlEventRepository
 from nutriplan.adapters.db.repositories.food import SqlFoodRepository
 from nutriplan.adapters.db.repositories.job import SqlJobRepository
@@ -21,6 +22,7 @@ __all__ = [
     "SqlAuditLogRepository",
     "SqlAuthRepository",
     "SqlClientRepository",
+    "SqlDeviceTokenRepository",
     "SqlEventRepository",
     "SqlDishRecipeRepository",
     "Funnel",
