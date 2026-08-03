@@ -16,6 +16,7 @@ from nutriplan.adapters.db.models import (
     ClientFoodPreferenceRow,
     ClientRow,
     DayPlanRow,
+    DeviceTokenRow,
     DishRatingRow,
     GenerationJobRow,
     MealEntryRow,
@@ -185,9 +186,9 @@ class SqlAccountEraser:
         await self._s.execute(delete(MealEntryRow).where(MealEntryRow.day_plan_id.in_(day_ids)))
         await self._s.execute(delete(DayPlanRow).where(DayPlanRow.plan_cycle_id.in_(plan_ids)))
         for table in (
-            DishRatingRow, AppFeedbackRow, PlanCycleRow, NutritionTargetsRow,
-            ClientFoodPreferenceRow, ClientFoodBanRow, ClientRow, GenerationJobRow,
-            AuditLogRow,
+            DeviceTokenRow, DishRatingRow, AppFeedbackRow, PlanCycleRow,
+            NutritionTargetsRow, ClientFoodPreferenceRow, ClientFoodBanRow,
+            ClientRow, GenerationJobRow, AuditLogRow,
         ):
             await self._s.execute(delete(table).where(table.tenant_id == tenant_id))
         await self._s.flush()

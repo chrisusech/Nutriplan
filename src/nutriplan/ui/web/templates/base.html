@@ -17,6 +17,7 @@
   <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </head>
 <body class="{% block page_class %}{% endblock %}"
+      {% if cuenta %}data-logged-in="1"{% endif %}
       hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
   <div class="app">

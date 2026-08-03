@@ -2,33 +2,23 @@
 
 Estado al 3 de agosto de 2026 — plan de lanzamiento beta en curso.
 
-## Hecho en esta pasada
+## Listo en código para probar (web / smoke local)
 
-- [x] Working tree commitado; `.env` local en SQLite; clave Groq vaciada (rotar en
-      consola si aún estaba viva).
-- [x] Filtro de desayuno alineado al solver + margen; matriz de perfiles en CI
-      (`tests/integration/test_matriz_de_perfiles.py`).
-- [x] `LLM_SELECT_FOODS=false` / `LLM_REFINE_NAMES=false`; Groq 20b solo recetas.
-- [x] Dockerfile + `fly.toml` + `/health` + `docs/ops.md`.
-- [x] `/terminos`, `/soporte`, OAuth UI + offline/share/haptics en `app.js`.
-- [x] Docs de listing y beta; ruff format NO es gate de CI.
+Flujo: `uv sync` → `uv run alembic upgrade head` → `uv run nutriplan` →
+registro → consentimiento → onboarding → generar menú → calificar → feedback.
+
+- [x] Motor determinista + cuota beta + legal público + health/Docker/Fly.
+- [x] Cobertura ≥90 %; push: registro de token; splash hide; gate
+      `BETA_INVITE_CODE`; tokens borrados al eliminar cuenta.
+- [x] Dockerfile con extra `apple` (Sign in with Apple en prod).
 
 ## Todavía humano (fuera del repo)
 
 - [ ] Rotar clave Groq en console.groq.com (la antigua se pegó en chat).
 - [ ] Crear proyecto Supabase prod + `fly launch` / secrets / DNS `app.nutriplan.co`
-      (ver `docs/ops.md`).
+      (ver `docs/ops.md`); incluir `BETA_INVITE_CODE`.
 - [ ] SMTP real (Resend/Postmark) con SPF/DKIM.
-- [ ] `brew install cocoapods` + `npx cap add ios` (Android ya se puede
-      generar localmente; `ios/`/`android/` están en `.gitignore`).
+- [ ] `brew install cocoapods` + `npx cap add ios` (Android: `cd mobile && npx cap sync`).
 - [ ] GoogleService-Info.plist / google-services.json; capturas; TestFlight /
       Play Internal (ver `docs/store-listing.md`).
 - [ ] Invites 10–50 + canal de feedback; QA en iPhone y Android reales.
-
-## Hecho después (cobertura + push MVP)
-
-- [x] Cobertura ≥90 % global (92 %): `concurrency = greenlet,thread` + bordes
-      auth / password reset / Apple OAuth / generate_plan.
-- [x] Push MVP: tabla `device_tokens`, `POST /device-tokens`, registro en
-      Capacitor `PushNotifications` (sin envío de notificaciones todavía).
-

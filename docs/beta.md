@@ -9,8 +9,10 @@ siguiente se desbloquea calificando platos (`RATINGS_REQUIRED`).
 ## Invites
 
 1. TestFlight Internal + Play Internal testing (lista de emails).
-2. Empezar con 10–20 personas; subir a ~50 si es estable.
-3. Canal: in-app `/feedback` + grupo WhatsApp/Telegram del equipo.
+2. Código de app: `BETA_INVITE_CODE` (vacío = abierto). En prod pon uno y
+   compártelo con los testers; aparece en `/registro`.
+3. Empezar con 10–20 personas; subir a ~50 si es estable.
+4. Canal: in-app `/feedback` + grupo WhatsApp/Telegram del equipo.
 
 ## Criterios de salida → soft launch
 

@@ -21,7 +21,7 @@ COPY prompts ./prompts
 COPY migrations ./migrations
 COPY alembic.ini ./
 
-RUN uv sync --frozen --no-dev \
+RUN uv sync --frozen --no-dev --extra apple \
     && useradd --create-home --uid 10001 nutri \
     && chown -R nutri:nutri /app
 

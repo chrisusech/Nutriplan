@@ -54,12 +54,16 @@
         <label class="field"><span>Contraseña</span>
           <input name="password" type="password" required minlength="8"
                  placeholder="••••••••"></label>
+        {% if mode == 'signup' and invite_required %}
+        <label class="field"><span>Código de invitación</span>
+          <input name="invite" required maxlength="64" autocomplete="off"
+                 placeholder="El que te compartimos"></label>
+        {% endif %}
         {% if mode == 'signup' %}
         <p class="muted auth-legal">Al crear la cuenta aceptas los
           <a href="/terminos">términos</a> y la
           <a href="/privacidad">privacidad</a>.</p>
-        {% endif %}
-        <button class="btn btn-primary btn-big btn-block" type="submit">
+        {% endif %}        <button class="btn btn-primary btn-big btn-block" type="submit">
           {{ 'Crear cuenta' if mode == 'signup' else 'Entrar' }}
         </button>
       </form>
@@ -72,6 +76,7 @@
       <form method="post" action="/auth/oauth/google" class="auth-social" hidden>
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">
+        {% if invite_required %}<input type="hidden" name="invite" value="">{% endif %}
         <button class="btn btn-outline btn-big btn-block" type="submit">
           Continuar con Google
         </button>
@@ -81,12 +86,12 @@
       <form method="post" action="/auth/oauth/apple" class="auth-social" hidden>
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">
+        {% if invite_required %}<input type="hidden" name="invite" value="">{% endif %}
         <button class="btn btn-outline btn-big btn-block" type="submit">
           Continuar con Apple
         </button>
       </form>
-      {% endif %}
-      {% endif %}
+      {% endif %}      {% endif %}
 
       <p class="auth-foot">
         {% if mode == 'signup' %}

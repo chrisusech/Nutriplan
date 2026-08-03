@@ -47,9 +47,9 @@ class Settings(BaseSettings):
     llm_fallback_base_url: str = ""
     llm_fallback_api_key: str = ""
     llm_fallback_model: str = ""
-    # Tope de menús generados por cuenta y semana civil (0 = sin tope; la
-    # cuota del beta se aplica vía application/quota.py con calificaciones).
-    beta_menus_per_week: int = 0
+    # Código de invitació para el alta pública. Vacío = abierto (local).
+    # En prod de beta cerrada: un string compartido con los testers.
+    beta_invite_code: str = ""
     # URL pública de la app: la necesitan los enlaces de correo.
     base_url: str = "http://127.0.0.1:8000"
     # Dominios que la app acepta servir. Vacío = sin comprobación (solo local);

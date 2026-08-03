@@ -207,6 +207,10 @@ def test_quien_borra_su_cuenta_se_lleva_su_perfil_y_sus_menus(app, container) ->
     """Requisito de tienda (Apple 5.1.1(v)) y de decencia."""
     _signup(app)
     _complete_onboarding(app)
+    assert app.post(
+        "/device-tokens",
+        data={"platform": "ios", "token": "token-a-borrar"},
+    ).status_code == 204
 
     resp = app.post("/perfil/eliminar", follow_redirects=False)
     assert resp.status_code == 303
@@ -227,15 +231,20 @@ def test_quien_borra_su_cuenta_se_lleva_su_perfil_y_sus_menus(app, container) ->
 
     from sqlalchemy import func, select
 
-    from nutriplan.adapters.db.models import ClientRow, PlanCycleRow
+    from nutriplan.adapters.db.models import ClientRow, DeviceTokenRow, PlanCycleRow
 
-    async def _quedan() -> tuple[int, int]:
+    async def _quedan() -> tuple[int, int, int]:
         async with container.session_factory() as session:
             perfiles = await session.execute(select(func.count()).select_from(ClientRow))
             planes = await session.execute(select(func.count()).select_from(PlanCycleRow))
-            return int(perfiles.scalar() or 0), int(planes.scalar() or 0)
+            tokens = await session.execute(select(func.count()).select_from(DeviceTokenRow))
+            return (
+                int(perfiles.scalar() or 0),
+                int(planes.scalar() or 0),
+                int(tokens.scalar() or 0),
+            )
 
-    assert asyncio.run(_quedan()) == (0, 0)
+    assert asyncio.run(_quedan()) == (0, 0, 0)
 
 
 def test_el_correo_de_una_cuenta_borrada_puede_registrarse_de_nuevo(app) -> None:

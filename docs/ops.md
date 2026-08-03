@@ -10,6 +10,7 @@ fly secrets set \
   SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
   BASE_URL=https://app.nutriplan.co \
   ALLOWED_HOSTS=app.nutriplan.co \
+  BETA_INVITE_CODE='…' \
   RUN_MIGRATIONS_ON_START=false \
   LLM_SELECT_FOODS=false \
   LLM_REFINE_NAMES=false \

@@ -48,6 +48,15 @@ class SignupError(ValueError):
     """El alta no se pudo completar (correo duplicado, datos inválidos)."""
 
 
+def check_beta_invite(*, configured: str, provided: str) -> None:
+    """Si hay código de beta, el alta pública lo exige; vacío = abierto."""
+    expected = configured.strip()
+    if not expected:
+        return
+    if provided.strip() != expected:
+        raise SignupError("Necesitas un código de invitación válido para esta beta.")
+
+
 def _validate_email(email: str) -> str:
     email = email.strip().lower()
     if not email or "@" not in email or len(email) > 320:

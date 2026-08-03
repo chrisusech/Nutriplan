@@ -20,7 +20,9 @@
   const sharePlugin = window.Capacitor?.Plugins?.Share;
   const social = window.Capacitor?.Plugins?.SocialLogin;
   const push = window.Capacitor?.Plugins?.PushNotifications;
+  const splash = window.Capacitor?.Plugins?.SplashScreen;
   const bootScript = document.querySelector('script[data-google-client-id]');
+  const loggedIn = document.body?.dataset?.loggedIn === '1';
 
   const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content
@@ -30,6 +32,8 @@
   // --- Puente nativo ------------------------------------------------------
   if (native) {
     document.documentElement.dataset.native = 'true';
+    // launchAutoHide=false: hay que ocultarlo a mano o la app se queda congelada.
+    splash?.hide?.().catch(() => {});
 
     const googleId = bootScript?.dataset.googleClientId || '';
     const appleId = bootScript?.dataset.appleClientId || '';
@@ -40,8 +44,8 @@
       }).catch(() => {});
     }
 
-    // Push: pedir permiso, registrar, mandar el token al servidor.
-    if (push) {
+    // Push solo con sesión: sin cookie, POST /device-tokens redirige al login.
+    if (push && loggedIn) {
       push.requestPermissions().then((perm) => {
         if (perm.receive !== 'granted') return;
         push.register();
@@ -73,6 +77,9 @@
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const provider = form.action.endsWith('apple') ? 'apple' : 'google';
+        const inviteField = form.querySelector('input[name=invite]');
+        const visibleInvite = document.querySelector('form input[name=invite]');
+        if (inviteField && visibleInvite) inviteField.value = visibleInvite.value;
         try {
           const { result } = await social.login({
             provider,
@@ -86,7 +93,6 @@
         }
       });
     }
-
     // Caché de la última semana vista: útil en el súper sin red.
     const cacheWeek = async () => {
       if (!prefs) return;

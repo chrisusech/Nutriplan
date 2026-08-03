@@ -24,6 +24,7 @@ from nutriplan.application.account_lifecycle import (
 from nutriplan.application.auth import (
     SignupError,
     authenticate,
+    check_beta_invite,
     register,
     sign_in_with_provider,
 )
@@ -212,6 +213,7 @@ async def signup_page(request: Request) -> HTMLResponse:
         request, "auth.html", mode="signup",
         google_client_id=settings.google_client_id,
         apple_client_id=settings.apple_client_id,
+        invite_required=bool(settings.beta_invite_code.strip()),
     )
 
 
@@ -222,17 +224,22 @@ async def signup(
     name: Annotated[str, Form()],
     email: Annotated[str, Form()],
     password: Annotated[str, Form()],
+    invite: Annotated[str, Form()] = "",
 ) -> HTMLResponse | RedirectResponse:
     container = container_of(request)
+    settings = container.settings
     try:
+        check_beta_invite(configured=settings.beta_invite_code, provided=invite)
         account = await register(
             name=name, email=email, password=password,
             auth_repo=container.auth_repo(session),
-            branding_dir=container.settings.branding_dir,
+            branding_dir=settings.branding_dir,
         )
     except SignupError as exc:
-        return render(request, "auth.html", mode="signup", error=str(exc))
-
+        return render(
+            request, "auth.html", mode="signup", error=str(exc),
+            invite_required=bool(settings.beta_invite_code.strip()),
+        )
     # Que el correo no llegue no puede tumbar el alta: la cuenta ya existe y se
     # puede reenviar. Bloquear aquí regalaría cuentas a medias.
     try:
@@ -275,6 +282,7 @@ async def oauth_sign_in(
     session: Annotated[AsyncSession, Depends(db_session)],
     provider: str,
     id_token: Annotated[str, Form()],
+    invite: Annotated[str, Form()] = "",
 ) -> HTMLResponse | RedirectResponse:
     """Canjea el ID token del cliente nativo por una sesión.
 
@@ -295,16 +303,19 @@ async def oauth_sign_in(
         else:
             return render(request, "auth.html", mode="login",
                           error="Ese proveedor no está disponible.")
+        # El código de beta solo aplica al alta: quien ya tiene cuenta entra.
+        auth = container.auth_repo(session)
+        if await auth.get_by_provider(identity.provider, identity.subject) is None:
+            check_beta_invite(configured=settings.beta_invite_code, provided=invite)
         account = await sign_in_with_provider(
             provider=identity.provider, subject=identity.subject,
             email=identity.email, name=identity.name,
             email_verified=identity.email_verified,
-            auth_repo=container.auth_repo(session),
+            auth_repo=auth,
             branding_dir=settings.branding_dir,
         )
     except (OAuthError, SignupError) as exc:
         return render(request, "auth.html", mode="login", error=str(exc))
-
     _set_session(request, account)
     profile = await container.repos(session, tenant_id=account.tenant_id).clients.get_by_user(
         account.id
