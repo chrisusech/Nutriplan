@@ -33,6 +33,18 @@ async def privacy(request: Request) -> HTMLResponse:
     return render(request, "privacidad.html", active_tab="")
 
 
+@router.get("/terminos", response_class=HTMLResponse)
+async def terms(request: Request) -> HTMLResponse:
+    """Pública: App Store / Play la piden en el listing."""
+    return render(request, "terminos.html", active_tab="")
+
+
+@router.get("/soporte", response_class=HTMLResponse)
+async def support(request: Request) -> HTMLResponse:
+    """Pública: URL de soporte para las fichas de las tiendas."""
+    return render(request, "soporte.html", active_tab="")
+
+
 @router.get("/consentimiento", response_class=HTMLResponse)
 async def consent_page(request: Request) -> HTMLResponse:
     return render(request, "consentimiento.html", active_tab="")

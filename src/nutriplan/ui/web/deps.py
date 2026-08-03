@@ -178,6 +178,7 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
     """Render con el contexto de marca que toda plantilla necesita."""
     container = container_of(request)
     branding = container.branding(tenant_or_none(request))
+    settings = container.settings
     return templates.TemplateResponse(
         request=request,
         name=template,
@@ -188,6 +189,8 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
             "role": role_of(request),
             "csrf_token": csrf_token(request),
             "offline": container.llm_client is None,
+            "google_client_id": settings.google_client_id,
+            "apple_client_id": settings.apple_client_id,
             **context,
         },
     )

@@ -60,9 +60,9 @@ def test_golden_female_lose_fat(nutrition_config) -> None:
 def test_golden_male_gain_muscle(nutrition_config) -> None:
     # BMR  = 10*80 + 6.25*180 - 5*25 + 5 = 1805 ; TDEE = 1805*1.725 = 3113.625
     # superávit = * 1.10 = 3424.99 ; piso = max(1805, 1700) = 1805 → manda el superávit
-    # prot = 1.6 * 80 = 128.0 → 512 kcal
-    # fat  = 0.8 * 80 =  64.0 → 576 kcal
-    # carb = (3424.99 - 512 - 576) / 4 = 584.2
+    # prot = 2.0 * 80 = 160.0 → 640 kcal  (volumen: más prot, menos carbo imposible)
+    # fat  = 1.0 * 80 =  80.0 → 720 kcal
+    # carb = (3424.99 - 640 - 720) / 4 = 516.2
     client = make_client(
         sex=Sex.MALE,
         weight_kg=80.0,
@@ -73,9 +73,9 @@ def test_golden_male_gain_muscle(nutrition_config) -> None:
     )
     targets = compute_targets(client, nutrition_config)
     assert targets.daily.kcal == pytest.approx(3425.0, abs=0.1)
-    assert targets.daily.protein_g == pytest.approx(128.0, abs=0.1)
-    assert targets.daily.fat_g == pytest.approx(64.0, abs=0.1)
-    assert targets.daily.carb_g == pytest.approx(584.2, abs=0.1)
+    assert targets.daily.protein_g == pytest.approx(160.0, abs=0.1)
+    assert targets.daily.fat_g == pytest.approx(80.0, abs=0.1)
+    assert targets.daily.carb_g == pytest.approx(516.2, abs=0.1)
 
 
 def test_golden_female_maintain(nutrition_config) -> None:

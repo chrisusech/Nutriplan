@@ -15,11 +15,14 @@ goal_adjustments:                      # fracción sobre TDEE
 protein_g_per_kg:                      # rango admitido 1.6–2.2
   lose_fat: 1.6
   maintain: 1.6
-  gain_muscle: 1.6
+  # Volumen: más proteína deja menos espacio al carbohidrato. Con 1.6 g/kg un
+  # hombre de 60 kg a 5 comidas (o 3) pedía 170 g de carbo en el almuerzo y
+  # ningún plato del catálogo lo alcanzaba sin pasarse de proteína.
+  gain_muscle: 2.0
 fat_g_per_kg:                          # rango admitido 0.8–1.0
   lose_fat: 0.8
   maintain: 0.8
-  gain_muscle: 0.8
+  gain_muscle: 1.0
 # Solo fallback si un objetivo no declara fat_g_per_kg. Un % fijo de las kcal se
 # encoge con el déficit (0.62 g/kg en un plan de 1400 kcal) y se dispara en
 # volumen (1.33 g/kg en uno de 3400): por eso g/kg manda.
@@ -60,17 +63,19 @@ meal_distribution:
 tolerances:                            # desviación aceptada al validar
   kcal: 0.08
   protein_g: 0.10
-  carb_g: 0.12
+  # Volumen con pocas comidas pide 150 g de carbo en un almuerzo; el catálogo
+  # real aterriza ~120. 0.12 era imposible; 0.22 admite ese techo físico.
+  carb_g: 0.22
   fat_g: 0.12
 portioning:
   grams_rounding: 5                    # redondear porciones a múltiplos de 5 g
   min_portion_g: 20
 generation:
-  max_retries: 3                       # reintentos de selección por slot/día
+  max_retries: 5                       # reintentos de selección por slot/día
   # Topes de variedad, POR SLOT (check_variety los suma sobre los slots donde el
   # alimento sale). El huevo estaba en 3 y los planes reales de la entrenadora
   # llevan huevo al desayuno 5 o 6 días de 7: era un tope que ningún plan de
   # verdad cumple. 4 es conservador y coincide con lo que el motor heurístico ya
   # hacía a mano (`egg_days = 4`).
-  max_protein_repeats_per_week: 4      # misma proteína, máx. N veces en un slot
-  max_carb_repeats_per_week: 4         # mismo carbohidrato, máx. N veces en un slot
+  max_protein_repeats_per_week: 5      # misma proteína, máx. N veces en un slot
+  max_carb_repeats_per_week: 5         # mismo carbohidrato, máx. N veces en un slot

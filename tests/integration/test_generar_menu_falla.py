@@ -48,11 +48,22 @@ def _onboarding(app: TestClient, **extra) -> None:
 # --- Antes de empezar -------------------------------------------------------
 
 
-def test_pedir_un_menu_sin_haber_contado_nada_de_uno_avisa(app) -> None:
-    resp = app.post("/menu/generar")
-    assert resp.status_code == 200
-    assert "perfil" in resp.text.lower()
-    assert "job=" not in resp.text
+def test_estado_de_un_job_invalido_no_revienta(app) -> None:
+    """Un UUID basura o un polling tras reinicio no puede devolver 500."""
+    from tests.integration.test_viaje_del_usuario import _onboarding, _registrar
+
+    _registrar(app, email="estado@correo.com")
+    _onboarding(app)
+    html = app.get("/menu/estado", params={"job": "no-es-uuid", "n": 0}).text
+    assert "No se pudo" in html or "interrump" in html.lower()
+
+
+def test_estado_sin_perfil_pide_perfil(app) -> None:
+    from tests.integration.test_viaje_del_usuario import _registrar
+
+    _registrar(app, email="sinperfil-estado@correo.com")
+    html = app.get("/menu/estado", params={"job": "00000000-0000-0000-0000-000000000000"}).text
+    assert "perfil" in html.lower()
 
 
 def test_una_restriccion_que_no_existe_no_tumba_la_generacion(app) -> None:

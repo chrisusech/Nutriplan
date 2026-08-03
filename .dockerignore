@@ -1,0 +1,15 @@
+.git
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.env
+data/*.db
+mobile/node_modules
+mobile/ios
+mobile/android
+**/__pycache__
+*.pyc
+.DS_Store

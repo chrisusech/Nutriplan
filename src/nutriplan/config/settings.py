@@ -31,17 +31,25 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
     run_migrations_on_start: bool = True
     anthropic_api_key: str = ""
-    llm_model_ingest: str = "claude-haiku-4-5"
-    llm_model_generate: str = "claude-sonnet-5"
+    # Defaults de beta: Groq gpt-oss-20b solo para recetas (schema pequeño).
+    llm_model_ingest: str = "openai/gpt-oss-20b"
+    llm_model_generate: str = "openai/gpt-oss-20b"
     # Proveedor OpenAI-compatible (DeepSeek, Groq, OpenRouter, Ollama…).
     # Si ANTHROPIC_API_KEY está vacía y LLM_BASE_URL + LLM_API_KEY están seteadas,
     # se usa OpenAICompatClient en lugar del modo offline.
     llm_base_url: str = ""
     llm_api_key: str = ""
+    # El motor determinista elige alimentos; la IA no entra en select_plan.
+    llm_select_foods: bool = False
+    # Rename/swaps vía critique; off en beta para no gastar cuota.
+    llm_refine_names: bool = False
     # Proveedor de reserva: entra cuando el primario falla o agota su cuota.
     llm_fallback_base_url: str = ""
     llm_fallback_api_key: str = ""
     llm_fallback_model: str = ""
+    # Tope de menús generados por cuenta y semana civil (0 = sin tope; la
+    # cuota del beta se aplica vía application/quota.py con calificaciones).
+    beta_menus_per_week: int = 0
     # URL pública de la app: la necesitan los enlaces de correo.
     base_url: str = "http://127.0.0.1:8000"
     # Dominios que la app acepta servir. Vacío = sin comprobación (solo local);

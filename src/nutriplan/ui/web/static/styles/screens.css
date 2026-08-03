@@ -180,6 +180,14 @@ fieldset.field legend { padding: 0; font: 600 var(--t-sm) Poppins, sans-serif; c
 }
 .gen-state .icon { font-size: 2.5rem; color: var(--brand); }
 .gen-state-error .icon { color: var(--danger); }
+.gen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  justify-content: center;
+  margin-top: var(--s-4);
+}
+.share-day { margin-top: var(--s-3); }
 .gen-spin { animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

@@ -84,9 +84,11 @@ async def _run_generation(
         job = await beacon.get(job_id)
         if job is None:  # pragma: no cover — el job se creó en el request
             return
+        s = container.settings
+        select = s.llm_select_foods
         model = (
-            container.settings.llm_model_generate
-            if container.llm_client is not None
+            s.llm_model_generate
+            if container.llm_client is not None and select
             else "engine-v1"
         )
         await run_generation_job(
@@ -95,10 +97,13 @@ async def _run_generation(
             food_repo=repos.foods, plan_repo=repos.plans,
             config=container.config_provider.get_nutrition_config(),
             llm=container.llm_client,
-            prompts_dir=container.settings.prompts_dir, model=model, variant=variant,
+            prompts_dir=s.prompts_dir, model=model, variant=variant,
             catalog=container.meal_catalog,
             recipe_repo=container.dish_recipe_repo(session),
             commit=session.commit,
+            select_foods=select,
+            refine_names=s.llm_refine_names,
+            recipe_model=s.llm_model_generate,
         )
 
 

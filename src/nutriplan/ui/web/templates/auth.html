@@ -7,6 +7,10 @@
   <link rel="preload" href="/static/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/app.js?v={{ asset_v }}" defer
+          data-google-client-id="{{ google_client_id or '' }}"
+          data-apple-client-id="{{ apple_client_id or '' }}"></script>
 </head>
 <body>
   <div class="auth-page">
@@ -50,18 +54,21 @@
         <label class="field"><span>Contraseña</span>
           <input name="password" type="password" required minlength="8"
                  placeholder="••••••••"></label>
+        {% if mode == 'signup' %}
+        <p class="muted auth-legal">Al crear la cuenta aceptas los
+          <a href="/terminos">términos</a> y la
+          <a href="/privacidad">privacidad</a>.</p>
+        {% endif %}
         <button class="btn btn-primary btn-big btn-block" type="submit">
           {{ 'Crear cuenta' if mode == 'signup' else 'Entrar' }}
         </button>
       </form>
 
-      {% if mode == 'signup' and (google_client_id or apple_client_id) %}
+      {% if google_client_id or apple_client_id %}
       <div class="auth-alt"><span>o</span></div>
-      {# El ID token lo produce el plugin nativo y se postea aquí: Google
-         bloquea su login dentro de un WebView plano. #}
+      {# El ID token lo produce el plugin nativo. Ocultos hasta que el
+         puente Capacitor los active (app.js). #}
       {% if google_client_id %}
-      {# Ocultos hasta que el puente nativo los active: en un navegador no hay
-   de dónde sacar el ID token. #}
       <form method="post" action="/auth/oauth/google" class="auth-social" hidden>
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <input type="hidden" name="id_token">

@@ -1,52 +1,50 @@
 # NutriPlan móvil (Capacitor)
 
-Envoltorio nativo de la app. El WebView carga la app **desde el servidor**
-(`server.url`), no un paquete local: la app es HTML renderizado en servidor con
-HTMX, así que empaquetarla exigiría reescribirla como SPA con API JSON.
+Envoltorio nativo. El WebView carga `https://app.nutriplan.co` (ver
+`capacitor.config.json`). Guía de listing: `docs/store-listing.md`.
 
-Que sea remota tiene una consecuencia que hay que tener presente: **Apple
-rechaza los envoltorios sin funcionalidad propia** (guía 4.2). Por eso la app
-nativa aporta lo que un navegador no puede:
+## Capacidades nativas (Apple 4.2)
 
-- Login con Google y con Apple **nativos**. No es un adorno: Google bloquea su
-  login dentro de un WebView plano, así que sin esto no hay login social en el
-  móvil.
-- Notificaciones push (recordar el menú de la semana).
-- Caché del menú para consultarlo sin conexión, que es justo cuando hace falta:
-  en el supermercado.
-- Compartir y haptics.
+| Capacidad | Estado en código |
+|---|---|
+| Login Google/Apple (`SocialLogin`) | `app.js` + `/auth/oauth/{provider}` |
+| Caché offline del menú (`Preferences`) | `app.js` guarda `week_html` |
+| Compartir día (`Share`) | botón `data-share-day` en la semana |
+| Haptics al generar | al ver “Todo listo” |
+| Push | plugin declarado; envío server-side aún no (no declarar en listing) |
 
-## Antes de compilar
+## Compilar
 
 ```bash
 cd mobile
 npm install
-npx cap add ios       # requiere CocoaPods: brew install cocoapods
-npx cap add android   # requiere Android Studio
+npx cap add ios       # una vez; requiere CocoaPods
+npx cap add android   # una vez
+npx @capacitor/assets generate --iconBackgroundColor '#F3EAE4' \
+  --splashBackgroundColor '#F3EAE4'
+# Coloca GoogleService-Info.plist / google-services.json (NO en git)
 npx cap sync
+npx cap open ios
+npx cap open android
 ```
 
-Apunta `server.url` en `capacitor.config.json` a tu dominio real antes de
-compilar. En desarrollo puedes usar tu IP local:
+Desarrollo contra máquina local:
 
 ```json
 "server": { "url": "http://192.168.1.10:8000", "cleartext": true }
 ```
 
-## Lo que falta y necesita una máquina con Xcode
+## Consolas
 
-| Paso | Dónde |
+| Artefacto | Dónde |
 |---|---|
-| `GoogleService-Info.plist` / `google-services.json` | consola de Google Cloud |
-| Client ID de Google (iOS, Android y Web) | `.env` del servidor → `GOOGLE_CLIENT_ID` |
-| Capacidad "Sign in with Apple" y Service ID | portal de Apple Developer |
-| Iconos y splash nativos | `npx capacitor-assets generate` |
-| Firma y perfiles | Xcode / Play Console |
+| `GoogleService-Info.plist` / `google-services.json` | Google Cloud |
+| `GOOGLE_CLIENT_ID` (web, es el `aud`) | `.env` / Fly secrets |
+| Sign in with Apple + Service ID | Apple Developer |
+| TestFlight Internal / Play Internal | `docs/store-listing.md` |
 
-## Riesgo conocido, sin verificar en dispositivo
+## CSP
 
-La app sirve una CSP estricta sin `unsafe-inline`. Capacitor inyecta su puente
-en la página; si el WebView lo bloqueara, `window.Capacitor` no existiría y el
-login nativo no aparecería (la app seguiría funcionando con correo y
-contraseña). Hay que comprobarlo en un dispositivo real: si pasa, se añaden los
-orígenes de Capacitor a la CSP en `ui/web/security.py`.
+La CSP permite `capacitor:` / `ionic:` (`ui/web/security.py`). Verificar en
+dispositivo real que `window.Capacitor` existe; si no, el login social no
+aparece y sigue el camino correo/contraseña.

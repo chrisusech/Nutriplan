@@ -77,6 +77,9 @@ async def run_generation_job(
     catalog: MealCatalog | None = None,
     recipe_repo: DishRecipeRepository | None = None,
     commit: Callable[[], Awaitable[None]] | None = None,
+    select_foods: bool = False,
+    refine_names: bool = False,
+    recipe_model: str | None = None,
 ) -> Job:
     """Genera el menú y deja el job en `done` o `failed`.
 
@@ -107,13 +110,15 @@ async def run_generation_job(
             model=model,
             variant=variant,
             catalog=catalog,
+            select_foods=select_foods,
+            refine_names=refine_names,
         )
         # Las recetas van después del plan y nunca lo tumban: si fallan, la app
         # muestra los ingredientes y ya.
         if recipe_repo is not None:
             await _resolve_recipes(
                 cycle=cycle, food_repo=food_repo, repo=recipe_repo, llm=llm,
-                prompts_dir=prompts_dir, model=model, catalog=catalog,
+                prompts_dir=prompts_dir, model=recipe_model or model, catalog=catalog,
             )
         if commit is not None:
             await commit()

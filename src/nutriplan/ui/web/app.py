@@ -44,6 +44,9 @@ _PUBLIC_PREFIXES = (
     "/verificar",
     "/auth/oauth",
     "/privacidad",
+    "/terminos",
+    "/soporte",
+    "/health",
     "/recuperar",
     "/static",
     "/logout",
@@ -186,6 +189,12 @@ def create_app(container: Container | None = None) -> FastAPI:
         )
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        """Liveness para Fly / balanceadores. Sin DB: un fallo de Postgres no
+        debe tumbar el check de despliegue mientras reiniciamos."""
+        return {"status": "ok"}
 
     from nutriplan.ui.web.routes import (
         account,

@@ -265,18 +265,23 @@ def _selector_for(
     config: NutritionConfig,
     variant: int,
     catalog: MealCatalog | None = None,
+    *,
+    select_foods: bool = False,
 ) -> LLMClient:
     """El motor de la fase.
 
-    Con `ANTHROPIC_API_KEY` manda el LLM real. Sin ella, el de PLATOS, que solo
-    emite combinaciones que un humano escribió. Si la lista del cliente es tan
-    corta que no da para armar ningún plato en algún slot, cae al heurístico
-    —que compone rol por rol y siempre produce algo— en vez de fallar.
+    Por defecto (beta) el LLM no elige alimentos: TemplateSelector arma platos
+    escritos por humanos. `select_foods=True` restaura el camino legacy en el
+    que el modelo propone food_ids. Si el catálogo no alcanza, HeuristicSelector.
     """
     from nutriplan.adapters.llm.heuristic import HeuristicSelector
     from nutriplan.adapters.llm.template_selector import InsufficientDishes, TemplateSelector
 
-    if llm is not None and not isinstance(llm, HeuristicSelector | TemplateSelector):
+    if (
+        select_foods
+        and llm is not None
+        and not isinstance(llm, HeuristicSelector | TemplateSelector)
+    ):
         return llm
 
     seed = variant
@@ -302,13 +307,16 @@ async def _generate_week(
     variant: int,
     feedback: str | None,
     catalog: MealCatalog | None = None,
+    select_foods: bool = False,
 ) -> tuple[list[DayPlan], list[str]]:
     from nutriplan.adapters.llm.heuristic import HeuristicSelector
     from nutriplan.adapters.llm.template_selector import TemplateSelector
 
     prompt = load_prompt(prompts_dir, "plan_generation", PLAN_PROMPT_VERSION)
     slots = _slots_of(config)
-    selector = _selector_for(llm, allowed, targets, config, variant, catalog)
+    selector = _selector_for(
+        llm, allowed, targets, config, variant, catalog, select_foods=select_foods
+    )
     offline = isinstance(selector, HeuristicSelector | TemplateSelector)
 
     # Al modelo se le enseña un catálogo corto: los 172 alimentos gastan ~6.400
@@ -397,17 +405,24 @@ async def generate_cycle(
     model: str,
     variant: int = 0,
     catalog: MealCatalog | None = None,
+    select_foods: bool = False,
+    refine_names: bool = False,
 ) -> PlanCycle:
     prompt = load_prompt(prompts_dir, "plan_generation", PLAN_PROMPT_VERSION)
     # El hash con el que se GUARDA tiene que ser el mismo con el que se BUSCA
     # (`generate_plan_for_client`). Sin `catalog_version` aquí, el plan se guardaba
     # con un hash que nadie consulta: la caché no acertaba nunca y, al regenerar el
     # mismo plan, la inserción chocaba contra la unicidad de (tenant, hash, variant).
+    uses_llm_in_plan = select_foods or refine_names
     input_hash = compute_input_hash(
         client,
         targets,
         config.version,
-        f"{prompt.version}+review.v{REVIEW_PROMPT_VERSION}" if llm else prompt.version,
+        (
+            f"{prompt.version}+review.v{REVIEW_PROMPT_VERSION}"
+            if uses_llm_in_plan and llm
+            else prompt.version
+        ),
         allowed,
         variant,
         catalog_version=catalog.version if catalog else "",
@@ -415,6 +430,7 @@ async def generate_cycle(
 
     feedback: str | None = None
     failures: list[str] = []
+    plan_model = model if select_foods else "engine-v1"
 
     for attempt in range(1 + config.generation.max_retries):
         days, problems = await _generate_week(
@@ -428,15 +444,17 @@ async def generate_cycle(
             variant=variant,
             feedback=feedback,
             catalog=catalog,
+            select_foods=select_foods,
         )
 
         if not problems and len(days) == DAYS_PER_WEEK:
-            # La pasada de sabor. Devuelve None sin LLM o si el proveedor falla,
-            # y entonces el menú se queda exactamente como lo dejó el solver.
-            refined = await refine_week(
-                days=days, client=client, allowed=allowed, config=config,
-                daily=targets.daily, llm=llm, prompts_dir=prompts_dir, model=model,
-            )
+            # La pasada de sabor. En beta viene apagada (`refine_names=False`).
+            refined = None
+            if refine_names:
+                refined = await refine_week(
+                    days=days, client=client, allowed=allowed, config=config,
+                    daily=targets.daily, llm=llm, prompts_dir=prompts_dir, model=model,
+                )
             if refined is not None:
                 days = refined.days
             logger.info(
@@ -455,7 +473,7 @@ async def generate_cycle(
                 status=PlanStatus.DRAFT,
                 config_version=config.version,
                 prompt_version=prompt.version,
-                model=model,
+                model=plan_model,
                 input_hash=input_hash,
                 created_at=datetime.now(UTC),
                 refined_at=datetime.now(UTC) if refined is not None else None,
@@ -490,6 +508,8 @@ async def generate_plan_for_client(
     model: str,
     variant: int = 0,
     catalog: MealCatalog | None = None,
+    select_foods: bool = False,
+    refine_names: bool = False,
 ) -> PlanCycle:
     """Orquesta el menú de la semana, de punta a punta."""
     allowed = await resolve_allowed_foods(
@@ -535,6 +555,8 @@ async def generate_plan_for_client(
         model=model,
         variant=variant,
         catalog=catalog,
+        select_foods=select_foods,
+        refine_names=refine_names,
     )
     cycle = cycle.model_copy(update={"version": version})
     # Solo lo definitivo se guarda: hay un único borrador vivo por cliente, y este

@@ -182,13 +182,16 @@ class TemplateSelector:
             en un snack de 129 kcal son ~22 g de proteína contra un objetivo de
             5 — no hay gramaje que lo arregle, porque bajarlo incumple las kcal.
 
-            El límite inferior: cada alimento del plato pesa AL MENOS su porción
-            mínima —el solver no baja de ahí— y las kcal que falten para llegar
-            al objetivo se cubren, en el mejor de los casos, con el alimento
-            menos proteico. Si ni con esa cuenta optimista se baja del objetivo,
-            este plato no puede cuadrar en este slot nunca.
+            Dos suelos, se toma el peor (el más alto):
+            A) Optimista por kcal: cada alimento en su porción mínima y el resto
+               de kcal con el alimento menos proteico. Caza el snack de yogur.
+            B) Como el solver: los carbos pesan lo que mande su objetivo del
+               slot (pan/avena arrastran proteína). Sin esto, un desayuno
+               lácteo+pan pasaba el filtro A (~33 g vs 26) y fallaba al
+               aterrizar (~41 g).
             """
             kcal_target = kcal_targets.get(dish.slot, 0.0)
+            carb_target = carb_targets.get(dish.slot, 0.0)
             target = targets.get(dish.slot, 0.0)
             if kcal_target <= 0 or target <= 0:
                 return True
@@ -199,13 +202,24 @@ class TemplateSelector:
                 return True
 
             proteina_base = kcal_base = 0.0
+            minima_solver = 0.0
             for food in dish.foods:
-                grams = food.portion_min_g or MIN_CO_PORTION_G
-                proteina_base += food.protein_100g * grams / 100.0
-                kcal_base += food.kcal_100g * grams / 100.0
+                floor_g = food.portion_min_g or MIN_CO_PORTION_G
+                proteina_base += food.protein_100g * floor_g / 100.0
+                kcal_base += food.kcal_100g * floor_g / 100.0
+                if food.category in CARB_GROUP and food.carb_100g > 0 and carb_target > 0:
+                    grams = carb_target / (food.carb_100g / 100.0)
+                else:
+                    grams = floor_g
+                minima_solver += food.protein_100g * grams / 100.0
             resto = max(kcal_target - kcal_base, 0.0)
-            minima = proteina_base + resto * min(densidades)
-            return minima - target <= max(target * protein_tolerance, MIN_RELEVANT_G)
+            minima_kcal = proteina_base + resto * min(densidades)
+            minima = max(minima_kcal, minima_solver)
+            # El filtro tiene que ser MÁS estrecho que el validador: el solver
+            # aterriza por encima del mínimo. Sin este margen de 2 g, un plato
+            # con suelo 48.4 g passaba el ±10 g y fallaba en 48.6 al validar.
+            allowance = max(target * protein_tolerance, MIN_RELEVANT_G) - 2.0
+            return minima - target <= max(allowance, 0.0)
 
         def dish_admissible(dish: Dish) -> bool:
             """¿Puede el ancla de este plato cuadrar la proteína del slot AQUÍ?

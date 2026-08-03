@@ -79,6 +79,9 @@ line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
 extend-exclude = ["migrations"]
+# Criterio de CI: `ruff check` (lint). NO exigimos `ruff format --check`: el
+# repo usa llamadas compactas a propósito y formatearlas reescribía ~80
+# archivos. Quien quiera formatear un archivo nuevo puede; no es gate.
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
