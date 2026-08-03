@@ -277,8 +277,7 @@ class MealItemRow(Base):
     __tablename__ = "meal_items"
     __table_args__ = (
         CheckConstraint(
-            "(food_id IS NOT NULL AND recipe_id IS NULL) OR "
-            "(food_id IS NULL AND recipe_id IS NOT NULL)",
+            "food_id IS NOT NULL",
             name="meal_items_one_source",
         ),
         CheckConstraint(
@@ -294,7 +293,6 @@ class MealItemRow(Base):
     )
     position: Mapped[int] = mapped_column(Integer, default=0)
     food_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("foods.id"), nullable=True)
-    recipe_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("recipes.id"), nullable=True)
     grams: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
@@ -313,27 +311,6 @@ class GenerationJobRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
-class RecipeRow(Base):
-    __tablename__ = "recipes"
-
-    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
-    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
-    name: Mapped[str] = mapped_column(String(200))
-    # Vacío = receta declarada POR MACROS (un plato de restaurante con sus números
-    # exactos), no por ingredientes. Los macros son entonces el dato, no el derivado.
-    ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # [{food_id, grams}]
-    macros: Mapped[dict[str, float]] = mapped_column(JSON)
-    total_grams: Mapped[float] = mapped_column(Float)
-    # En qué comidas encaja el plato. Sin esto, el alimento compuesto que sale al
-    # verificarla deriva sus comidas de la CATEGORÍA: una hamburguesa acababa siendo
-    # apta para desayuno.
-    meal_slots: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
-    status: Mapped[str] = mapped_column(String(20), index=True, default="pending")
-    created_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    compound_food_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 
 
 class AuditLogRow(Base):
@@ -387,7 +364,10 @@ class DishRatingRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
-    plan_cycle_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("plan_cycles.id"), index=True)
+    # Sin FK a propósito: generar una semana nueva borra el borrador anterior, y
+    # una clave foránea haría que el borrado se llevara por delante justamente
+    # los datos que el BETA existe para recoger.
+    plan_cycle_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     day_index: Mapped[int] = mapped_column(SmallInteger)
     slot: Mapped[str] = mapped_column(String(20))
     # Se copian del plato en vez de referenciarlo: el rating tiene que sobrevivir a

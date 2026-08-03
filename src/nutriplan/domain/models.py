@@ -311,7 +311,6 @@ class MealItem(BaseModel):
 
     id: int | None = None
     food_id: UUID | None = None
-    recipe_id: UUID | None = None
     grams: float | None = None
     is_free: bool = False
     is_locked: bool = False
@@ -319,10 +318,8 @@ class MealItem(BaseModel):
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "MealItem":
-        has_food = self.food_id is not None
-        has_recipe = self.recipe_id is not None
-        if has_food == has_recipe:
-            raise ValueError("MealItem requiere food_id o recipe_id, no ambos ni ninguno")
+        if self.food_id is None:
+            raise ValueError("MealItem requiere un food_id")
         if not self.is_free and (self.grams is None or self.grams <= 0):
             raise ValueError("MealItem con macros debe tener grams > 0")
         return self
@@ -471,8 +468,8 @@ class Branding(BaseModel):
 
 
 class Role(StrEnum):
-    """Rol de la cuenta. `user` es el entrenador; `super_user` es el dueño de la
-    plataforma (crea entrenadores, fija cupos, bloquea) y no tiene límites."""
+    """Rol de la cuenta. `user` es quien usa la app; `super_user` es el dueño de
+    la plataforma: ve las métricas globales y no tiene cuota."""
 
     USER = "user"
     SUPER_USER = "super_user"
@@ -506,55 +503,3 @@ class Account(BaseModel):
     max_menus: int | None = None
 
 
-class RecipeStatus(StrEnum):
-    PENDING = "pending"
-    VERIFIED = "verified"
-    REJECTED = "rejected"
-
-
-class RecipeIngredient(BaseModel):
-    food_id: UUID
-    grams: float = Field(gt=0)
-
-
-class Recipe(BaseModel):
-    """Un plato con sus macros. De dos maneras, porque hay dos clases de plato.
-
-    POR INGREDIENTES: el entrenador lista qué lleva y cuánto, y los macros los
-    calcula el DOMINIO (`portioning.macros_of`). Es la receta que se cocina en casa.
-
-    POR MACROS: el plato de un restaurante, del que no se conoce la receta pero sí
-    los números exactos. `ingredients` va vacío y los macros son el DATO, no el
-    derivado. Antes esto no se podía registrar —`create_recipe` exigía al menos un
-    ingrediente— y un cliente que come fuera se quedaba sin poder contarlo.
-
-    En ambos casos: el entrenador la sube (pending), un admin la verifica
-    (verified), y al verificarla se materializa como 'alimento compuesto' del
-    tenant, disponible para armar planes.
-    """
-
-    id: UUID
-    tenant_id: UUID
-    name: str
-    ingredients: list[RecipeIngredient] = []  # vacío = declarada por macros
-    macros: MacroTargets  # totales del plato: calculados, o declarados a mano
-    total_grams: float = Field(gt=0)  # lo que pesa una porción
-    # En qué comidas encaja el plato. Sin esto, el alimento compuesto derivaría sus
-    # comidas de la CATEGORÍA dominante y una hamburguesa saldría en un desayuno.
-    meal_slots: list[MealSlot] = []
-    status: RecipeStatus = RecipeStatus.PENDING
-    created_by: UUID | None = None  # cuenta de entrenador que la subió
-    created_at: datetime
-    compound_food_id: UUID | None = None  # alimento generado al verificar
-
-    @model_validator(mode="after")
-    def _carries_energy(self) -> "Recipe":
-        """Un plato sin ingredientes NI macros no es nada: no aporta al plan."""
-        if not self.ingredients and not any(
-            (self.macros.protein_g, self.macros.carb_g, self.macros.fat_g)
-        ):
-            raise ValueError(
-                "La receta necesita ingredientes, o los macros del plato (proteína, "
-                "carbohidrato o grasa)"
-            )
-        return self

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Métricas{% endblock %}
+
+{% block content %}
+<h1>Métricas del BETA</h1>
+<p class="muted">Qué come la gente y qué le gustó.</p>
+
+<section class="card metric-card">
+  <h2>El embudo</h2>
+  <ul class="funnel">
+    {% set tope = funnel.registros or 1 %}
+    {% for etiqueta, total in funnel.pasos %}
+    <li>
+      <div class="funnel-row">
+        <span>{{ etiqueta }}</span>
+        <b>{{ total }}</b>
+      </div>
+      <div class="funnel-bar"><i class="funnel-fill funnel-w{{ (total * 10 // tope) }}"></i></div>
+    </li>
+    {% endfor %}
+  </ul>
+  <ul class="funnel-aside">
+    {% for etiqueta, total in funnel.aparte %}
+    <li><span>{{ etiqueta }}</span><b>{{ total }}</b></li>
+    {% endfor %}
+  </ul>
+  <p class="muted funnel-note">Estos dos no van en la barra: no dependen de los pasos de arriba.</p>
+</section>
+
+<div class="metric-pair">
+  <section class="card metric-card">
+    <h2>Los que más gustan</h2>
+    {% if mejores %}
+    <ol class="rank">
+      {% for d in mejores %}
+      <li><span>{{ d.plantilla }}</span><b>{{ d.media }}</b><i>{{ d.votos }} votos</i></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="muted">Aún nadie ha calificado lo suficiente.</p>{% endif %}
+  </section>
+
+  <section class="card metric-card">
+    <h2>Los que menos</h2>
+    {% if peores %}
+    <ol class="rank rank-bad">
+      {% for d in peores %}
+      <li><span>{{ d.plantilla }}</span><b>{{ d.media }}</b><i>{{ d.votos }} votos</i></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="muted">Aún no hay suficientes datos.</p>{% endif %}
+  </section>
+</div>
+
+<div class="metric-pair">
+  <section class="card metric-card">
+    <h2>Objetivos</h2>
+    <ul class="tally">
+      {% for r in objetivos %}<li><span>{{ r.valor }}</span><b>{{ r.total }}</b></li>{% endfor %}
+    </ul>
+  </section>
+  <section class="card metric-card">
+    <h2>Ciudades</h2>
+    <ul class="tally">
+      {% for r in ciudades %}<li><span>{{ r.valor }}</span><b>{{ r.total }}</b></li>{% endfor %}
+      {% if not ciudades %}<li class="muted">Nadie ha dicho de dónde es.</li>{% endif %}
+    </ul>
+  </section>
+</div>
+
+<section class="card metric-card">
+  <h2>Cómo come la gente</h2>
+  <p class="muted">Lo que escribieron en el onboarding, en sus palabras.</p>
+  <ul class="quotes">
+    {% for h in habitos %}<li>«{{ h }}»</li>{% endfor %}
+    {% if not habitos %}<li class="muted">Todavía nadie lo ha contado.</li>{% endif %}
+  </ul>
+</section>
+
+<section class="card metric-card">
+  <h2>Lo que nos escriben</h2>
+  <ul class="quotes">
+    {% for c in comentarios %}
+    <li><span class="pill">{{ c.categoria }}</span>
+      {% if c.nps is not none %}<span class="pill">NPS {{ c.nps }}</span>{% endif %}
+      «{{ c.mensaje }}»</li>
+    {% endfor %}
+    {% if not comentarios %}<li class="muted">Nadie ha opinado todavía.</li>{% endif %}
+  </ul>
+</section>
+
+<section class="card metric-card">
+  <h2>Uso (últimos 14 días)</h2>
+  <ul class="tally">
+    {% for e in eventos %}<li><span>{{ e.evento }}</span><b>{{ e.total }}</b></li>{% endfor %}
+    {% if not eventos %}<li class="muted">Sin eventos registrados.</li>{% endif %}
+  </ul>
+</section>
+
+<a class="btn btn-outline btn-block" href="/admin/metricas.csv">
+  <span class="icon">download</span>Descargar los platos en CSV
+</a>
+{% endblock %}

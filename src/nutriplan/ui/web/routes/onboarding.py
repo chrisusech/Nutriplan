@@ -12,8 +12,10 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutriplan.application.analytics import Event
 from nutriplan.application.onboarding import create_profile
 from nutriplan.domain.errors import ValidationError
+from nutriplan.domain.food_filter import RESTRICTION_TAG_MAP
 from nutriplan.domain.models import (
     CORE_MEAL_SLOTS,
     ActivityLevel,
@@ -29,6 +31,7 @@ from nutriplan.ui.web.deps import (
     render,
     repos_of,
     tenant_of,
+    track_event,
 )
 
 router = APIRouter()
@@ -61,6 +64,16 @@ def _safe_uuids(raw_ids: list[str]) -> list[UUID]:
         except ValueError:
             continue
     return ids
+
+
+def _restricciones(raw: list[str]) -> list[str]:
+    """Solo las que el filtro de alimentos sabe traducir a tags.
+
+    `allowed_foods` se niega —con razón— a adivinar qué prohíbe una restricción
+    que no conoce, así que dejar pasar una cadena cualquiera desde el formulario
+    convertía la generación en un 500 varios pasos más adelante.
+    """
+    return [r for r in raw if r in RESTRICTION_TAG_MAP]
 
 
 def _meal_slots(raw: list[str]) -> list[MealSlot]:
@@ -101,10 +114,14 @@ async def onboarding_page(
     repos = repos_of(request, session)
     existing = await repos.clients.get_by_user(account_id_of(request))
     if existing is not None:
-        return RedirectResponse(f"/generador?cliente={existing.id}", status_code=303)
+        return RedirectResponse("/", status_code=303)
+    cuenta = await container_of(request).auth_repo(session).get_by_id(account_id_of(request))
     return render(
         request, "onboarding.html", active_tab="onboarding",
-        form=None, groups=await _food_groups(request, session, set()),
+        # El nombre ya lo escribió al registrarse: repetir la pregunta en el
+        # primer campo del primer paso es la peor primera impresión posible.
+        form={"name": cuenta.name, "restrictions": []} if cuenta else None,
+        groups=await _food_groups(request, session, set()),
     )
 
 
@@ -149,7 +166,7 @@ async def submit_onboarding(
             city=city,
             country=country,
             liked_food_ids=_safe_uuids(food_ids),
-            restrictions=restrictions,
+            restrictions=_restricciones(restrictions),
             dislikes=[d for d in dislikes.replace("\n", ",").split(",") if d.strip()],
             context_tags=context_tags,
             eating_pattern_raw=eating_pattern_raw,
@@ -166,4 +183,13 @@ async def submit_onboarding(
             },
             groups=await _food_groups(request, session, set(food_ids)),
         )
-    return RedirectResponse(f"/generador?cliente={client.id}", status_code=303)
+    await track_event(
+        request, session, Event.ONBOARDING_DONE,
+        comidas=len(client.meal_slots),
+        marco_alimentos=len(client.liked_food_ids),
+        conto_habitos=client.eating_pattern_raw is not None,
+        contexto=client.context_tags,
+        objetivo=client.goal.value,
+        tiene_ciudad=client.city is not None,
+    )
+    return RedirectResponse("/", status_code=303)

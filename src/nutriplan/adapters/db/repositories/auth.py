@@ -22,7 +22,6 @@ from nutriplan.adapters.db.models import (
     MealItemRow,
     NutritionTargetsRow,
     PlanCycleRow,
-    RecipeRow,
     TenantRow,
     UserRow,
 )
@@ -188,7 +187,7 @@ class SqlAccountEraser:
         for table in (
             DishRatingRow, AppFeedbackRow, PlanCycleRow, NutritionTargetsRow,
             ClientFoodPreferenceRow, ClientFoodBanRow, ClientRow, GenerationJobRow,
-            RecipeRow, AuditLogRow,
+            AuditLogRow,
         ):
             await self._s.execute(delete(table).where(table.tenant_id == tenant_id))
         await self._s.flush()

@@ -83,16 +83,17 @@ class SqlRatingRepository:
         return int((await self._s.execute(stmt)).scalar() or 0) > 0
 
     async def quota_for(self, plan_cycle_id: UUID, *, max_menus: int | None = None) -> MenuQuota:
-        menus = int(
-            (
-                await self._s.execute(
-                    select(func.count())
-                    .select_from(PlanCycleRow)
-                    .where(PlanCycleRow.tenant_id == self._tenant)
+        # Contar filas daría siempre 1: generar una semana nueva borra el
+        # borrador anterior. `variant` sí lleva la cuenta y sobrevive en la
+        # fila que queda, que es la única memoria duradera de cuántas van.
+        ultimo = (
+            await self._s.execute(
+                select(func.max(PlanCycleRow.variant)).where(
+                    PlanCycleRow.tenant_id == self._tenant
                 )
-            ).scalar()
-            or 0
-        )
+            )
+        ).scalar()
+        menus = 0 if ultimo is None else int(ultimo) + 1
         return evaluate(
             menus_generated=menus,
             ratings=await self.count_for_plan(plan_cycle_id),

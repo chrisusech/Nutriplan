@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutriplan.application.analytics import Event, track
 from nutriplan.container import Container, Repos
 from nutriplan.domain.models import Account, Role
 from nutriplan.ui.web import format as fmt
@@ -98,7 +99,7 @@ def tenant_of(request: Request) -> UUID:
         raise RuntimeError("El tenant de la sesión no es un UUID") from None
 
 
-def current_trainer(request: Request) -> dict[str, str] | None:
+def current_account(request: Request) -> dict[str, str] | None:
     sess = request.session if "session" in request.scope else {}
     if sess.get("tenant_id"):
         return {"name": sess.get("name", ""), "email": sess.get("email", ""),
@@ -124,7 +125,7 @@ def is_super_user(request: Request) -> bool:
     return role_of(request) == Role.SUPER_USER
 
 
-async def acting_trainer(request: Request, session: AsyncSession) -> Account | None:
+async def acting_account(request: Request, session: AsyncSession) -> Account | None:
     """La cuenta logueada, con sus cupos, para el enforcement. `None` si no hay sesión."""
     email = request.session.get("email") if "session" in request.scope else None
     if not email:
@@ -145,6 +146,30 @@ async def db_session(request: Request) -> AsyncIterator[AsyncSession]:
             raise
 
 
+async def track_event(
+    request: Request, session: AsyncSession, event: Event, **props: object
+) -> None:
+    """Registra un evento del embudo si esa persona dio su consentimiento.
+
+    Se resuelve aquí y no en cada ruta para que sea imposible olvidarse del
+    permiso: la comprobación vive en un solo sitio.
+    """
+    container = container_of(request)
+    email = request.session.get("email") if "session" in request.scope else None
+    account = None
+    if email:
+        account = await container.auth_repo(session).get_by_email_any_provider(str(email))
+    await track(
+        event,
+        repo=container.event_repo(session),
+        has_consent=account is not None and account.consent_analytics_at is not None,
+        user_id=account.id if account else None,
+        tenant_id=account.tenant_id if account else None,
+        platform=request.headers.get("X-Platform", "web")[:20],
+        **props,
+    )
+
+
 def repos_of(request: Request, session: AsyncSession) -> Repos:
     return container_of(request).repos(session, tenant_of(request))
 
@@ -158,9 +183,8 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
         name=template,
         context={
             "branding": branding,
-            "brand": branding.primary_color,
-            "trainer_initials": presenter.initials(branding.tenant_name),
-            "trainer": current_trainer(request),
+            "iniciales": presenter.initials(branding.tenant_name),
+            "cuenta": current_account(request),
             "role": role_of(request),
             "csrf_token": csrf_token(request),
             "offline": container.llm_client is None,

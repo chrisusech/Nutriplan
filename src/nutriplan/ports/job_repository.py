@@ -27,11 +27,20 @@ class Job(BaseModel):
     updated_at: datetime
 
 
-class JobRepository(Protocol):
+class JobStatusSink(Protocol):
+    """Solo anunciar en qué va el job.
+
+    Es lo único que la tarea de fondo necesita, y pedir menos es lo que permite
+    escribir el progreso en una transacción aparte de la del plan.
+    """
+
+    async def update(self, job: Job) -> None: ...
+
+
+class JobRepository(JobStatusSink, Protocol):
     async def add(self, job: Job) -> None: ...
     async def get(self, job_id: UUID) -> Job | None: ...
     async def get_by_idempotency_key(self, key: str) -> Job | None: ...
-    async def update(self, job: Job) -> None: ...
 
 
 class AuditLogRepository(Protocol):

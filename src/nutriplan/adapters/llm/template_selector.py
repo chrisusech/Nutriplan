@@ -42,6 +42,7 @@ from nutriplan.domain.models import (
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import fits_protein, usable_in_slot
+from nutriplan.domain.validation import MIN_RELEVANT_G
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -163,10 +164,48 @@ class TemplateSelector:
             if config
             else {}
         )
+        kcal_targets = (
+            {s: daily.kcal * sh.kcal for s, sh in config.meal_distribution.items()}
+            if config
+            else {}
+        )
         protein_tolerance = config.tolerances.protein_g if config else 0.10
 
         def admissible(food: FoodItem, slot: MealSlot) -> bool:
             return fits_protein(food, targets.get(slot, 0.0))
+
+        def _fits_by_kcal(dish: Dish) -> bool:
+            """¿Cabe este plato en las kcal del slot sin pasarse de proteína?
+
+            Porcionar en gramos no basta para aterrizar donde sea: las kcal del
+            slot fijan cuánto se sirve, y con ello la proteína. Un yogur griego
+            en un snack de 129 kcal son ~22 g de proteína contra un objetivo de
+            5 — no hay gramaje que lo arregle, porque bajarlo incumple las kcal.
+
+            El límite inferior: cada alimento del plato pesa AL MENOS su porción
+            mínima —el solver no baja de ahí— y las kcal que falten para llegar
+            al objetivo se cubren, en el mejor de los casos, con el alimento
+            menos proteico. Si ni con esa cuenta optimista se baja del objetivo,
+            este plato no puede cuadrar en este slot nunca.
+            """
+            kcal_target = kcal_targets.get(dish.slot, 0.0)
+            target = targets.get(dish.slot, 0.0)
+            if kcal_target <= 0 or target <= 0:
+                return True
+            densidades = [
+                f.protein_100g / f.kcal_100g for f in dish.foods if f.kcal_100g > 0
+            ]
+            if not densidades:
+                return True
+
+            proteina_base = kcal_base = 0.0
+            for food in dish.foods:
+                grams = food.portion_min_g or MIN_CO_PORTION_G
+                proteina_base += food.protein_100g * grams / 100.0
+                kcal_base += food.kcal_100g * grams / 100.0
+            resto = max(kcal_target - kcal_base, 0.0)
+            minima = proteina_base + resto * min(densidades)
+            return minima - target <= max(target * protein_tolerance, MIN_RELEVANT_G)
 
         def dish_admissible(dish: Dish) -> bool:
             """¿Puede el ancla de este plato cuadrar la proteína del slot AQUÍ?
@@ -187,7 +226,7 @@ class TemplateSelector:
             """
             anchor = dish.anchor
             if anchor.unit_granularity is UnitGranularity.GRAMS:
-                return True  # se porciona fino: siempre aterriza donde haga falta
+                return _fits_by_kcal(dish)
             target = targets.get(dish.slot, 0.0)
             unit_protein = anchor.protein_100g * (anchor.default_unit_g or 0.0) / 100.0
             if target <= 0 or unit_protein <= 0:

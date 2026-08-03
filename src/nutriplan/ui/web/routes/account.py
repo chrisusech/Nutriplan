@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutriplan.application.analytics import Event
 from nutriplan.ui.web.deps import (
     account_id_of,
     container_of,
     db_session,
     render,
     repos_of,
+    track_event,
 )
 
 router = APIRouter()
@@ -48,6 +50,8 @@ async def give_consent(
     await container_of(request).auth_repo(session).grant_analytics_consent(
         account_id_of(request)
     )
+    # El primer evento que se puede registrar es, precisamente, el permiso.
+    await track_event(request, session, Event.CONSENT_GIVEN)
     return RedirectResponse("/onboarding", status_code=303)
 
 
@@ -96,5 +100,8 @@ async def submit_feedback(
         message=texto,
         nps=int(nps) if nps.isdigit() and 0 <= int(nps) <= 10 else None,
         platform=request.headers.get("X-Platform", "web")[:20],
+    )
+    await track_event(
+        request, session, Event.FEEDBACK_SENT, category=category, tiene_nps=bool(nps)
     )
     return RedirectResponse("/feedback?gracias=1", status_code=303)

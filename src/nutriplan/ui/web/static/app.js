@@ -5,13 +5,6 @@
 (() => {
   'use strict';
 
-  // El color de marca llega como atributo del <body>: es el único estilo que
-  // depende del servidor, y así no hace falta un <style> inline.
-  // Solo el color base: el tinte lo deriva el CSS con color-mix() para que
-  // siga al tema claro/oscuro. Fijarlo aquí lo congelaba en su versión clara.
-  const brand = document.body.dataset.brand;
-  if (brand) document.documentElement.style.setProperty('--brand', brand);
-
   // Al reemplazar un bloque grande, el documento se encoge, el navegador
   // recorta el scroll y al reinsertar ya no vuelve: calificar un plato te
   // mandaba al fondo de la página.
@@ -48,6 +41,53 @@
         }
       });
     }
+  }
+
+  // --- Onboarding por pasos -----------------------------------------------
+  // Una pantalla, una pregunta: en un móvil, seis secciones en un scroll son
+  // un muro. El formulario sigue siendo UNO solo —un POST al final, sin estado
+  // a medias en la base—; esto solo decide qué se ve. Sin JavaScript se ven
+  // todos los pasos seguidos, que es exactamente lo que había antes.
+  const stepper = document.querySelector('[data-stepper]');
+  if (stepper) {
+    const steps = [...stepper.querySelectorAll('.onb-step')];
+    const back = stepper.querySelector('[data-back]');
+    const next = stepper.querySelector('[data-next]');
+    const submit = stepper.querySelector('[data-submit]');
+    const fill = stepper.querySelector('[data-progress]');
+    fill.dataset.of = String(stepper.querySelectorAll('.onb-step').length);
+    const count = stepper.querySelector('[data-count]');
+    let at = 0;
+
+    const show = () => {
+      steps.forEach((step, i) => { step.hidden = i !== at; });
+      back.hidden = at === 0;
+      next.hidden = at === steps.length - 1;
+      submit.hidden = at !== steps.length - 1;
+      fill.dataset.at = String(at + 1);
+      count.textContent = `Paso ${at + 1} de ${steps.length}`;
+      // El foco al título, o un lector de pantalla se queda en el paso viejo.
+      const title = steps[at].querySelector('h2');
+      if (title) { title.setAttribute('tabindex', '-1'); title.focus(); }
+      window.scrollTo(0, 0);
+    };
+
+    // Avanzar con un campo inválido escondería el error en un paso que ya no
+    // se ve: el navegador lo señala aquí y ahora.
+    const valid = () => [...steps[at].querySelectorAll('input, select, textarea')]
+      .every((field) => field.reportValidity());
+
+    next.addEventListener('click', () => { if (valid()) { at += 1; show(); } });
+    back.addEventListener('click', () => { at -= 1; show(); });
+    // Enter en un campo suele significar "siguiente", no "enviar a medias".
+    stepper.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && event.target.tagName === 'INPUT'
+          && at < steps.length - 1) {
+        event.preventDefault();
+        if (valid()) { at += 1; show(); }
+      }
+    });
+    show();
   }
 
   // Un solo plato abierto a la vez: en un móvil, dos acordeones abiertos

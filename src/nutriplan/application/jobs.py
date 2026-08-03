@@ -5,7 +5,8 @@ tabla generation_jobs — la UI hace polling del estado y el salto a una cola
 real (Nivel 2) no cambia este contrato.
 """
 
-from datetime import UTC, datetime
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -18,15 +19,27 @@ from nutriplan.domain.meal_template import MealCatalog, static_recipes
 from nutriplan.domain.models import PlanCycle
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.ports.food_repository import FoodRepository
-from nutriplan.ports.job_repository import (
-    Job,
-    JobRepository,
-    JobStatus,
-)
+from nutriplan.ports.job_repository import Job, JobStatus, JobStatusSink
 from nutriplan.ports.llm_client import LLMClient
 from nutriplan.ports.repository import ClientRepository, PlanRepository, TargetsRepository
 
 logger = structlog.get_logger(__name__)
+
+# Un job corre en el mismo proceso que sirve las peticiones: si ese proceso se
+# cae o se reinicia a mitad, nadie vuelve a tocar la fila y se queda en
+# `running` para siempre. Pasado este margen lo damos por muerto, que es mejor
+# que dejar a alguien mirando la pantalla de carga sin salida.
+JOB_STALE_AFTER = timedelta(minutes=5)
+
+
+def is_stale(job: Job, *, now: datetime | None = None) -> bool:
+    """Un job que dice estar corriendo pero lleva demasiado sin dar señales."""
+    if job.status is not JobStatus.RUNNING:
+        return False
+    updated = job.updated_at
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=UTC)
+    return (now or datetime.now(UTC)) - updated > JOB_STALE_AFTER
 
 
 def new_job(*, tenant_id: UUID, idempotency_key: str) -> Job:
@@ -41,7 +54,7 @@ def new_job(*, tenant_id: UUID, idempotency_key: str) -> Job:
     )
 
 
-async def _finish(job: Job, job_repo: JobRepository, **updates: object) -> Job:
+async def _finish(job: Job, job_repo: JobStatusSink, **updates: object) -> Job:
     job = job.model_copy(update={**updates, "updated_at": datetime.now(UTC)})
     await job_repo.update(job)
     return job
@@ -50,7 +63,7 @@ async def _finish(job: Job, job_repo: JobRepository, **updates: object) -> Job:
 async def run_generation_job(
     *,
     job: Job,
-    job_repo: JobRepository,
+    job_repo: JobStatusSink,
     client_id: UUID,
     client_repo: ClientRepository,
     targets_repo: TargetsRepository,
@@ -63,7 +76,13 @@ async def run_generation_job(
     variant: int = 0,
     catalog: MealCatalog | None = None,
     recipe_repo: DishRecipeRepository | None = None,
+    commit: Callable[[], Awaitable[None]] | None = None,
 ) -> Job:
+    """Genera el menú y deja el job en `done` o `failed`.
+
+    `commit` confirma el plan antes de anunciarlo: quien vea `done` tiene que
+    poder leer el plan, no encontrarse una transacción a medias.
+    """
     job = await _finish(job, job_repo, status=JobStatus.RUNNING)
     try:
         client = await client_repo.get(client_id)
@@ -96,6 +115,8 @@ async def run_generation_job(
                 cycle=cycle, food_repo=food_repo, repo=recipe_repo, llm=llm,
                 prompts_dir=prompts_dir, model=model, catalog=catalog,
             )
+        if commit is not None:
+            await commit()
         return await _finish(
             job,
             job_repo,

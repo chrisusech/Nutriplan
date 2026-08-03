@@ -25,11 +25,9 @@ SCHEMA_RETRIES = 2  # reintentos si la respuesta no valida contra el esquema
 class AnthropicClient:
     def __init__(self, api_key: str, *, max_tokens_extract: int = 2048,
                  max_tokens_select: int = 8192) -> None:
-        import anthropic
-
         try:
-            import anthropic  # noqa: F401
-        except ImportError as exc:  # pragma: no cover - depende del extra
+            import anthropic
+        except ImportError as exc:
             raise LLMError(
                 "Claude es opcional: instala el extra `anthropic` "
                 "(uv sync --extra anthropic) o usa un proveedor OpenAI-compatible."

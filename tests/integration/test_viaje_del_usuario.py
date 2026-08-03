@@ -47,7 +47,7 @@ def _registrar(client: TestClient, email: str = "ana@correo.com") -> None:
     assert resp.status_code == 303, resp.text
 
 
-def _onboarding(client: TestClient, **overrides) -> str:
+def _onboarding(client: TestClient, **overrides) -> None:
     data = {
         "name": "Ana Pérez", "sex": "female", "age_years": 28,
         "height_cm": 165, "weight_kg": 62, "goal": "lose_fat",
@@ -58,7 +58,8 @@ def _onboarding(client: TestClient, **overrides) -> str:
     data.update(overrides)
     resp = client.post("/onboarding", data=data, follow_redirects=False)
     assert resp.status_code == 303, resp.text
-    return resp.headers["location"].split("cliente=")[1]
+    # Termina en su semana, no en la consola del entrenador que ya no existe.
+    assert resp.headers["location"] == "/"
 
 
 def _generar(client: TestClient) -> None:
@@ -116,10 +117,10 @@ def test_quien_entra_sin_perfil_va_derecho_al_onboarding(app) -> None:
 
 def test_quien_ya_tiene_perfil_no_vuelve_a_pasar_por_el_onboarding(app) -> None:
     _registrar(app)
-    cid = _onboarding(app)
+    _onboarding(app)
     again = app.get("/onboarding", follow_redirects=False)
     assert again.status_code == 303
-    assert cid in again.headers["location"]
+    assert again.headers["location"] == "/"
 
 
 def test_se_puede_mirar_cualquier_dia_de_la_semana(app) -> None:

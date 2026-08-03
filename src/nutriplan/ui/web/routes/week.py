@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutriplan.application.analytics import Event
 from nutriplan.domain.dish_recipe import DishRecipe
 from nutriplan.domain.models import MealSlot, PlanCycle
 from nutriplan.ui.web import week_view
@@ -19,6 +20,7 @@ from nutriplan.ui.web.deps import (
     db_session,
     render,
     repos_of,
+    track_event,
 )
 
 router = APIRouter()
@@ -110,6 +112,11 @@ async def rate_meal(
         template_id=meal.template_id,
         dish_key=meal.dish_key,
         rating=min(max(rating, 1), 5),
+    )
+    await track_event(
+        request, session, Event.DISH_RATED,
+        plantilla=meal.template_id, nota=min(max(rating, 1), 5),
+        dia=day.day_index, comida=slot,
     )
     return RedirectResponse(f"/?dia={dia}", status_code=303)
 

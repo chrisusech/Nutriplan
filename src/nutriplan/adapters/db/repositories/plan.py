@@ -40,7 +40,6 @@ class SqlPlanRepository:
             MealItem(
                 id=r.id,
                 food_id=r.food_id,
-                recipe_id=r.recipe_id,
                 grams=r.grams,
                 is_free=bool(r.is_free),
                 is_locked=bool(r.is_locked),
@@ -69,13 +68,13 @@ class SqlPlanRepository:
         self,
         items: list[MealItem],
         *,
-        preserve_ids: dict[tuple[UUID | None, UUID | None], int] | None = None,
+        preserve_ids: dict[UUID | None, int] | None = None,
         meal_entry_id: int | None = None,
     ) -> list[MealItemRow]:
         preserve_ids = preserve_ids or {}
         rows: list[MealItemRow] = []
         for item in items:
-            key = (item.food_id, item.recipe_id)
+            key = item.food_id
             item_id = item.id
             if item_id is None and key in preserve_ids:
                 item_id = preserve_ids[key]
@@ -83,7 +82,6 @@ class SqlPlanRepository:
                 "tenant_id": self._tenant,
                 "position": item.position,
                 "food_id": item.food_id,
-                "recipe_id": item.recipe_id,
                 "grams": item.grams,
                 "is_free": item.is_free,
                 "is_locked": item.is_locked,
@@ -235,13 +233,13 @@ class SqlPlanRepository:
             None,
         )
         preserve_meals: dict[MealSlot, int] = {}
-        preserve_items: dict[MealSlot, dict[tuple[UUID | None, UUID | None], int]] = {}
+        preserve_items: dict[MealSlot, dict[UUID | None, int]] = {}
         if existing is not None:
             for existing_meal in existing.meals:
                 slot = MealSlot(existing_meal.slot)
                 preserve_meals[slot] = existing_meal.id
                 preserve_items[slot] = {
-                    (item.food_id, item.recipe_id): item.id for item in existing_meal.items
+                    item.food_id: item.id for item in existing_meal.items
                 }
 
         if existing is not None:

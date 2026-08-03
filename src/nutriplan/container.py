@@ -23,11 +23,12 @@ from nutriplan.adapters.db.repositories import (
     SqlAuthRepository,
     SqlClientRepository,
     SqlDishRecipeRepository,
+    SqlEventRepository,
     SqlFoodRepository,
     SqlJobRepository,
+    SqlMetricsRepository,
     SqlPlanRepository,
     SqlRatingRepository,
-    SqlRecipeRepository,
     SqlTargetsRepository,
 )
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
@@ -53,7 +54,6 @@ class Repos:
     plans: SqlPlanRepository
     jobs: SqlJobRepository
     audit: SqlAuditLogRepository
-    recipes: SqlRecipeRepository
     ratings: SqlRatingRepository
 
 
@@ -82,12 +82,19 @@ class Container:
             plans=SqlPlanRepository(session, t),
             jobs=SqlJobRepository(session, t),
             audit=SqlAuditLogRepository(session, t),
-            recipes=SqlRecipeRepository(session, t),
             ratings=SqlRatingRepository(session, t),
         )
 
     def account_eraser(self, session: AsyncSession) -> SqlAccountEraser:
         return SqlAccountEraser(session)
+
+    def metrics_repo(self, session: AsyncSession) -> SqlMetricsRepository:
+        """Cruza tenants: solo para el super_user, y solo agregados."""
+        return SqlMetricsRepository(session)
+
+    def event_repo(self, session: AsyncSession) -> SqlEventRepository:
+        """Sin tenant: el embudo se lee agregado."""
+        return SqlEventRepository(session)
 
     def dish_recipe_repo(self, session: AsyncSession) -> SqlDishRecipeRepository:
         """Sin tenant: la caché de recetas es de todos."""
@@ -95,10 +102,6 @@ class Container:
 
     def auth_repo(self, session: AsyncSession) -> SqlAuthRepository:
         return SqlAuthRepository(session)
-
-    def admin_recipe_repo(self, session: AsyncSession) -> SqlRecipeRepository:
-        """Repo de recetas sin filtro de tenant (solo rutas de admin)."""
-        return SqlRecipeRepository(session, None)
 
     @cached_property
     def config_provider(self) -> YamlConfigProvider:

@@ -44,6 +44,7 @@ dev = [
     "httpx>=0.28.1",
     # Solo para generar los .docx de fixture del intake; la app ya no exporta Word.
     "python-docx>=1.1",
+    "playwright>=1.62.0",
 ]
 
 [project.scripts]

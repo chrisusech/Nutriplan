@@ -57,7 +57,7 @@ def _signup(client: TestClient, email: str = "ana@correo.com") -> None:
     client.post("/consentimiento", data={"acepta": "1"}, follow_redirects=False)
 
 
-def _complete_onboarding(client: TestClient) -> str:
+def _complete_onboarding(client: TestClient) -> None:
     resp = client.post(
         "/onboarding",
         data={
@@ -69,7 +69,7 @@ def _complete_onboarding(client: TestClient) -> str:
         follow_redirects=False,
     )
     assert resp.status_code == 303, resp.text
-    return resp.headers["location"].split("cliente=")[1]
+    assert resp.headers["location"] == "/"
 
 
 # --- Alta con correo --------------------------------------------------------
@@ -203,10 +203,10 @@ def test_el_correo_de_una_cuenta_de_correo_no_lo_secuestra_google(app, monkeypat
 # --- Baja de cuenta ---------------------------------------------------------
 
 
-def test_quien_borra_su_cuenta_se_lleva_su_perfil_y_sus_menus(app) -> None:
+def test_quien_borra_su_cuenta_se_lleva_su_perfil_y_sus_menus(app, container) -> None:
     """Requisito de tienda (Apple 5.1.1(v)) y de decencia."""
     _signup(app)
-    cid = _complete_onboarding(app)
+    _complete_onboarding(app)
 
     resp = app.post("/perfil/eliminar", follow_redirects=False)
     assert resp.status_code == 303
@@ -221,7 +221,21 @@ def test_quien_borra_su_cuenta_se_lleva_su_perfil_y_sus_menus(app) -> None:
         follow_redirects=False,
     )
     assert again.status_code == 200
-    assert cid  # el perfil existió y ya no
+
+    # Y el perfil no quedó de recuerdo en la base.
+    import asyncio
+
+    from sqlalchemy import func, select
+
+    from nutriplan.adapters.db.models import ClientRow, PlanCycleRow
+
+    async def _quedan() -> tuple[int, int]:
+        async with container.session_factory() as session:
+            perfiles = await session.execute(select(func.count()).select_from(ClientRow))
+            planes = await session.execute(select(func.count()).select_from(PlanCycleRow))
+            return int(perfiles.scalar() or 0), int(planes.scalar() or 0)
+
+    assert asyncio.run(_quedan()) == (0, 0)
 
 
 def test_el_correo_de_una_cuenta_borrada_puede_registrarse_de_nuevo(app) -> None:

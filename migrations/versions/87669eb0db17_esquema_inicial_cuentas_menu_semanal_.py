@@ -112,22 +112,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_generation_jobs_status'), 'generation_jobs', ['status'], unique=False)
     op.create_index(op.f('ix_generation_jobs_tenant_id'), 'generation_jobs', ['tenant_id'], unique=False)
-    op.create_table('recipes',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('tenant_id', sa.Uuid(), nullable=False),
-    sa.Column('name', sa.String(length=200), nullable=False),
-    sa.Column('ingredients', sa.JSON(), nullable=False),
-    sa.Column('macros', sa.JSON(), nullable=False),
-    sa.Column('total_grams', sa.Float(), nullable=False),
-    sa.Column('meal_slots', sa.JSON(), server_default='[]', nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('created_by', sa.Uuid(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('compound_food_id', sa.Uuid(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_recipes_status'), 'recipes', ['status'], unique=False)
-    op.create_index(op.f('ix_recipes_tenant_id'), 'recipes', ['tenant_id'], unique=False)
     op.create_table('tenants',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('name', sa.String(length=200), nullable=False),
@@ -292,7 +276,9 @@ def upgrade() -> None:
     sa.Column('would_repeat', sa.Boolean(), nullable=True),
     sa.Column('comment', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['plan_cycle_id'], ['plan_cycles.id'], ),
+    # Sin FK a plan_cycles a propósito: generar una semana nueva borra el
+    # borrador anterior, y la clave foránea hacía que ese borrado chocara
+    # justo contra los datos que el BETA existe para recoger.
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('plan_cycle_id', 'day_index', 'slot', name='dish_ratings_one_per_meal')
@@ -328,15 +314,13 @@ def upgrade() -> None:
     sa.Column('meal_entry_id', sa.Integer(), nullable=False),
     sa.Column('position', sa.Integer(), nullable=False),
     sa.Column('food_id', sa.Uuid(), nullable=True),
-    sa.Column('recipe_id', sa.Uuid(), nullable=True),
     sa.Column('grams', sa.Float(), nullable=True),
     sa.Column('is_free', sa.Boolean(), server_default=sa.text('false'), nullable=False),
     sa.Column('is_locked', sa.Boolean(), server_default=sa.text('false'), nullable=False),
-    sa.CheckConstraint('(food_id IS NOT NULL AND recipe_id IS NULL) OR (food_id IS NULL AND recipe_id IS NOT NULL)', name='meal_items_one_source'),
+    sa.CheckConstraint('food_id IS NOT NULL', name='meal_items_one_source'),
     sa.CheckConstraint('is_free OR (grams IS NOT NULL AND grams > 0)', name='meal_items_grams_positive'),
     sa.ForeignKeyConstraint(['food_id'], ['foods.id'], ),
     sa.ForeignKeyConstraint(['meal_entry_id'], ['meal_entries.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['recipe_id'], ['recipes.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_meal_items_meal_entry_id'), 'meal_items', ['meal_entry_id'], unique=False)
@@ -386,9 +370,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_table('tenants')
-    op.drop_index(op.f('ix_recipes_tenant_id'), table_name='recipes')
-    op.drop_index(op.f('ix_recipes_status'), table_name='recipes')
-    op.drop_table('recipes')
     op.drop_index(op.f('ix_generation_jobs_tenant_id'), table_name='generation_jobs')
     op.drop_index(op.f('ix_generation_jobs_status'), table_name='generation_jobs')
     op.drop_table('generation_jobs')

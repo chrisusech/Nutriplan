@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from typing import Any, TypeVar
 
 import httpx
@@ -33,8 +34,19 @@ DEFAULT_TIMEOUT = 120.0
 
 # Ojo con `max_tokens`: los proveedores lo cuentan contra la cuota por minuto
 # ANTES de generar nada, así que pedir de más rechaza la petición entera. El
-# nivel gratis de Groq da 8.000 TPM; una selección de siete días cabe en ~1.500
-# tokens de salida, así que 3.072 es holgado y 8.192 era un 413 seguro.
+# nivel gratis de Groq da 8.000 TPM.
+#
+# Y ojo doble con los modelos de razonamiento: los tokens que gastan pensando
+# salen del MISMO presupuesto. Medido contra Groq con gpt-oss-120b, una semana
+# completa consume ~3.270 tokens de salida entre razonamiento y respuesta, así
+# que 3.072 truncaba SIEMPRE —devolvía tres días de siete— y el esquema lo
+# rechazaba. 4.096 deja margen y sigue cabiendo en los 8.000 TPM junto con el
+# prompt (~2.600). Bajar el esfuerzo de razonamiento no es la salida: entrega
+# los siete días pero incumple otras restricciones del esquema.
+
+# Cuánto se le concede a la IA antes de tirar del motor determinista. Nadie va
+# a mirar una rueda dos minutos porque un proveedor gratuito esté saturado.
+DEFAULT_BUDGET_S = 45.0
 
 # Modelos que garantizan decodificación restringida contra el JSON Schema.
 STRICT_SCHEMA_MODELS = ("gpt-oss", "gpt-4o", "gpt-4.1")
@@ -42,6 +54,7 @@ STRICT_SCHEMA_MODELS = ("gpt-oss", "gpt-4o", "gpt-4.1")
 
 def supports_strict_schema(model: str) -> bool:
     return any(marker in model for marker in STRICT_SCHEMA_MODELS)
+
 
 
 def _strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
@@ -80,13 +93,15 @@ class OpenAICompatClient:
         *,
         base_url: str = "https://api.openai.com/v1",
         max_tokens_extract: int = 4096,
-        max_tokens_select: int = 3072,
+        max_tokens_select: int = 4096,
+        budget_s: float = DEFAULT_BUDGET_S,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._max_tokens_extract = max_tokens_extract
         self._max_tokens_select = max_tokens_select
+        self._budget_s = budget_s
         self._timeout = timeout
         self._usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
@@ -128,9 +143,13 @@ class OpenAICompatClient:
             )
         last_error: Exception | None = None
         rate_waits = 0
+        deadline = time.monotonic() + self._budget_s
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             for attempt in range(1 + SCHEMA_RETRIES + RATE_LIMIT_RETRIES):
+                if time.monotonic() > deadline:
+                    logger.warning("llm_budget_spent", attempt=attempt)
+                    break
                 try:
                     response = await client.post(
                         f"{self._base_url}/chat/completions",
@@ -155,7 +174,11 @@ class OpenAICompatClient:
                     response.raise_for_status()
                 except httpx.HTTPStatusError as exc:
                     wait = _retry_after(exc.response)
-                    if wait is not None and rate_waits < RATE_LIMIT_RETRIES:
+                    if (
+                        wait is not None
+                        and rate_waits < RATE_LIMIT_RETRIES
+                        and time.monotonic() + wait < deadline
+                    ):
                         rate_waits += 1
                         logger.info("llm_rate_limited", wait_s=round(wait, 1))
                         await asyncio.sleep(wait)

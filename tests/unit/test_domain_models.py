@@ -19,7 +19,6 @@ from nutriplan.domain.models import (
     MealSlot,
     PlanCycle,
     PlanStatus,
-    Recipe,
     Sex,
 )
 
@@ -102,33 +101,3 @@ def test_plan_cycle_roundtrip_serialization() -> None:
     assert plan.status == PlanStatus.DRAFT
     restored = PlanCycle.model_validate_json(plan.model_dump_json())
     assert restored == plan
-
-
-def test_a_recipe_can_declare_its_macros_instead_of_its_ingredients() -> None:
-    """El plato de restaurante: sin ingredientes, con sus macros exactos."""
-    dish = Recipe(
-        id=uuid4(),
-        tenant_id=uuid4(),
-        user_id=uuid4(),
-        name="Hamburguesa del restaurante",
-        macros=MacroTargets(kcal=550, protein_g=42, carb_g=55, fat_g=18),
-        total_grams=350,
-        meal_slots=[MealSlot.LUNCH, MealSlot.DINNER],
-        created_at=datetime.now(UTC),
-    )
-    assert dish.ingredients == []
-    assert dish.meal_slots == [MealSlot.LUNCH, MealSlot.DINNER]
-
-
-def test_a_recipe_with_neither_ingredients_nor_macros_is_nothing() -> None:
-    """Un plato que no aporta nada no puede entrar en un plan: mejor no nacer."""
-    with pytest.raises(ValidationError):
-        Recipe(
-            id=uuid4(),
-            tenant_id=uuid4(),
-            user_id=uuid4(),
-            name="Aire",
-            macros=MacroTargets(kcal=0, protein_g=0, carb_g=0, fat_g=0),
-            total_grams=100,
-            created_at=datetime.now(UTC),
-        )

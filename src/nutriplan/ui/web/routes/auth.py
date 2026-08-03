@@ -131,18 +131,18 @@ async def password_reset_confirm(
             auth_repo=container.auth_repo(session),
             session_secret=container.settings.session_secret,
         )
-        trainer_row = await container.auth_repo(session).get_by_email(email)
-        if trainer_row is None:
+        fila = await container.auth_repo(session).get_by_email(email)
+        if fila is None:
             raise SignupError("La cuenta ya no existe.")
-        trainer, _ = trainer_row
-        if await session.get(TenantRow, trainer.tenant_id) is None:
+        cuenta, _ = fila
+        if await session.get(TenantRow, cuenta.tenant_id) is None:
             return render(
                 request,
                 "password_reset_request.html",
                 error="La cuenta quedó desincronizada. Regístrate de nuevo.",
                 email=email,
             )
-        _set_session(request, trainer)
+        _set_session(request, cuenta)
     except SignupError as exc:
         email = verify_token(token, secret=container.settings.session_secret)
         return render(
@@ -172,27 +172,27 @@ async def login(request: Request,
                 email: Annotated[str, Form()],
                 password: Annotated[str, Form()]) -> HTMLResponse | RedirectResponse:
     auth_repo = container_of(request).auth_repo(session)
-    trainer = await authenticate(email=email, password=password, auth_repo=auth_repo)
+    cuenta = await authenticate(email=email, password=password, auth_repo=auth_repo)
     # Un solo mensaje para todos los fallos: distinguirlos convierte el login en
     # un detector de correos registrados.
     generico = "Correo o contraseña incorrectos."
-    if trainer is None:
+    if cuenta is None:
         return render(request, "auth.html", mode="login", error=generico)
-    if await session.get(TenantRow, trainer.tenant_id) is None:
+    if await session.get(TenantRow, cuenta.tenant_id) is None:
         return render(
             request,
             "auth.html",
             mode="login",
             error=generico,
         )
-    if not trainer.is_active:
+    if not cuenta.is_active:
         return render(
             request,
             "auth.html",
             mode="login",
             error=generico,
         )
-    _set_session(request, trainer)
+    _set_session(request, cuenta)
     return RedirectResponse("/", status_code=303)
 
 

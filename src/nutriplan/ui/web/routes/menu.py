@@ -17,13 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.llm.prompts import load_prompt
+from nutriplan.application.analytics import Event
 from nutriplan.application.compute_targets import compute_and_store_targets
 from nutriplan.application.food_pool import resolve_allowed_foods
 from nutriplan.application.generate_plan import PLAN_PROMPT_VERSION, compute_input_hash
-from nutriplan.application.jobs import new_job, run_generation_job
+from nutriplan.application.jobs import is_stale, new_job, run_generation_job
 from nutriplan.container import Container
 from nutriplan.domain.models import Client
-from nutriplan.ports.job_repository import JobStatus
+from nutriplan.ports.job_repository import Job, JobStatus
 from nutriplan.ui.web.deps import (
     account_id_of,
     container_of,
@@ -31,6 +32,7 @@ from nutriplan.ui.web.deps import (
     render,
     repos_of,
     tenant_of,
+    track_event,
 )
 
 router = APIRouter()
@@ -49,13 +51,37 @@ async def _profile(request: Request, session: AsyncSession) -> Client | None:
     return await repos_of(request, session).clients.get_by_user(account_id_of(request))
 
 
+class _JobBeacon:
+    """El estado del job en su propia transacción, corta y confirmada al vuelo.
+
+    Escribirlo en la misma sesión que la generación tenía dos problemas: nadie
+    fuera veía el `running` hasta el final (el polling acertaba de casualidad),
+    y en SQLite esa transacción retenía el lock de escritura los veinte segundos
+    que dura generar, así que cualquier otra petición moría con `database is
+    locked`."""
+
+    def __init__(self, container: Container, tenant_id: UUID) -> None:
+        self._container = container
+        self._tenant_id = tenant_id
+
+    async def get(self, job_id: UUID) -> Job | None:
+        async with self._container.session_factory() as session:
+            return await self._container.repos(session, self._tenant_id).jobs.get(job_id)
+
+    async def update(self, job: Job) -> None:
+        async with self._container.session_factory() as session:
+            await self._container.repos(session, self._tenant_id).jobs.update(job)
+            await session.commit()
+
+
 async def _run_generation(
     container: Container, job_id: UUID, client_id: UUID, variant: int, tenant_id: UUID
 ) -> None:
-    """Tarea de fondo: sesión propia, job persistido, commit al final."""
+    """Tarea de fondo: sesión propia para el plan, beacon aparte para el estado."""
+    beacon = _JobBeacon(container, tenant_id)
     async with container.session_factory() as session:
         repos = container.repos(session, tenant_id)
-        job = await repos.jobs.get(job_id)
+        job = await beacon.get(job_id)
         if job is None:  # pragma: no cover — el job se creó en el request
             return
         model = (
@@ -64,7 +90,7 @@ async def _run_generation(
             else "engine-v1"
         )
         await run_generation_job(
-            job=job, job_repo=repos.jobs, client_id=client_id,
+            job=job, job_repo=beacon, client_id=client_id,
             client_repo=repos.clients, targets_repo=repos.targets,
             food_repo=repos.foods, plan_repo=repos.plans,
             config=container.config_provider.get_nutrition_config(),
@@ -72,8 +98,8 @@ async def _run_generation(
             prompts_dir=container.settings.prompts_dir, model=model, variant=variant,
             catalog=container.meal_catalog,
             recipe_repo=container.dish_recipe_repo(session),
+            commit=session.commit,
         )
-        await session.commit()
 
 
 def _spawn(request: Request, coro: Coroutine[Any, Any, None]) -> None:
@@ -102,6 +128,17 @@ async def start_generation(
 
     container = container_of(request)
     repos = repos_of(request, session)
+
+    # La cuota se decide aquí, no escondiendo el botón: la plantilla es una
+    # sugerencia y esto cuesta llamadas a un proveedor de pago.
+    if client.active_plan_id is not None:
+        quota = await repos.ratings.quota_for(client.active_plan_id)
+        if not quota.unlocked:
+            return render(
+                request, "partials/gen_error.html", client=client,
+                error=quota.hint or "Ya usaste tu menú de esta etapa del BETA.",
+            )
+
     targets = await compute_and_store_targets(
         client=client,
         config_provider=container.config_provider,
@@ -145,7 +182,7 @@ async def start_generation(
                 raise
         if job.status in (JobStatus.QUEUED, JobStatus.FAILED):
             _spawn(request, _run_generation(container, job.id, client.id, variant, tenant_id))
-    elif job.status == JobStatus.FAILED:
+    elif job.status == JobStatus.FAILED or is_stale(job):
         job = job.model_copy(
             update={"status": JobStatus.QUEUED, "error": None, "updated_at": datetime.now(UTC)}
         )
@@ -153,6 +190,11 @@ async def start_generation(
         await session.commit()
         _spawn(request, _run_generation(container, job.id, client.id, variant, tenant_id))
 
+    await track_event(
+        request, session, Event.MENU_GENERATED,
+        version=variant, alimentos_disponibles=len(allowed),
+        con_ia=container.llm_client is not None,
+    )
     return _loading(request, client, str(job.id), 0)
 
 
@@ -174,8 +216,15 @@ async def generation_status(
     except ValueError:
         job_row = None
 
+    if job_row is not None and is_stale(job_row):
+        # El proceso que lo generaba ya no está. Mejor decirlo que dejar girar
+        # la rueda: el botón de reintentar vuelve a encolarlo.
+        job_row = None
+
     if job_row is None or job_row.status == JobStatus.FAILED:
-        error = (job_row.error if job_row else None) or "La generación no se encontró."
+        error = (job_row.error if job_row else None) or (
+            "La generación se interrumpió. Vuelve a intentarlo."
+        )
         return render(request, "partials/gen_error.html", client=client, error=error)
 
     if job_row.status == JobStatus.DONE:

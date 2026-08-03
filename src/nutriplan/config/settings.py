@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     session_secret: str = DEV_SESSION_SECRET
     # Credenciales del super_user. Si ambas están seteadas y la cuenta no existe,
-    # se siembra al arrancar. No hay alta pública: el super_user crea entrenadores.
+    # se siembra al arrancar. Es la única cuenta que no sale del alta pública.
     admin_email: str = ""
     admin_password: str = ""
 

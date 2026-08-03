@@ -16,7 +16,6 @@
   <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </head>
 <body class="{% block page_class %}{% endblock %}"
-      data-brand="{{ brand }}"
       hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
   <div class="app">
@@ -33,7 +32,7 @@
     </main>
   </div>
 
-  {% if trainer %}
+  {% if cuenta and active_tab != 'onboarding' %}
   <nav class="nav" aria-label="Navegación principal">
     <a href="/" class="{% if active_tab == 'semana' %}on{% endif %}"
        {% if active_tab == 'semana' %}aria-current="page"{% endif %}>
