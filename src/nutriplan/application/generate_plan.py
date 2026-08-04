@@ -126,6 +126,9 @@ def build_selection_prompt(
     feedback: str | None = None,
     *,
     habits: str | None = None,
+    dislikes: list[str] | None = None,
+    context_tags: list[str] | None = None,
+    city: str | None = None,
 ) -> str:
     slots = _slots_of(config)
     structure_lines = [
@@ -147,6 +150,18 @@ def build_selection_prompt(
         "ESTRUCTURA DE CADA COMIDA:",
         *structure_lines,
         "",
+        "PLATOS DE COCINA REAL (obligatorio — no improvises porciones locas):",
+        "- Elige combinaciones que alguien cocinaría y COMERÍA a gusto.",
+        "- Carbohidratos contables (tortilla, arepa, rebanada de pan): máximo "
+        "3 unidades en desayuno; 2 en almuerzo/cena. Si el plato necesita más "
+        "energía, elige arroz, papa, yuca, pasta o plátano — no apiles "
+        "tortillas.",
+        "- Un plato = proteína + carbohidrato que combine + acompañamiento. "
+        "Nombra mentalmente el plato (ej. 'pollo con arroz y ensalada'), no "
+        "una suma de macros.",
+        "- Evita 1 huevo con 6 panes, 3 lonchas con 9 tortillas, o 400 g de "
+        "un solo carbo contable.",
+        "",
         "VARIEDAD (obligatoria en almuerzo y cena):",
         f"- La misma proteína máximo {gen.max_protein_repeats_per_week} veces por semana "
         "en el mismo slot.",
@@ -159,6 +174,16 @@ def build_selection_prompt(
         "CATÁLOGO PERMITIDO (usa exclusivamente estos food_id):",
         *catalog_lines,
     ]
+    if city and city.strip():
+        parts += ["", f"CIUDAD / REGIÓN: {city.strip()} (prioriza comida local si cabe)."]
+    if context_tags:
+        parts += ["", "CONTEXTO: " + ", ".join(context_tags)]
+    if dislikes:
+        parts += [
+            "",
+            "NO QUIERE VER (respeta aunque esté en el catálogo): "
+            + ", ".join(dislikes),
+        ]
     if habits and habits.strip():
         parts += [
             "",
@@ -333,6 +358,9 @@ async def _generate_week(
         config,
         feedback,
         habits=habits,
+        dislikes=None if offline else (client.dislikes or None),
+        context_tags=None if offline else (client.context_tags or None),
+        city=None if offline else client.city,
     )
     try:
         raw = await selector.select_plan(

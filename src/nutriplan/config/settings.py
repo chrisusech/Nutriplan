@@ -39,9 +39,10 @@ class Settings(BaseSettings):
     # se usa OpenAICompatClient en lugar del modo offline.
     llm_base_url: str = ""
     llm_api_key: str = ""
-    # El motor determinista elige alimentos; la IA no entra en select_plan.
+    # Beta: motor con topes de porción. true + LLM_API_KEY → IA elige y nombra;
+    # el código sigue calculando gramos y validando.
     llm_select_foods: bool = False
-    # Rename/swaps vía critique; off en beta para no gastar cuota.
+    # Rename/swaps vía critique tras un plan válido.
     llm_refine_names: bool = False
     # Proveedor de reserva: entra cuando el primario falla o agota su cuota.
     llm_fallback_base_url: str = ""

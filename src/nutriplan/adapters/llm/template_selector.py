@@ -41,7 +41,7 @@ from nutriplan.domain.models import (
     UnitGranularity,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
-from nutriplan.domain.portioning import fits_protein, usable_in_slot
+from nutriplan.domain.portioning import can_cover_carb, fits_protein, usable_in_slot
 from nutriplan.domain.validation import MIN_RELEVANT_G
 
 T = TypeVar("T", bound=BaseModel)
@@ -102,6 +102,10 @@ W_RECENCY = 25.0     # comer hoy lo de ayer o anteayer
 # de afinidad cuesta lo mismo lleve dos alimentos o tres.
 W_PREFERRED = 30.0
 W_OFF_MEAL = 2_500.0
+# Plato cuyo carbo no alcanza el objetivo (p. ej. plátano topeado a 300 g
+# cuando el almuerzo pide 125 g de carbo). Preferir arroz/papa antes que
+# quedar cortos y fallar la validación.
+W_UNDER_CARB = 3_000.0
 
 # Servir un plato sin su componente opcional (el almuerzo sin aguacate). Flojo a
 # propósito: la versión completa es la buena y gana por defecto, pero cuando la
@@ -222,7 +226,7 @@ class TemplateSelector:
             return minima - target <= max(allowance, 0.0)
 
         def dish_admissible(dish: Dish) -> bool:
-            """¿Puede el ancla de este plato cuadrar la proteína del slot AQUÍ?
+            """¿Puede este plato cuadrar proteína Y carbohidratos sin porciones absurdas?
 
             Un alimento que va por unidades no se afina: la lata de atún son 25.5 g
             de proteína, o 51, o 76.5 — no hay puntos intermedios. Mirada SOLA, la
@@ -234,10 +238,21 @@ class TemplateSelector:
             generación moría cuatro intentos después sin decir de dónde venía el
             problema.
 
-            Lo que el ancla tiene que cubrir es el objetivo MENOS lo que aportan sus
-            acompañantes. El carbohidrato se estima por su propio objetivo (que es lo
-            que va a decidir su gramaje); del resto basta su porción mínima.
+            Igual de crítico: si el único carbo es tortilla y el slot pide 130 g de
+            carbo, harían falta ~9 tortillas. Con `portion_max_g` el solver no las
+            sirve… y el día falla. Mejor no ofrecer ese plato.
             """
+            carb_target = carb_targets.get(dish.slot, 0.0)
+            # Contables (tortilla/arepa/pan): no emitir platos que necesitarían
+            # 9 unidades. Los a granel (arroz, plátano) se tipifican por coste.
+            for food in dish.foods:
+                if (
+                    food.category is FoodCategory.CARB
+                    and food.unit_granularity is not UnitGranularity.GRAMS
+                    and not can_cover_carb(food, carb_target)
+                ):
+                    return False
+
             anchor = dish.anchor
             if anchor.unit_granularity is UnitGranularity.GRAMS:
                 return _fits_by_kcal(dish)
@@ -246,7 +261,6 @@ class TemplateSelector:
             if target <= 0 or unit_protein <= 0:
                 return True  # su papel en el plato no es la proteína
 
-            carb_target = carb_targets.get(dish.slot, 0.0)
             co_protein = 0.0
             for food in dish.foods:
                 if food.id == anchor.id:
@@ -283,6 +297,14 @@ class TemplateSelector:
                 "No hay ningún plato que se pueda cocinar con los alimentos de este "
                 f"cliente en: {', '.join(empty)}."
             )
+        carb_share = (
+            {s: sh.carb_g for s, sh in config.meal_distribution.items()}
+            if config
+            else {}
+        )
+        self._carb_targets = {
+            slot: daily.carb_g * carb_share.get(slot, 0.0) for slot in self.slots
+        }
         self.warnings = pool_health({s: self.pools[s] for s in self.slots})
         self._seed = seed
         self.calls = 0
@@ -418,6 +440,13 @@ class TemplateSelector:
                         # que cuentan para variedad: si alguien declara que un
                         # aceite es de cocina y no de desayuno, hay que hacerle caso.
                         total += _affinity_cost(food, _slot)
+                        if (
+                            food.category is FoodCategory.CARB
+                            and not can_cover_carb(
+                                food, self._carb_targets.get(_slot, 0.0)
+                            )
+                        ):
+                            total += W_UNDER_CARB
                         if food.category not in VARIETY_CATEGORIES:
                             continue
                         fid = str(food.id)

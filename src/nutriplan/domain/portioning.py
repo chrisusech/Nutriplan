@@ -70,28 +70,47 @@ def fits_protein(food: FoodItem, target_g: float) -> bool:
     return abs(count * unit_protein - target_g) <= tol
 
 
+def can_cover_carb(food: FoodItem, carb_target_g: float) -> bool:
+    """¿Este carbohidrato puede cubrir el objetivo del slot sin un plato absurdo?
+
+    Solo los contables (tortilla, arepa, rebanada) tienen techo de cocina estricto:
+    130 g de carbo ≈ 9 tortillas — prohibido. Arroz/papa se pesan en gramos y un
+    almuerzo grande (350–450 g cocido) sigue siendo creíble.
+    """
+    if carb_target_g <= 0 or food.carb_100g <= 0:
+        return True
+    grams_needed = carb_target_g / (food.carb_100g / 100.0)
+    if food.unit_granularity is UnitGranularity.GRAMS:
+        return grams_needed <= _cap_g(food)
+    return grams_needed <= _cap_g(food) * 1.05
+
+
 def usable_in_slot(
     daily: MacroTargets, config: NutritionConfig
 ) -> Callable[[FoodItem, MealSlot], bool]:
     """¿Puede el motor usar este alimento en este slot?
 
-    Solo mira la proteína, que es el macro que no se puede fraccionar: lo demás se
-    porciona fino. Lo usan el motor (para armar sus pools) y la regla de variedad
-    (para saber cuántas opciones REALES hay). Si no miran lo mismo, la regla juzga
-    al motor por opciones que el motor no tiene.
+    Proteína en unidades + carbohidratos contables con tope de cocina. Lo usan
+    el motor y la regla de variedad.
     """
     share = config.meal_distribution
 
     def usable(food: FoodItem, slot: MealSlot) -> bool:
-        if food.category not in PROTEIN_GROUP or slot not in share:
+        if slot not in share:
             return True
-        return fits_protein(food, daily.protein_g * share[slot].protein_g)
+        if food.category in PROTEIN_GROUP:
+            return fits_protein(food, daily.protein_g * share[slot].protein_g)
+        # Carbos (no fruta): si el tope no alcanza el slot, no cuenta como opción
+        # de variedad — si no, avena sale 7 días con tope 5 porque el pan "contaba".
+        if food.category is FoodCategory.CARB:
+            return can_cover_carb(food, daily.carb_g * share[slot].carb_g)
+        return True
 
     return usable
 
 
 def _cap_g(food: FoodItem) -> float:
-    """Tope de porción de un alimento (p. ej. aceitunas ≤ 30 g)."""
+    """Tope de porción de un alimento (p. ej. tortilla ≤ 90 g ≈ 3 unidades)."""
     if food.portion_max_g is not None:
         return min(food.portion_max_g, MAX_PORTION_G)
     return MAX_PORTION_G

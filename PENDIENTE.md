@@ -11,6 +11,15 @@ registro → consentimiento → onboarding → generar menú → calificar → f
 - [x] Cobertura ≥90 %; push: registro de token; splash hide; gate
       `BETA_INVITE_CODE`; tokens borrados al eliminar cuenta.
 - [x] Dockerfile con extra `apple` (Sign in with Apple en prod).
+- [x] Topes de porción (máx. 3 tortillas / 2 arepas); IA elige+nombra vía
+      `LLM_SELECT_FOODS` + `LLM_REFINE_NAMES` cuando hay API key.
+
+## Mejoras de menú en curso
+
+- [ ] Plantillas con 2 carbos cuando el slot pide mucho; matriz 2 perfiles altos
+      aún fallan por variedad de avena.
+- [ ] Iconos Material (`WB_SUNNY`) que se ven como texto — fuente/ligadura.
+- [ ] Clave Groq nueva + regenerar menús para notar nombres personalizados.
 
 ## Todavía humano (fuera del repo)
 
