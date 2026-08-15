@@ -23,11 +23,90 @@ ACTIVITY_LABELS = {
 
 SEX_LABELS = {"female": "Mujer", "male": "Hombre"}
 
-GOAL_META: dict[Goal, dict[str, str]] = {
-    Goal.LOSE_FAT: {"label": "Déficit", "icon": "trending_down"},
-    Goal.MAINTAIN: {"label": "Recomposición", "icon": "trending_flat"},
-    Goal.GAIN_MUSCLE: {"label": "Superávit", "icon": "trending_up"},
+# Los nombres internos de `application.analytics.Event` dichos en cristiano: la
+# consola la lee una persona, no un panel de telemetría.
+EVENT_LABELS = {
+    "consent_given": "Aceptaron compartir sus datos",
+    "onboarding_done": "Terminaron de crear su perfil",
+    "menu_generated": "Generaron un menú",
+    "dish_rated": "Calificaron un plato",
+    "feedback_sent": "Nos escribieron algo",
+    "weight_checkin": "Registraron su peso de la semana",
 }
+
+FEEDBACK_LABELS = {
+    "bug": "Algo falla",
+    "idea": "Idea",
+    "receta": "Sobre una receta",
+    "general": "General",
+}
+
+SEX_META = [
+    {"key": "female", "label": "Mujer", "icon": "female"},
+    {"key": "male", "label": "Hombre", "icon": "male"},
+]
+
+GOAL_META: dict[Goal, dict[str, str]] = {
+    Goal.LOSE_FAT: {
+        "label": "Déficit",
+        "icon": "trending_down",
+        "title": "Perder grasa",
+        "sub": "Bajas de peso cuidando el músculo que ya tienes.",
+    },
+    Goal.MAINTAIN: {
+        "label": "Recomposición",
+        "icon": "trending_flat",
+        "title": "Mantener peso",
+        "sub": "Te quedas donde estás y cambias la composición.",
+    },
+    Goal.GAIN_MUSCLE: {
+        "label": "Superávit",
+        "icon": "trending_up",
+        "title": "Ganar músculo",
+        "sub": "Subes de peso para entrenar más fuerte.",
+    },
+}
+
+GOAL_LABELS = {goal.value: meta["title"] for goal, meta in GOAL_META.items()}
+
+# Lo mismo que `ACTIVITY_LABELS` pero partido en dos líneas: en una tarjeta el
+# paréntesis del final es justo lo que la persona necesita para decidir.
+ACTIVITY_META = [
+    {"key": "sedentary", "title": "Sedentario", "sub": "Poco o nada de ejercicio", "icon": "chair"},
+    {
+        "key": "light",
+        "title": "Ligeramente activo",
+        "sub": "Ejercicio 1 a 3 días por semana",
+        "icon": "directions_walk",
+    },
+    {
+        "key": "moderate",
+        "title": "Moderadamente activo",
+        "sub": "Ejercicio 3 a 5 días por semana",
+        "icon": "directions_run",
+    },
+    {
+        "key": "active",
+        "title": "Muy activo",
+        "sub": "Ejercicio 6 a 7 días por semana",
+        "icon": "fitness_center",
+    },
+    {
+        "key": "very_active",
+        "title": "Atleta",
+        "sub": "Dos sesiones al día",
+        "icon": "sports_martial_arts",
+    },
+]
+
+# Lo que se pregunta en el paso de contexto. Estaba escrito a mano en la
+# plantilla: aquí se ve de un vistazo qué sabe la app de cómo vive quien come.
+CONTEXT_TOGGLES = [
+    {"key": "cocina", "label": "Me encanta cocinar", "icon": "skillet"},
+    {"key": "come_afuera", "label": "Como mucho afuera", "icon": "storefront"},
+    {"key": "entrena_noche", "label": "Entreno de noche", "icon": "bedtime"},
+    {"key": "come_rapido", "label": "Como rápido", "icon": "bolt"},
+]
 
 # Desayuno, almuerzo y cena no se pueden quitar; los snacks sí.
 MEAL_TOGGLES = [
@@ -64,9 +143,7 @@ _MACRO_ICONS = {
     "carb_g": "bakery_dining",
     "fat_g": "water_drop",
 }
-MACRO_META = [
-    {"key": key, "icon": _MACRO_ICONS[key], **meta} for key, meta in MACRO_COLORS.items()
-]
+MACRO_META = [{"key": key, "icon": _MACRO_ICONS[key], **meta} for key, meta in MACRO_COLORS.items()]
 
 
 def initials(name: str) -> str:

@@ -1,11 +1,19 @@
 <div class="gen-state gen-state-error">
-  <span class="icon">error</span>
+  <span class="gen-error-badge"><span class="icon">error</span></span>
   <p><b>No se pudo generar el menú.</b></p>
   <p class="muted">{{ error }}</p>
-  <p class="muted">A veces basta con cambiar cuántas veces comes o tu objetivo.
-     Prueba a editar tu perfil y vuelve a pedirlo.</p>
   <div class="gen-actions">
-    <a class="btn btn-primary" href="/perfil">Editar mi perfil</a>
-    <a class="btn btn-outline" href="/">Volver</a>
+    {# A quien le falta cerrar la semana hay que llevarlo al cierre, no al
+       perfil: el mensaje ya le dice qué falta y el botón tiene que ir ahí. #}
+    {% if (closure and not closure.is_closed) or "peso" in error|lower %}
+    <a class="btn btn-primary btn-block" href="/check-in">
+      {% if closure and not closure.has_weight %}Registrar mi peso{% else %}Cerrar mi semana{% endif %}
+    </a>
+    {% elif membership and not membership.can_generate %}
+    <a class="btn btn-primary btn-block" href="/plan">Activar mi plan</a>
+    {% else %}
+    <a class="btn btn-primary btn-block" href="/perfil">Editar mi perfil</a>
+    {% endif %}
+    <a class="btn btn-outline btn-block" href="/">Volver</a>
   </div>
 </div>

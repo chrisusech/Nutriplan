@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from nutriplan.adapters.llm.offline_engine import build_offline_engine
 from nutriplan.application.jobs import new_job, run_generation_job
 from nutriplan.ports.job_repository import Job, JobStatus
 
@@ -32,10 +33,18 @@ def job() -> Job:
 
 async def _correr(job: Job, sink: _SinkQueRegistra, **extra: object) -> Job:
     return await run_generation_job(
-        job=job, job_repo=sink, client_id=uuid4(),
+        job=job,
+        job_repo=sink,
+        client_id=uuid4(),
         client_repo=_ClienteVacio(),  # type: ignore[arg-type]
-        targets_repo=None, food_repo=None, plan_repo=None,  # type: ignore[arg-type]
-        config=None, llm=None, prompts_dir=Path("."), model="m",  # type: ignore[arg-type]
+        targets_repo=None,
+        food_repo=None,
+        plan_repo=None,  # type: ignore[arg-type]
+        config=None,
+        llm=None,
+        prompts_dir=Path("."),
+        model="m",  # type: ignore[arg-type]
+        offline_engine=build_offline_engine,
         **extra,  # type: ignore[arg-type]
     )
 
@@ -73,8 +82,12 @@ def _corriendo(minutos: int) -> Job:
 
     hace = datetime.now(UTC) - timedelta(minutes=minutos)
     return Job(
-        id=uuid4(), tenant_id=uuid4(), status=JobStatus.RUNNING,
-        idempotency_key="k", created_at=hace, updated_at=hace,
+        id=uuid4(),
+        tenant_id=uuid4(),
+        status=JobStatus.RUNNING,
+        idempotency_key="k",
+        created_at=hace,
+        updated_at=hace,
     )
 
 

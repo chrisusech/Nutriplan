@@ -1,0 +1,138 @@
+/* El armazón: la columna de contenido, la cabecera y la barra inferior.
+
+   Todo lo que hace que esto se lea como una app y no como una web dentro de un
+   teléfono: una sola columna, la cabecera pegada arriba y el pulgar mandando
+   abajo. */
+
+.app {
+  max-width: 34rem;         /* más ancho que esto ya no se lee de un vistazo */
+  margin: 0 auto;
+  padding: 0 var(--s-4) calc(var(--nav-h) + var(--safe-b) + var(--s-8));
+}
+.app-plain { padding-bottom: calc(var(--safe-b) + var(--s-8)); }
+
+/* --- Cabecera -------------------------------------------------------------- */
+
+.app-head {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 3.5rem;
+  margin-inline: calc(var(--s-4) * -1);
+  padding: calc(var(--safe-t) + var(--s-2)) var(--s-4) var(--s-3);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(0.875rem);
+  -webkit-backdrop-filter: blur(0.875rem);
+}
+.app-head-lead { display: flex; align-items: center; gap: var(--s-2); min-width: 0; flex: 1 1 auto; }
+.app-head-actions { display: flex; align-items: center; gap: var(--s-2); }
+.app-title {
+  font: 800 var(--t-xl) Poppins, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-kicker { font: 600 var(--t-xs) Poppins, sans-serif; color: var(--muted); }
+
+.logo { display: flex; align-items: center; gap: var(--s-2); font-weight: 800; }
+.logo-badge {
+  width: 2.25rem; height: 2.25rem;
+  border-radius: var(--r-sm);
+  background: var(--brand);
+  color: var(--on-brand);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Volver: en una app es una flecha arriba a la izquierda, no un enlace al pie. */
+.back {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto;
+  width: 2.5rem; height: 2.5rem;
+  margin-left: calc(var(--s-2) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--r-pill);
+  /* También es un <button> en el cuestionario: sin esto sale el gris del sistema. */
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+.back:active { background: var(--card-2); transform: scale(0.92); }
+.back .icon { font-size: 1.5rem; }
+
+/* --- Barra inferior -------------------------------------------------------- */
+
+.nav {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-around;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-2) calc(var(--s-2) + var(--safe-b));
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(0.875rem);
+  -webkit-backdrop-filter: blur(0.875rem);
+  border-top: 1px solid var(--line);
+}
+.nav a {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: var(--tap);
+  padding: var(--s-1) 0;
+  font: 600 var(--t-xs) Poppins, sans-serif;
+  color: var(--muted-2);
+  transition: color var(--dur-2) var(--ease-out);
+}
+.nav-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 3rem; height: 1.875rem;
+  border-radius: var(--r-pill);
+  transition: background var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-spring);
+}
+.nav .icon { font-size: 1.5rem; }
+.nav a.on { color: var(--brand); }
+.nav a.on .nav-icon { background: var(--brand-soft); transform: translateY(-1px); }
+.nav a:active .nav-icon { transform: scale(0.9); }
+
+@media (min-width: 40rem) {
+  .nav {
+    inset: auto auto 1.25rem 50%;
+    transform: translateX(-50%);
+    width: min(30rem, calc(100% - 3rem));
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    box-shadow: var(--sh-3);
+  }
+}
+
+/* --- Estados vacíos y secciones -------------------------------------------- */
+
+.section { margin-top: var(--s-6); }
+.section > h2, .section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-8) var(--s-4);
+  text-align: center;
+}
+.empty .icon { font-size: 3rem; color: var(--faint-2); }
+.empty p { color: var(--muted); max-width: 22rem; }

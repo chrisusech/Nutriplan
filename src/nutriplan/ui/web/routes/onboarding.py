@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.application.analytics import Event
 from nutriplan.application.onboarding import create_profile
+from nutriplan.application.weekly_checkin import seed_weight_from_profile
 from nutriplan.domain.errors import ValidationError
 from nutriplan.domain.food_filter import RESTRICTION_TAG_MAP
 from nutriplan.domain.models import (
@@ -117,7 +118,9 @@ async def onboarding_page(
         return RedirectResponse("/", status_code=303)
     cuenta = await container_of(request).auth_repo(session).get_by_id(account_id_of(request))
     return render(
-        request, "onboarding.html", active_tab="onboarding",
+        request,
+        "onboarding.html",
+        active_tab="onboarding",
         # El nombre ya lo escribió al registrarse: repetir la pregunta en el
         # primer campo del primer paso es la peor primera impresión posible.
         form={"name": cuenta.name, "restrictions": []} if cuenta else None,
@@ -144,6 +147,11 @@ async def submit_onboarding(
     eating_pattern_raw: Annotated[str, Form()] = "",
     city: Annotated[str, Form()] = "",
     country: Annotated[str, Form()] = "",
+    conoce_macros: Annotated[str, Form()] = "no",
+    kcal: Annotated[str, Form()] = "",
+    protein_g: Annotated[str, Form()] = "",
+    carb_g: Annotated[str, Form()] = "",
+    fat_g: Annotated[str, Form()] = "",
 ) -> HTMLResponse | RedirectResponse:
     repos = repos_of(request, session)
     account_id = account_id_of(request)
@@ -174,17 +182,55 @@ async def submit_onboarding(
         )
     except (ValidationError, ValueError) as exc:
         return render(
-            request, "onboarding.html", active_tab="onboarding", error=str(exc),
+            request,
+            "onboarding.html",
+            active_tab="onboarding",
+            error=str(exc),
             form={
-                "name": name, "sex": sex, "age_years": age_years,
-                "height_cm": height_cm, "weight_kg": weight_kg, "goal": goal,
-                "activity_level": activity_level, "restrictions": restrictions,
+                "name": name,
+                "sex": sex,
+                "age_years": age_years,
+                "height_cm": height_cm,
+                "weight_kg": weight_kg,
+                "goal": goal,
+                "activity_level": activity_level,
+                "restrictions": restrictions,
                 "eating_pattern_raw": eating_pattern_raw,
             },
             groups=await _food_groups(request, session, set(food_ids)),
         )
+    # El peso del alta cuenta como check-in de esta semana: si no, la primera
+    # generación pediría pesarse otra vez el mismo día.
+    await seed_weight_from_profile(client=client, weights=repos.weights)
+    if conoce_macros.strip().lower() == "si":
+        from nutriplan.application.compute_targets import compute_and_store_targets
+        from nutriplan.application.user_macros import user_macro_plan
+        from nutriplan.domain.errors import CalculationError
+
+        try:
+            formula, overrides, _warning = user_macro_plan(
+                client=client,
+                config=container_of(request).nutrition_config(client),
+                kcal=float(kcal.replace(",", ".")),
+                protein_g=float(protein_g.replace(",", ".")),
+                carb_g=float(carb_g.replace(",", ".")),
+                fat_g=float(fat_g.replace(",", ".")),
+            )
+            await compute_and_store_targets(
+                client=client,
+                config_provider=container_of(request).config_provider,
+                targets_repo=repos.targets,
+                formula=formula,
+                overrides=overrides,
+            )
+        except (CalculationError, ValueError) as exc:
+            from urllib.parse import quote
+
+            return RedirectResponse("/perfil?error=" + quote(str(exc)), status_code=303)
     await track_event(
-        request, session, Event.ONBOARDING_DONE,
+        request,
+        session,
+        Event.ONBOARDING_DONE,
         comidas=len(client.meal_slots),
         marco_alimentos=len(client.liked_food_ids),
         conto_habitos=client.eating_pattern_raw is not None,

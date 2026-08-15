@@ -2,7 +2,8 @@
 
 La fuente va subseteada a los iconos que se usan. Añadir uno nuevo y olvidar
 regenerarla no rompe nada visible en el código: simplemente sale el NOMBRE del
-icono escrito en la pantalla. Pasó con el spinner de "generando tu menú".
+icono escrito en la pantalla. Pasó con el spinner de "generando tu menú" y otra
+vez con el de la receta, que lo pinta el JS y no ninguna plantilla.
 """
 
 import re
@@ -14,11 +15,38 @@ WEB = Path(__file__).resolve().parents[2] / "src" / "nutriplan" / "ui" / "web"
 FUENTE = WEB / "static" / "fonts" / "material-symbols-rounded.woff2"
 
 
+SPAN = re.compile(r'class="icon[^"]*"[^>]*>(.*?)</span>', re.S)
+LITERAL = re.compile(r"'([a-z_]+)'")
+
+
+def _iconos_de_la_plantilla(texto: str) -> set[str]:
+    """Los nombres escritos en un `<span class="icon">`, también dentro de Jinja.
+
+    Un `{{ 'check_circle' if … else 'radio_button_unchecked' }}` es tan icono
+    como uno escrito a pelo, y olvidar el del `else` sale en pantalla.
+    """
+    encontrados: set[str] = set()
+    for dentro in SPAN.findall(texto):
+        crudo = dentro.strip()
+        if "{" in crudo:
+            encontrados |= set(LITERAL.findall(crudo))
+        elif re.fullmatch(r"[a-z_]+", crudo):
+            encontrados.add(crudo)
+    return encontrados
+
+
 def _iconos_usados() -> set[str]:
     encontrados: set[str] = set()
-    for ruta in [*WEB.joinpath("templates").rglob("*.html"), WEB / "presenter.py"]:
+    for ruta in [
+        *WEB.joinpath("templates").rglob("*.html"),
+        # El JS pinta iconos que no están en ninguna plantilla (el spinner de la
+        # receta), y por eso el nombre salió girando en la tarjeta del plato.
+        *WEB.joinpath("static", "js").glob("*.js"),
+        WEB / "presenter.py",
+        WEB / "week_view.py",
+    ]:
         texto = ruta.read_text(encoding="utf-8")
-        encontrados |= set(re.findall(r'class="icon[^"]*"[^>]*>\s*([a-z_]+)\s*<', texto))
+        encontrados |= _iconos_de_la_plantilla(texto)
         encontrados |= set(re.findall(r'"icon":\s*"([a-z_]+)"', texto))
     return encontrados
 
@@ -35,8 +63,7 @@ def _ligaduras_de_la_fuente() -> set[str]:
             for primero, conjuntos in getattr(real, "ligatures", {}).items():
                 for liga in conjuntos:
                     nombres.add(
-                        letra.get(primero, "?")
-                        + "".join(letra.get(g, "?") for g in liga.Component)
+                        letra.get(primero, "?") + "".join(letra.get(g, "?") for g in liga.Component)
                     )
     return nombres
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -62,6 +62,7 @@ class SqlPlanRepository:
             free_salad=row.free_salad,
             free_protein=row.free_protein,
             is_free_meal=bool(row.is_free_meal),
+            eaten=bool(row.eaten),
         )
 
     def _item_rows(
@@ -107,6 +108,7 @@ class SqlPlanRepository:
                 free_salad=meal.free_salad,
                 free_protein=meal.free_protein,
                 is_free_meal=meal.is_free_meal,
+                eaten=meal.eaten,
                 items=self._item_rows(meal.items),
             )
             for i, meal in enumerate(meals)
@@ -130,6 +132,7 @@ class SqlPlanRepository:
             tenant_id=row.tenant_id,
             client_id=row.client_id,
             targets_id=row.targets_id,
+            week_start=row.week_start,
             variant=row.variant,
             version=row.version,
             days=sorted(
@@ -164,6 +167,7 @@ class SqlPlanRepository:
                 tenant_id=self._tenant,
                 client_id=plan.client_id,
                 targets_id=plan.targets_id,
+                week_start=plan.week_start,
                 variant=plan.variant,
                 version=plan.version,
                 status=plan.status.value,
@@ -225,11 +229,7 @@ class SqlPlanRepository:
             raise TenantIsolationError("Plan inexistente para este tenant")
 
         existing = next(
-            (
-                d
-                for d in row.days
-                if d.day_index == day_index
-            ),
+            (d for d in row.days if d.day_index == day_index),
             None,
         )
         preserve_meals: dict[MealSlot, int] = {}
@@ -238,9 +238,7 @@ class SqlPlanRepository:
             for existing_meal in existing.meals:
                 slot = MealSlot(existing_meal.slot)
                 preserve_meals[slot] = existing_meal.id
-                preserve_items[slot] = {
-                    item.food_id: item.id for item in existing_meal.items
-                }
+                preserve_items[slot] = {item.food_id: item.id for item in existing_meal.items}
 
         if existing is not None:
             await self._s.delete(existing)
@@ -261,6 +259,7 @@ class SqlPlanRepository:
                 free_salad=day_meal.free_salad,
                 free_protein=day_meal.free_protein,
                 is_free_meal=day_meal.is_free_meal,
+                eaten=day_meal.eaten,
                 items=self._item_rows(
                     day_meal.items,
                     preserve_ids=preserve_items.get(day_meal.slot, {}),
@@ -298,27 +297,55 @@ class SqlPlanRepository:
         )
         return int((await self._s.execute(stmt)).scalar() or 0)
 
-    async def set_version(self, plan_id: UUID, version: int) -> None:
-        row = await self._row(plan_id)
-        if row is None:
-            raise TenantIsolationError("Plan inexistente para este tenant")
-        row.version = version
-        await self._s.flush()
-
-    async def delete_draft_for_client(self, client_id: UUID) -> None:
-        """Un solo borrador vivo por persona: el nuevo reemplaza al anterior.
-
-        Se borra de las hojas hacia la raíz porque no hay cascada en la base.
-        """
-        drafts = (
-            select(PlanCycleRow.id)
+    async def count_weeks_since(self, client_id: UUID, since: datetime) -> int:
+        """Semanas distintas con menú desde una fecha. Es lo que consume la
+        membresía: regenerar la misma semana no cuenta dos veces, y lo gastado
+        bajo un plan ya vencido no puede restar del que se acaba de conceder."""
+        stmt = (
+            select(func.count(func.distinct(PlanCycleRow.week_start)))
+            .select_from(PlanCycleRow)
             .where(
                 PlanCycleRow.tenant_id == self._tenant,
                 PlanCycleRow.client_id == client_id,
-                PlanCycleRow.status == PlanStatus.DRAFT.value,
+                PlanCycleRow.created_at >= since,
             )
-            .scalar_subquery()
         )
+        return int((await self._s.execute(stmt)).scalar() or 0)
+
+    async def for_week(self, client_id: UUID, week_start: date) -> PlanCycle | None:
+        """El menú de esa semana, el más reciente si se regeneró."""
+        stmt = (
+            select(PlanCycleRow)
+            .where(
+                PlanCycleRow.tenant_id == self._tenant,
+                PlanCycleRow.client_id == client_id,
+                PlanCycleRow.week_start == week_start,
+            )
+            .order_by(PlanCycleRow.created_at.desc())
+            .limit(1)
+        )
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        return self._to_domain(row) if row else None
+
+    async def delete_draft_for_client(
+        self, client_id: UUID, *, week_start: date | None = None
+    ) -> None:
+        """Un solo borrador vivo POR SEMANA: regenerar reemplaza el de esa semana.
+
+        Acotarlo a la semana es lo que convierte los planes en historial: antes,
+        generar la semana nueva se llevaba por delante la anterior y no quedaba
+        con qué comparar el seguimiento.
+
+        Se borra de las hojas hacia la raíz porque no hay cascada en la base.
+        """
+        conditions = [
+            PlanCycleRow.tenant_id == self._tenant,
+            PlanCycleRow.client_id == client_id,
+            PlanCycleRow.status == PlanStatus.DRAFT.value,
+        ]
+        if week_start is not None:
+            conditions.append(PlanCycleRow.week_start == week_start)
+        drafts = select(PlanCycleRow.id).where(*conditions).scalar_subquery()
         day_ids = (
             select(DayPlanRow.id).where(DayPlanRow.plan_cycle_id.in_(drafts)).scalar_subquery()
         )

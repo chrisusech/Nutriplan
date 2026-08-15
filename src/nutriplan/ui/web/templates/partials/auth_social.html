@@ -1,0 +1,22 @@
+{% if google_client_id or apple_client_id %}
+<div class="auth-alt"><span>o</span></div>
+{# El ID token lo produce el plugin nativo. Ocultos hasta que el puente
+   Capacitor los active (js/native.js): en un navegador no hay de dónde
+   sacarlo, y ofrecer el botón sería prometer algo que falla. #}
+{% if google_client_id %}
+<form method="post" action="/auth/oauth/google" class="auth-social" hidden>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="id_token">
+  {% if invite_required %}<input type="hidden" name="invite" value="">{% endif %}
+  <button class="btn btn-soft btn-big btn-block" type="submit">Continuar con Google</button>
+</form>
+{% endif %}
+{% if apple_client_id %}
+<form method="post" action="/auth/oauth/apple" class="auth-social" hidden>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="id_token">
+  {% if invite_required %}<input type="hidden" name="invite" value="">{% endif %}
+  <button class="btn btn-soft btn-big btn-block" type="submit">Continuar con Apple</button>
+</form>
+{% endif %}
+{% endif %}

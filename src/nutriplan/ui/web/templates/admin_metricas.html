@@ -1,9 +1,85 @@
 {% extends "base.html" %}
 {% block title %}Métricas{% endblock %}
+{% block page_class %}page-admin{% endblock %}
 
 {% block content %}
-<h1>Métricas del BETA</h1>
-<p class="muted">Qué come la gente y qué le gustó.</p>
+{% include "partials/admin_nav.html" %}
+<h1>Cómo vamos</h1>
+<p class="muted">Números del producto. Las personas se buscan, no se listan.</p>
+
+<form class="admin-search" method="get" action="/admin/usuarios">
+  <label class="field"><span>Buscar una cuenta</span>
+    <input name="q" type="search" placeholder="correo o nombre" minlength="2" required></label>
+  <button class="btn btn-outline" type="submit">
+    <span class="icon">search</span>Buscar
+  </button>
+</form>
+
+<section class="kpi-grid">
+  <article class="card kpi">
+    <p class="eyebrow">Activos</p>
+    <p class="kpi-n">{{ pulse.activos }}</p>
+    <p class="muted">con saldo de semanas</p>
+  </article>
+  <article class="card kpi">
+    <p class="eyebrow">Con menú esta semana</p>
+    <p class="kpi-n">{{ pulse.con_menu }}</p>
+    <p class="muted">{{ pulse.cumplimiento }}% de comidas marcadas</p>
+  </article>
+  <article class="card kpi">
+    <p class="eyebrow">Días completos</p>
+    <p class="kpi-n">{{ pulse.dias_completos }}</p>
+    <p class="muted">{{ pulse.comidas_marcadas }} de {{ pulse.comidas }} platos</p>
+  </article>
+  <article class="card kpi">
+    <p class="eyebrow">Algo falla</p>
+    <p class="kpi-n">{{ pulse.fallas }}</p>
+    <p class="muted">reportes · {{ pulse.jobs_fallidos }} menús fallidos</p>
+  </article>
+  <article class="card kpi">
+    <p class="eyebrow">No les gusta</p>
+    <p class="kpi-n">{{ pulse.detractores }}</p>
+    <p class="muted">NPS 0–6, últimos 30 días</p>
+  </article>
+</section>
+
+{% if grafica_dias %}
+<section class="card metric-card">
+  <h2>Platos marcados esta semana</h2>
+  <svg class="prog-chart" viewBox="0 0 320 120"
+       role="img" aria-label="Comidas marcadas por día">
+    {% for b in grafica_dias %}
+    <rect class="prog-bar {{ 'is-now' if b.destacada }}" rx="4"
+          x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"></rect>
+    {% endfor %}
+  </svg>
+  <p class="muted prog-chart-foot">
+    <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+  </p>
+</section>
+{% endif %}
+
+<section class="card metric-card">
+  <h2>Qué dicen</h2>
+  {% if informe %}
+  <p>{{ informe.summary }}</p>
+  <ul class="quotes">
+    {% for t in informe.themes %}
+    <li><b>{{ t.name }}</b> · {{ t.count }}
+      {% for q in t.quotes %}<p class="muted">«{{ q }}»</p>{% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Un resumen de los comentarios, no de los números.</p>
+  <form method="post" action="/admin/metricas/informe">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <button class="btn btn-outline" type="submit">
+      <span class="icon">auto_awesome</span>Resumir comentarios
+    </button>
+  </form>
+  {% endif %}
+</section>
 
 <section class="card metric-card">
   <h2>El embudo</h2>
@@ -33,7 +109,7 @@
     {% if mejores %}
     <ol class="rank">
       {% for d in mejores %}
-      <li><span>{{ d.plantilla }}</span><b>{{ d.media }}</b><i>{{ d.votos }} votos</i></li>
+      <li><span>{{ d.plato }}</span><b>{{ d.media }}</b><i>{{ d.votos }} votos</i></li>
       {% endfor %}
     </ol>
     {% else %}<p class="muted">Aún nadie ha calificado lo suficiente.</p>{% endif %}
@@ -44,7 +120,7 @@
     {% if peores %}
     <ol class="rank rank-bad">
       {% for d in peores %}
-      <li><span>{{ d.plantilla }}</span><b>{{ d.media }}</b><i>{{ d.votos }} votos</i></li>
+      <li><span>{{ d.plato }}</span><b>{{ d.media }}</b><i>{{ d.votos }} votos</i></li>
       {% endfor %}
     </ol>
     {% else %}<p class="muted">Aún no hay suficientes datos.</p>{% endif %}
@@ -77,11 +153,23 @@
 </section>
 
 <section class="card metric-card">
+  <h2>Qué dicen de los platos</h2>
+  <p class="muted">El porqué de cada nota, en las palabras de quien comió.</p>
+  <ul class="quotes">
+    {% for n in notas %}
+    <li><span class="pill">{{ n.nota }}<span class="icon">star</span></span>
+      <b>{{ n.plato }}</b> «{{ n.comentario }}»</li>
+    {% endfor %}
+    {% if not notas %}<li class="muted">Todavía nadie ha explicado una nota.</li>{% endif %}
+  </ul>
+</section>
+
+<section class="card metric-card">
   <h2>Lo que nos escriben</h2>
   <ul class="quotes">
     {% for c in comentarios %}
     <li><span class="pill">{{ c.categoria }}</span>
-      {% if c.nps is not none %}<span class="pill">NPS {{ c.nps }}</span>{% endif %}
+      {% if c.nps is not none %}<span class="pill">Nos puntúan {{ c.nps }}/10</span>{% endif %}
       «{{ c.mensaje }}»</li>
     {% endfor %}
     {% if not comentarios %}<li class="muted">Nadie ha opinado todavía.</li>{% endif %}
@@ -89,14 +177,18 @@
 </section>
 
 <section class="card metric-card">
-  <h2>Uso (últimos 14 días)</h2>
+  <h2>Qué hizo la gente en la app</h2>
+  <p class="muted">Cuántas veces pasó cada cosa en los últimos 14 días.</p>
   <ul class="tally">
     {% for e in eventos %}<li><span>{{ e.evento }}</span><b>{{ e.total }}</b></li>{% endfor %}
-    {% if not eventos %}<li class="muted">Sin eventos registrados.</li>{% endif %}
+    {% if not eventos %}<li class="muted">Todavía no ha pasado nada.</li>{% endif %}
   </ul>
 </section>
 
-<a class="btn btn-outline btn-block" href="/admin/metricas.csv">
-  <span class="icon">download</span>Descargar los platos en CSV
+<a class="btn btn-primary btn-block" href="/admin/metricas.csv">
+  <span class="icon">download</span>Descargar todo para analizar
 </a>
+<p class="muted funnel-note">Un CSV con todo lo que hay: platos y sus notas, los
+  comentarios de cada uno, los cierres de semana, lo que piden cambiar, las
+  opiniones, los perfiles, los alimentos elegidos y el uso día a día.</p>
 {% endblock %}

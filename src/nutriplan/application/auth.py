@@ -6,15 +6,14 @@ El alta es pública: cualquiera se registra con correo, con Google o con Apple. 
 """
 
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Protocol
 from uuid import UUID, uuid4
 
 import structlog
 
-from nutriplan.adapters.auth import hash_password, verify_password
-from nutriplan.adapters.branding_store import save_branding
 from nutriplan.domain.models import Account, AuthProvider, Branding, Role
+from nutriplan.domain.passwords import hash_password, verify_password
+from nutriplan.ports.branding import BrandingStore
 
 logger = structlog.get_logger(__name__)
 
@@ -27,21 +26,33 @@ MAX_PASSWORD_LEN = 200
 class AuthRepository(Protocol):
     async def get_by_email(self, email: str) -> tuple[Account, str] | None: ...
     async def get_by_email_any_provider(self, email: str) -> Account | None: ...
-    async def get_by_provider(
-        self, provider: AuthProvider, subject: str
-    ) -> Account | None: ...
+    async def get_by_provider(self, provider: AuthProvider, subject: str) -> Account | None: ...
     async def create_account(
-        self, *, tenant_id: UUID, tenant_name: str, name: str, email: str,
-        password_hash: str | None = None, role: str = "user",
+        self,
+        *,
+        tenant_id: UUID,
+        tenant_name: str,
+        name: str,
+        email: str,
+        password_hash: str | None = None,
+        role: str = "user",
         provider: AuthProvider = AuthProvider.PASSWORD,
         provider_subject: str | None = None,
         email_verified_at: datetime | None = None,
-        max_menus: int | None = None,
     ) -> Account: ...
+    async def get_by_id(self, user_id: UUID) -> Account | None: ...
     async def set_password_hash(self, email: str, password_hash: str) -> bool: ...
+    async def clear_password_hash(self, user_id: UUID) -> None: ...
     async def set_name(self, user_id: UUID, name: str) -> None: ...
     async def mark_email_verified(self, user_id: UUID) -> None: ...
     async def touch_login(self, user_id: UUID) -> None: ...
+    async def link_oauth(self, user_id: UUID, provider: AuthProvider, subject: str) -> None: ...
+
+
+class PasswordCredentialSink(Protocol):
+    """Lo único que el alta social necesita saber de los enlaces pendientes."""
+
+    async def invalidate_for_user(self, user_id: UUID) -> None: ...
 
 
 class SignupError(ValueError):
@@ -76,26 +87,32 @@ async def _new_account(
     name: str,
     email: str,
     auth_repo: AuthRepository,
-    branding_dir: Path,
+    branding: BrandingStore,
     role: Role,
     provider: AuthProvider,
     password_hash: str | None = None,
     provider_subject: str | None = None,
     email_verified_at: datetime | None = None,
-    max_menus: int | None = None,
 ) -> Account:
     display = name.strip() or email.split("@")[0]
     tenant_id = uuid4()
     account = await auth_repo.create_account(
-        tenant_id=tenant_id, tenant_name=display, name=display, email=email,
-        password_hash=password_hash, role=role.value, provider=provider,
-        provider_subject=provider_subject, email_verified_at=email_verified_at,
-        max_menus=max_menus,
+        tenant_id=tenant_id,
+        tenant_name=display,
+        name=display,
+        email=email,
+        password_hash=password_hash,
+        role=role.value,
+        provider=provider,
+        provider_subject=provider_subject,
+        email_verified_at=email_verified_at,
     )
-    save_branding(branding_dir, Branding(tenant_name=display), tenant=str(tenant_id))
+    branding.save(Branding(tenant_name=display), tenant=str(tenant_id))
     logger.info(
         "account_created",
-        tenant_id=str(tenant_id), role=role.value, provider=provider.value,
+        tenant_id=str(tenant_id),
+        role=role.value,
+        provider=provider.value,
     )
     return account
 
@@ -106,9 +123,8 @@ async def register(
     email: str,
     password: str,
     auth_repo: AuthRepository,
-    branding_dir: Path,
+    branding: BrandingStore,
     role: Role = Role.USER,
-    max_menus: int | None = None,
 ) -> Account:
     """Alta pública con correo y contraseña."""
     email = _validate_email(email)
@@ -116,9 +132,13 @@ async def register(
     if await auth_repo.get_by_email_any_provider(email) is not None:
         raise SignupError("Ese correo ya tiene una cuenta")
     return await _new_account(
-        name=name, email=email, auth_repo=auth_repo, branding_dir=branding_dir,
-        role=role, provider=AuthProvider.PASSWORD,
-        password_hash=hash_password(password), max_menus=max_menus,
+        name=name,
+        email=email,
+        auth_repo=auth_repo,
+        branding=branding,
+        role=role,
+        provider=AuthProvider.PASSWORD,
+        password_hash=hash_password(password),
     )
 
 
@@ -130,7 +150,8 @@ async def sign_in_with_provider(
     name: str,
     email_verified: bool,
     auth_repo: AuthRepository,
-    branding_dir: Path,
+    branding: BrandingStore,
+    reset_tokens: PasswordCredentialSink | None = None,
 ) -> Account:
     """Entra con Google o Apple; si es la primera vez, crea la cuenta.
 
@@ -146,20 +167,39 @@ async def sign_in_with_provider(
     email = _validate_email(email)
     clash = await auth_repo.get_by_email_any_provider(email)
     if clash is not None:
+        # Mismo correo, cuenta de contraseña, token verificado: no duplicar.
+        # Google contra Apple en la misma fila no cabe sin tabla de identidades.
+        if clash.provider is AuthProvider.PASSWORD and email_verified:
+            # La contraseña que hubiera se anula, y con ella los enlaces de
+            # recuperación pendientes. El alta no exige confirmar el correo, así
+            # que esa cuenta pudo crearla cualquiera con el correo de otro: quien
+            # llega ahora con el proveedor es quien de verdad tiene el buzón, y
+            # el otro no puede quedarse dentro.
+            await auth_repo.clear_password_hash(clash.id)
+            if reset_tokens is not None:
+                await reset_tokens.invalidate_for_user(clash.id)
+            await auth_repo.link_oauth(clash.id, provider, subject)
+            await auth_repo.mark_email_verified(clash.id)
+            await auth_repo.touch_login(clash.id)
+            logger.info("oauth_linked_over_password", user_id=str(clash.id))
+            return clash
         raise SignupError(
             "Ese correo ya tiene una cuenta creada de otra forma. "
             "Entra como lo hiciste la primera vez."
         )
     return await _new_account(
-        name=name, email=email, auth_repo=auth_repo, branding_dir=branding_dir,
-        role=Role.USER, provider=provider, provider_subject=subject,
+        name=name,
+        email=email,
+        auth_repo=auth_repo,
+        branding=branding,
+        role=Role.USER,
+        provider=provider,
+        provider_subject=subject,
         email_verified_at=datetime.now(UTC) if email_verified else None,
     )
 
 
-async def authenticate(
-    *, email: str, password: str, auth_repo: AuthRepository
-) -> Account | None:
+async def authenticate(*, email: str, password: str, auth_repo: AuthRepository) -> Account | None:
     row = await auth_repo.get_by_email(email.strip().lower())
     if row is None:
         return None

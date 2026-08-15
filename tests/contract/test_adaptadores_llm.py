@@ -73,9 +73,7 @@ def _cliente(monkeypatch, **kwargs):
 
 async def test_una_respuesta_valida_llega_tipada_a_quien_la_pidio(monkeypatch) -> None:
     cliente = _cliente(monkeypatch, respuestas=[_Parsed(Respuesta(elegidos=["a", "b"]))])
-    salida = await cliente.extract(
-        system="s", text="t", schema=Respuesta, model="claude-x"
-    )
+    salida = await cliente.extract(system="s", text="t", schema=Respuesta, model="claude-x")
     assert salida.elegidos == ["a", "b"]
 
 
@@ -95,9 +93,7 @@ async def test_si_la_respuesta_no_trae_nada_utilizable_se_reintenta(monkeypatch)
         monkeypatch,
         respuestas=[_Parsed(None), _Parsed(Respuesta(elegidos=["c"]))],
     )
-    salida = await cliente.select_plan(
-        system="s", prompt="p", schema=Respuesta, model="claude-x"
-    )
+    salida = await cliente.select_plan(system="s", prompt="p", schema=Respuesta, model="claude-x")
     assert salida.elegidos == ["c"]
 
 

@@ -10,8 +10,8 @@ from uuid import UUID
 
 import structlog
 
-from nutriplan.adapters.password_reset_token import issue_token, verify_token
 from nutriplan.application.auth import AuthRepository, SignupError
+from nutriplan.domain.signed_links import issue_token, verify_token
 from nutriplan.ports.email_sender import EmailSender
 
 logger = structlog.get_logger(__name__)
@@ -43,9 +43,7 @@ async def send_verification_email(
     logger.info("verification_email_sent", email=email)
 
 
-async def confirm_email(
-    *, token: str, secret: str, auth_repo: AuthRepository
-) -> str:
+async def confirm_email(*, token: str, secret: str, auth_repo: AuthRepository) -> str:
     """Marca el correo como verificado. Devuelve la dirección."""
     email = verify_token(token, secret=secret)
     if email is None:
@@ -58,9 +56,7 @@ async def confirm_email(
     return email
 
 
-async def delete_account(
-    *, user_id: UUID, tenant_id: UUID, eraser: AccountEraser
-) -> None:
+async def delete_account(*, user_id: UUID, tenant_id: UUID, eraser: AccountEraser) -> None:
     """Borra la cuenta y todo lo que la identifica.
 
     Los eventos de analítica NO se borran: se desligan de la persona. El embudo

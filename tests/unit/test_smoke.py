@@ -10,7 +10,6 @@ def test_settings_defaults() -> None:
     settings = Settings(_env_file=None)
     assert settings.env == Environment.LOCAL
     assert settings.database_url.startswith("sqlite+aiosqlite")
-    assert settings.llm_model_ingest
     assert settings.llm_model_generate
 
 

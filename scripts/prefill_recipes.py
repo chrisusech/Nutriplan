@@ -59,6 +59,7 @@ async def main() -> int:
             client_repo=repos.clients,
             config=config,
             llm=None,
+            offline_engine=container.offline_engine,
             prompts_dir=settings.prompts_dir,
             model="engine-v1",
             catalog=container.meal_catalog,
@@ -83,6 +84,7 @@ async def main() -> int:
             prompts_dir=settings.prompts_dir,
             model=settings.llm_model_generate,
             static=static_recipes(container.meal_catalog),
+            curated=list(container.recipe_catalog.recipes),
         )
         await session.commit()
     print(f"Prefill OK: plan {cycle.id}, {len(found)} recetas en caché.")

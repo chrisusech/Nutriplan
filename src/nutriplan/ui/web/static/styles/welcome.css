@@ -1,0 +1,107 @@
+/* La primera pantalla y los formularios de acceso.
+
+   La bienvenida es lo único de la app que no tiene barra inferior ni cabecera:
+   una foto, una frase y un botón. Todo lo demás estorba antes de empezar. */
+
+.page-welcome, .page-form { min-height: 100dvh; }
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-height: 100dvh;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: calc(var(--safe-t) + var(--s-3)) var(--s-5) calc(var(--safe-b) + var(--s-6));
+  /* Un halo coral detrás del plato: el fondo negro solo sería un agujero. */
+  background:
+    radial-gradient(85% 45% at 50% 18%,
+      color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
+    var(--bg);
+}
+.welcome-head { display: flex; justify-content: flex-end; }
+
+/* --- El plato que gira ----------------------------------------------------- */
+
+.plate {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: var(--s-2) auto 0;
+  width: min(72vw, 17rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.5);
+  animation: float-soft 6s ease-in-out infinite;
+}
+.plate-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  /* Lento a propósito: a esta velocidad se percibe como que la comida está
+     viva, no como un carrusel pidiendo atención. */
+  animation: plate-spin 48s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plate, .plate-img { animation: none; }
+}
+
+.welcome-copy { display: flex; flex-direction: column; gap: var(--s-3); margin-top: auto; }
+.welcome-title {
+  font-size: var(--t-hero);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.welcome-cta { display: flex; flex-direction: column; gap: var(--s-3); }
+
+/* --- Formularios de acceso -------------------------------------------------- */
+
+.form-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-height: 100dvh;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: calc(var(--safe-t) + var(--s-3)) var(--s-5) calc(var(--safe-b) + var(--s-8));
+}
+.form-head { display: flex; align-items: center; justify-content: space-between; }
+.form-intro { display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-4) 0 var(--s-2); }
+.form-intro .logo-badge { width: 3rem; height: 3rem; border-radius: var(--r-md); margin-bottom: var(--s-2); }
+.form-intro .logo-badge .icon { font-size: 1.5rem; }
+.form-intro h1 { font-size: var(--t-3xl); }
+.form-stack { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.auth-legal { font-size: var(--t-xs); line-height: 1.5; }
+.auth-legal a, .auth-foot a, .link { color: var(--brand); font-weight: 700; }
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: 700 var(--t-sm) Poppins, sans-serif;
+  cursor: pointer;
+}
+.auth-foot {
+  margin-top: auto;
+  padding-top: var(--s-4);
+  text-align: center;
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--muted);
+}
+.auth-alt {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-4) 0;
+  color: var(--faint);
+  font: 600 var(--t-xs) Poppins, sans-serif;
+}
+.auth-alt::before, .auth-alt::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.auth-social + .auth-social { margin-top: var(--s-3); }

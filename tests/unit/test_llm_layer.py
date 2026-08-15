@@ -5,16 +5,19 @@ from pathlib import Path
 import pytest
 
 from nutriplan.adapters.llm.mock_client import MockLLMClient
-from nutriplan.adapters.llm.prompts import load_prompt
+from nutriplan.application.plan_cache import PLAN_PROMPT_ID, PLAN_PROMPT_VERSION
+from nutriplan.application.prompts import load_prompt
 from nutriplan.domain.errors import LLMError
 from nutriplan.domain.models import PlanSelection
 
 PROMPTS_DIR = Path(__file__).resolve().parents[2] / "prompts"
 
+
 def test_los_prompts_estan_versionados_y_dicen_lo_que_la_ia_no_puede_hacer() -> None:
-    plan = load_prompt(PROMPTS_DIR, "plan_generation", 1)
-    assert plan.version == "plan_generation.v1"
-    assert "Nunca decides cantidades" in plan.text
+    """Se lee la versión que corre en producción, no una que quedó atrás."""
+    plan = load_prompt(PROMPTS_DIR, "plan_generation", PLAN_PROMPT_VERSION)
+    assert plan.version == PLAN_PROMPT_ID
+    assert "Nunca decides gramos" in plan.text
 
 
 def test_pedir_una_version_de_prompt_que_no_existe_falla_ruidosamente() -> None:

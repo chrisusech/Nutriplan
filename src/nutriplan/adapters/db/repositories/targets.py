@@ -75,3 +75,36 @@ class SqlTargetsRepository:
         )
         row = (await self._s.execute(stmt)).scalar_one_or_none()
         return self._to_domain(row) if row else None
+
+    async def history(self, client_id: UUID, *, limit: int = 52) -> list[NutritionTargets]:
+        """Cada versión de los macros, de la más reciente a la más vieja."""
+        stmt = (
+            select(NutritionTargetsRow)
+            .where(
+                NutritionTargetsRow.client_id == client_id,
+                NutritionTargetsRow.tenant_id == self._tenant,
+            )
+            .order_by(NutritionTargetsRow.computed_at.desc())
+            .limit(limit)
+        )
+        rows = (await self._s.execute(stmt)).scalars().all()
+        return [self._to_domain(r) for r in rows]
+
+    async def latest_at_weight(
+        self, client_id: UUID, weight_kg: float, *, tol: float = 0.05
+    ) -> NutritionTargets | None:
+        """Últimos macros calculados con ese peso (p. ej. el check-in previo)."""
+        stmt = (
+            select(NutritionTargetsRow)
+            .where(
+                NutritionTargetsRow.client_id == client_id,
+                NutritionTargetsRow.tenant_id == self._tenant,
+                NutritionTargetsRow.weight_kg.is_not(None),
+                NutritionTargetsRow.weight_kg >= weight_kg - tol,
+                NutritionTargetsRow.weight_kg <= weight_kg + tol,
+            )
+            .order_by(NutritionTargetsRow.computed_at.desc())
+            .limit(1)
+        )
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        return self._to_domain(row) if row else None

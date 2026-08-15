@@ -14,7 +14,6 @@ from nutriplan.adapters.oauth import (
     verify_apple_id_token,
     verify_google_id_token,
 )
-from nutriplan.adapters.password_reset_token import verify_token
 from nutriplan.application.account_lifecycle import (
     confirm_email,
     delete_account,
@@ -28,7 +27,12 @@ from nutriplan.application.auth import (
     register,
     sign_in_with_provider,
 )
-from nutriplan.application.password_reset import complete_password_reset, request_password_reset
+from nutriplan.application.membership import grant_free_trial
+from nutriplan.application.password_reset import (
+    complete_password_reset,
+    email_behind_reset_link,
+    request_password_reset,
+)
 from nutriplan.domain.models import Account, AuthProvider
 from nutriplan.ui.web.deps import (
     account_id_of,
@@ -69,7 +73,7 @@ async def password_reset_request(
         link = await request_password_reset(
             email=email,
             auth_repo=container.auth_repo(session),
-            session_secret=container.settings.session_secret,
+            tokens=container.password_reset_repo(session),
         )
     except SignupError as exc:
         return render(request, "password_reset_request.html", error=str(exc), email=email)
@@ -94,10 +98,16 @@ async def password_reset_request(
 
 @router.get("/recuperar/{token}", response_model=None)
 async def password_reset_confirm_page(
-    request: Request, token: str
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    token: str,
 ) -> HTMLResponse | RedirectResponse:
     container = container_of(request)
-    email = verify_token(token, secret=container.settings.session_secret)
+    email = await email_behind_reset_link(
+        token=token,
+        auth_repo=container.auth_repo(session),
+        tokens=container.password_reset_repo(session),
+    )
     if email is None:
         return render(
             request,
@@ -115,8 +125,15 @@ async def password_reset_confirm(
     password: Annotated[str, Form()],
     password_confirm: Annotated[str, Form()],
 ) -> HTMLResponse | RedirectResponse:
+    container = container_of(request)
+    # Mirar de quién es el enlace no lo gasta: si las contraseñas no coinciden,
+    # la persona vuelve a la misma pantalla con el mismo enlace todavía vivo.
+    email = await email_behind_reset_link(
+        token=token,
+        auth_repo=container.auth_repo(session),
+        tokens=container.password_reset_repo(session),
+    )
     if password != password_confirm:
-        email = verify_token(token, secret=container_of(request).settings.session_secret)
         return render(
             request,
             "password_reset_confirm.html",
@@ -124,13 +141,12 @@ async def password_reset_confirm(
             email=email or "",
             error="Las contraseñas no coinciden.",
         )
-    container = container_of(request)
     try:
         email = await complete_password_reset(
             token=token,
             new_password=password,
             auth_repo=container.auth_repo(session),
-            session_secret=container.settings.session_secret,
+            tokens=container.password_reset_repo(session),
         )
         fila = await container.auth_repo(session).get_by_email(email)
         if fila is None:
@@ -145,7 +161,6 @@ async def password_reset_confirm(
             )
         _set_session(request, cuenta)
     except SignupError as exc:
-        email = verify_token(token, secret=container.settings.session_secret)
         return render(
             request,
             "password_reset_confirm.html",
@@ -168,10 +183,12 @@ async def login_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/login", response_model=None)
-async def login(request: Request,
-                session: Annotated[AsyncSession, Depends(db_session)],
-                email: Annotated[str, Form()],
-                password: Annotated[str, Form()]) -> HTMLResponse | RedirectResponse:
+async def login(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    email: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+) -> HTMLResponse | RedirectResponse:
     auth_repo = container_of(request).auth_repo(session)
     cuenta = await authenticate(email=email, password=password, auth_repo=auth_repo)
     # Un solo mensaje para todos los fallos: distinguirlos convierte el login en
@@ -186,13 +203,9 @@ async def login(request: Request,
             mode="login",
             error=generico,
         )
-    if not cuenta.is_active:
-        return render(
-            request,
-            "auth.html",
-            mode="login",
-            error=generico,
-        )
+    # Una cuenta desactivada sí entra: el guard la lleva a la pantalla que le
+    # explica que su plan ya no está activo. Rebotarla aquí la dejaba creyendo
+    # que había olvidado la contraseña.
     _set_session(request, cuenta)
     return RedirectResponse("/", status_code=303)
 
@@ -210,7 +223,9 @@ async def logout(request: Request) -> RedirectResponse:
 async def signup_page(request: Request) -> HTMLResponse:
     settings = container_of(request).settings
     return render(
-        request, "auth.html", mode="signup",
+        request,
+        "auth.html",
+        mode="signup",
         google_client_id=settings.google_client_id,
         apple_client_id=settings.apple_client_id,
         invite_required=bool(settings.beta_invite_code.strip()),
@@ -231,20 +246,27 @@ async def signup(
     try:
         check_beta_invite(configured=settings.beta_invite_code, provided=invite)
         account = await register(
-            name=name, email=email, password=password,
+            name=name,
+            email=email,
+            password=password,
             auth_repo=container.auth_repo(session),
-            branding_dir=settings.branding_dir,
+            branding=container.branding_store,
         )
     except SignupError as exc:
         return render(
-            request, "auth.html", mode="signup", error=str(exc),
+            request,
+            "auth.html",
+            mode="signup",
+            error=str(exc),
             invite_required=bool(settings.beta_invite_code.strip()),
         )
+    await grant_free_trial(account=account, memberships=container.membership_repo(session))
     # Que el correo no llegue no puede tumbar el alta: la cuenta ya existe y se
     # puede reenviar. Bloquear aquí regalaría cuentas a medias.
     try:
         await send_verification_email(
-            email=account.email, name=account.name,
+            email=account.email,
+            name=account.name,
             base_url=container.settings.base_url,
             secret=container.settings.session_secret,
             mailer=container.mailer,
@@ -265,7 +287,8 @@ async def verify_email(
     container = container_of(request)
     try:
         await confirm_email(
-            token=token, secret=container.settings.session_secret,
+            token=token,
+            secret=container.settings.session_secret,
             auth_repo=container.auth_repo(session),
         )
     except SignupError as exc:
@@ -293,29 +316,31 @@ async def oauth_sign_in(
     settings = container.settings
     try:
         if provider == AuthProvider.GOOGLE:
-            identity = await verify_google_id_token(
-                id_token, client_id=settings.google_client_id
-            )
+            identity = await verify_google_id_token(id_token, client_id=settings.google_client_id)
         elif provider == AuthProvider.APPLE:
-            identity = await verify_apple_id_token(
-                id_token, client_id=settings.apple_client_id
-            )
+            identity = await verify_apple_id_token(id_token, client_id=settings.apple_client_id)
         else:
-            return render(request, "auth.html", mode="login",
-                          error="Ese proveedor no está disponible.")
+            return render(
+                request, "auth.html", mode="login", error="Ese proveedor no está disponible."
+            )
         # El código de beta solo aplica al alta: quien ya tiene cuenta entra.
         auth = container.auth_repo(session)
         if await auth.get_by_provider(identity.provider, identity.subject) is None:
             check_beta_invite(configured=settings.beta_invite_code, provided=invite)
         account = await sign_in_with_provider(
-            provider=identity.provider, subject=identity.subject,
-            email=identity.email, name=identity.name,
+            provider=identity.provider,
+            subject=identity.subject,
+            email=identity.email,
+            name=identity.name,
             email_verified=identity.email_verified,
             auth_repo=auth,
-            branding_dir=settings.branding_dir,
+            branding=container.branding_store,
+            reset_tokens=container.password_reset_repo(session),
         )
     except (OAuthError, SignupError) as exc:
         return render(request, "auth.html", mode="login", error=str(exc))
+    # Idempotente: quien ya entró antes no vuelve a recibir la semana de prueba.
+    await grant_free_trial(account=account, memberships=container.membership_repo(session))
     _set_session(request, account)
     profile = await container.repos(session, tenant_id=account.tenant_id).clients.get_by_user(
         account.id

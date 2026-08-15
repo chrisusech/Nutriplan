@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Mis alimentos{% endblock %}
+{% block page_class %}page-foods{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="/perfil" aria-label="Volver"><span class="icon">arrow_back</span></a>
+<div>
+  <p class="app-kicker">{{ n_dentro }} en tu menú</p>
+  <h1 class="app-title">Mis alimentos</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<p class="muted">Con estos armamos tu menú. Lo que quites no vuelve a aparecer
+   en la semana siguiente.</p>
+
+<section class="food-section">
+  <h2 class="eyebrow">En tu menú</h2>
+  {% for group in dentro %}
+  <details class="food-group">
+    <summary>
+      <span class="food-group-name">{{ group.label }}</span>
+      <span class="food-count">{{ group['items'] | length }}</span>
+      <span class="food-chevron"><span class="icon">expand_more</span></span>
+    </summary>
+    <ul class="food-lines">
+      {% for item in group['items'] %}
+      <li>
+        <span>{{ item.name }}</span>
+        <form method="post" action="/mis-alimentos">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="food_id" value="{{ item.id }}">
+          <input type="hidden" name="accion" value="quitar">
+          <button class="btn-icon" type="submit" aria-label="Quitar {{ item.name }}">
+            <span class="icon">remove</span>
+          </button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% else %}
+  <p class="alert">No te queda ningún alimento. Añade algo de la lista de abajo.</p>
+  {% endfor %}
+</section>
+
+<section class="food-section">
+  <h2 class="eyebrow">Añadir</h2>
+  <p class="muted">Lo que no comes hoy. Tus restricciones se cambian en
+     <a href="/perfil">tu perfil</a>.</p>
+  {% for group in fuera %}
+  <details class="food-group">
+    <summary>
+      <span class="food-group-name">{{ group.label }}</span>
+      <span class="food-count">{{ group['items'] | length }}</span>
+      <span class="food-chevron"><span class="icon">expand_more</span></span>
+    </summary>
+    <ul class="food-lines">
+      {% for item in group['items'] %}
+      <li>
+        <span>{{ item.name }}</span>
+        <form method="post" action="/mis-alimentos">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="food_id" value="{{ item.id }}">
+          <input type="hidden" name="accion" value="anadir">
+          <button class="btn-icon" type="submit" aria-label="Añadir {{ item.name }}">
+            <span class="icon">add</span>
+          </button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% else %}
+  <p class="muted">Ya tienes todo el catálogo disponible.</p>
+  {% endfor %}
+</section>
+{% endblock %}

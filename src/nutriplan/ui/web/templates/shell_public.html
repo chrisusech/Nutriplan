@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="{{ tema }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="{{ tema_color }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Entrar{% endblock %} · NutriPlan</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/icon-32.png" sizes="32x32">
+  <link rel="icon" href="/static/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="preload" href="/static/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/poppins-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
+  {# Sin esto htmx inyecta un <style> para sus indicadores y la CSP lo bloquea. #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <script src="/static/htmx.min.js" defer></script>
+  <script type="module" src="/static/js/app.js?v={{ asset_v }}"
+          data-google-client-id="{{ google_client_id or '' }}"
+          data-apple-client-id="{{ apple_client_id or '' }}"></script>
+</head>
+<body class="{% block page_class %}{% endblock %}">
+  {% block body %}{% endblock %}
+</body>
+</html>

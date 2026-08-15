@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Compra de la semana{% endblock %}
+{% block page_class %}page-shopping{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="/" aria-label="Volver"><span class="icon">arrow_back</span></a>
+<div>
+  <p class="app-kicker">{{ n_items }} ítems</p>
+  <h1 class="app-title">Compra de la semana</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if not groups %}
+<div class="empty">
+  <span class="icon">shopping_cart</span>
+  <h2>Nada que comprar todavía</h2>
+  <p>Cuando generes tu semana, aquí aparece de una sola vez todo lo que hay que
+     llevar del súper para los siete días.</p>
+  <a class="btn btn-primary btn-big" href="/">Ir a mi semana</a>
+</div>
+{% else %}
+{% if nueva %}
+{# Se acaba de generar la semana y se aterriza aquí. Sin este bloque, el botón
+   «Generar mi plan» parecería llevar al súper sin haber enseñado el menú. #}
+<div class="ready shop-ready">
+  <span class="ready-badge"><span class="icon">celebration</span></span>
+  <h2>¡Tu semana está lista!</h2>
+  <p class="muted">Empieza por la compra: con esto tienes los siete días
+     resueltos. Tu menú te espera cuando vuelvas.</p>
+  <a class="btn btn-primary btn-big btn-block" href="/">
+    <span class="icon">restaurant</span>Ver mi menú
+  </a>
+</div>
+{% endif %}
+{# Lo primero que se lee tiene que decir qué es esto: una sola compra que cubre
+   los siete días, no lo de hoy. #}
+<div class="shop-intro">
+  <span class="icon">calendar_month</span>
+  <div>
+    <b>Una sola compra para toda la semana</b>
+    <p>Todo lo que necesitas del {{ desde.strftime('%d/%m') }} al
+       {{ hasta.strftime('%d/%m') }}, sumado y en cantidades ya calculadas.
+       Marca lo que vayas echando al carrito.
+       {% if n_en_casa %}Las {{ n_en_casa }} líneas atenuadas ya las tienes en
+       casa: no hace falta comprarlas.{% endif %}</p>
+  </div>
+</div>
+
+{% for group in groups %}
+<section class="card shop-group">
+  <h2>{{ group.label }} <span class="food-count">{{ group.lines | length }}</span></h2>
+  <ul class="shop-list">
+    {% for line in group.lines %}
+    <li>
+      {% if line.ya_tengo %}
+      {# Se queda en la lista, atenuada: hay que poder ver que ese arroz sale de
+         tu bolsa y no que desapareció del menú. #}
+      <div class="shop-line is-mine">
+        <span class="shop-check"><span class="icon">check</span></span>
+        <span class="shop-name">{{ line.name_es|capitalize }}</span>
+        <span class="shop-qty">ya lo tienes</span>
+      </div>
+      {% else %}
+      {# Tacharlo es cosa de la pantalla, no del servidor: nadie quiere que su
+         lista del súper viaje a una base de datos. #}
+      <label class="shop-line">
+        <input type="checkbox">
+        <span class="shop-check"><span class="icon">check</span></span>
+        <span class="shop-name">{{ line.name_es|capitalize }}</span>
+        <span class="shop-qty">
+          {% if line.unit_label %}{{ line.unit_label }} · {% endif %}{{ line.grams|int }} g
+        </span>
+      </label>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -23,17 +23,19 @@ FORBIDDEN_PROPS = frozenset({"email", "name", "nombre", "correo", "password", "t
 
 
 class Event(StrEnum):
-    """El embudo, paso a paso. Añadir uno aquí es declarar que se mide."""
+    """El embudo, paso a paso. Añadir uno aquí es declarar que se emite.
 
-    SIGNED_UP = "signed_up"
+    El alta y el borrado de cuenta no están: en ese momento no hay
+    consentimiento que valga (se acaba de dar o se acaba de retirar), así que
+    `track` los descartaría siempre.
+    """
+
     CONSENT_GIVEN = "consent_given"
     ONBOARDING_DONE = "onboarding_done"
     MENU_GENERATED = "menu_generated"
-    MENU_REFINED = "menu_refined"
-    RECIPE_OPENED = "recipe_opened"
     DISH_RATED = "dish_rated"
     FEEDBACK_SENT = "feedback_sent"
-    ACCOUNT_DELETED = "account_deleted"
+    WEIGHT_CHECKIN = "weight_checkin"
 
 
 class EventRepository(Protocol):

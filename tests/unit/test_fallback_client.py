@@ -63,10 +63,12 @@ async def test_si_el_primero_se_queda_sin_cuota_entra_el_siguiente() -> None:
 
 async def test_si_ninguno_responde_falla_diciendo_que_paso_con_cada_uno() -> None:
     """El error tiene que nombrar a los dos: si no, no se sabe qué arreglar."""
-    chain = FallbackLLMClient([
-        ("groq", _Proveedor("groq", falla=True)),
-        ("openrouter", _Proveedor("openrouter", falla=True)),
-    ])
+    chain = FallbackLLMClient(
+        [
+            ("groq", _Proveedor("groq", falla=True)),
+            ("openrouter", _Proveedor("openrouter", falla=True)),
+        ]
+    )
     with pytest.raises(LLMError) as exc:
         await chain.select_plan(system="s", prompt="p", schema=Respuesta, model="m")
     assert "groq" in str(exc.value)
@@ -74,10 +76,12 @@ async def test_si_ninguno_responde_falla_diciendo_que_paso_con_cada_uno() -> Non
 
 
 async def test_el_fallback_tambien_cubre_la_extraccion() -> None:
-    chain = FallbackLLMClient([
-        ("groq", _Proveedor("groq", falla=True)),
-        ("openrouter", _Proveedor("openrouter")),
-    ])
+    chain = FallbackLLMClient(
+        [
+            ("groq", _Proveedor("groq", falla=True)),
+            ("openrouter", _Proveedor("openrouter")),
+        ]
+    )
     result = await chain.extract(system="s", text="t", schema=Respuesta, model="m")
     assert result.quien == "openrouter"
 

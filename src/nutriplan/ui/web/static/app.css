@@ -1,13 +1,22 @@
-/* Punto de entrada. El orden importa: tokens, base, pantallas.
+/* Punto de entrada. El orden importa: primero el vocabulario, luego las piezas,
+   al final las pantallas.
 
    Son @import y no un solo archivo para que cada hoja se lea sola; en HTTP/2 el
-   coste de cuatro peticiones pequeñas es despreciable frente a lo que gana la
-   siguiente persona que tenga que tocar esto.
+   coste de unas cuantas peticiones pequeñas es despreciable frente a lo que
+   gana la siguiente persona que tenga que tocar esto.
 
    OJO con el orden: lo que se importa al final gana. Una hoja que redeclare
    `:root` aquí abajo pisaría todos los tokens — pasó con la hoja heredada. */
 
 @import url('/static/styles/tokens.css');
 @import url('/static/styles/base.css');
+@import url('/static/styles/motion.css');
+@import url('/static/styles/components.css');
+@import url('/static/styles/viz.css');
+@import url('/static/styles/sheet.css');
+@import url('/static/styles/shell.css');
+@import url('/static/styles/welcome.css');
+@import url('/static/styles/onboarding.css');
 @import url('/static/styles/week.css');
 @import url('/static/styles/screens.css');
+@import url('/static/styles/admin.css');

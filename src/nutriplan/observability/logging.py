@@ -6,7 +6,6 @@ job_id cuando se bind()ean al contexto.
 """
 
 import logging
-from typing import cast
 
 import structlog
 
@@ -27,7 +26,3 @@ def configure_logging(level: str = "INFO") -> None:
         ),
         cache_logger_on_first_use=True,
     )
-
-
-def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    return cast(structlog.stdlib.BoundLogger, structlog.get_logger(name))

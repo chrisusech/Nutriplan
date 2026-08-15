@@ -6,7 +6,9 @@
 - **Bundle / applicationId:** `app.nutriplan`
 - **Categoría:** Health & Fitness / Salud y bienestar
 - **Edad:** 13+
-- **Precio:** Gratis (beta sin IAP)
+- **Precio:** Gratis con prueba de 1 semana; suscripción IAP mensual/anual
+  (`nutriplan.monthly`, `nutriplan.annual`). El precio se pone en App Store
+  Connect, no en el código.
 
 ## URLs (prod)
 
@@ -47,7 +49,7 @@ Tamaños: iPhone 6.7" + Pixel 6. Feature graphic Play 1024×500.
 | Salud (peso, altura, objetivo) | Sí | Sí | No |
 | Identificadores (sesión, OAuth sub) | Sí | Sí | No |
 | Uso de la app (eventos) | Sí (opt-in consentimiento) | No (agregado) | No |
-| Compra / publicidad | No | — | — |
+| Compra / publicidad | Sí (IAP Apple) | Sí (user_id + transaction_id) | No |
 
 No se venden datos. IA de terceros recibe solo alimentos del plato (ver privacidad).
 
@@ -56,8 +58,12 @@ No se venden datos. IA de terceros recibe solo alimentos del plato (ver privacid
 1. Apple Developer Program
 2. App Store Connect → app `app.nutriplan`
 3. Sign in with Apple capability
-4. TestFlight **Internal** → emails del equipo
-5. Export compliance: HTTPS only / Exempt encryption if applicable
+4. Productos de suscripción `nutriplan.monthly` y `nutriplan.annual` **antes**
+   del review si el paywall ya está. Sandbox tester para el revisor.
+5. TestFlight **Internal** puede salir **sin** IAP (una semana + activación a mano).
+6. Cuenta demo para revisión (correo + clave en las notas de review).
+7. Export compliance: HTTPS only / Exempt encryption if applicable
+8. **No declarar Push** en el listing hasta que el envío server-side exista.
 
 ## Google Play
 
@@ -85,7 +91,9 @@ npx cap open android
 - [ ] Registro + consentimiento + onboarding
 - [ ] Generar menú (~1 s)
 - [ ] Ver semana offline (modo avión tras cache)
-- [ ] Login Google / Apple
+- [ ] Login Google / Apple (mismo correo no duplica cuenta)
+- [ ] Paywall `/plan` + restaurar compras (sandbox)
 - [ ] Compartir día
 - [ ] Eliminar cuenta
 - [ ] `/privacidad` `/terminos` `/soporte` abren
+- [ ] Splash no se queda en negro

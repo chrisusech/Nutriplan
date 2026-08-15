@@ -20,9 +20,7 @@ DEFAULT_TENANT_ID: UUID = uuid5(NAMESPACE_URL, "nutriplan/default-tenant")
 async def seed_local(session: AsyncSession, foods_csv: Path) -> None:
     if await session.get(TenantRow, DEFAULT_TENANT_ID) is None:
         session.add(
-            TenantRow(
-                id=DEFAULT_TENANT_ID, name="Entrenadora local", created_at=datetime.now(UTC)
-            )
+            TenantRow(id=DEFAULT_TENANT_ID, name="Entrenadora local", created_at=datetime.now(UTC))
         )
     await session.flush()
 

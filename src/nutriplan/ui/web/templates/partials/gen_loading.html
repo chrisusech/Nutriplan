@@ -1,5 +1,38 @@
-<div class="gen-state" hx-get="/menu/estado?job={{ job_id }}&n={{ msg_index }}"
+{# id=menu-flow: mismo ancla que el estado vacío, por si el poll reinicia el
+   swap. Lo que se ve mientras el motor trabaja: el plato girando, la etapa en
+   curso y el esqueleto de lo que está por llegar — así la espera ya es la app
+   y no una pantalla en blanco con un reloj. #}
+<div class="gen-state" id="menu-flow"
+     hx-get="/menu/estado?job={{ job_id }}&n={{ msg_index }}"
      hx-trigger="load delay:900ms" hx-swap="outerHTML">
-  <span class="icon gen-spin">autorenew</span>
-  <p>{{ loading_msg }}</p>
+
+  <div class="gen-plate" aria-hidden="true">
+    <img class="plate-img" src="/static/img/plato-hero.jpg" alt="" width="640" height="640">
+  </div>
+
+  <h2 class="gen-title">Estamos armando tu semana</h2>
+  <p class="gen-msg">Tarda menos de un minuto. Puedes quedarte mirando.</p>
+  {# La etapa se ve en la lista; quien no ve la pantalla la oye aquí. #}
+  <p class="sr-only" role="status" aria-live="polite">{{ loading_msg }}</p>
+
+  <ol class="gen-steps">
+    {% for texto in etapas %}
+    <li class="gen-step {{ 'is-done' if loop.index0 < etapa else ('on' if loop.index0 == etapa else '') }}">
+      <span class="icon">{{ 'check_circle' if loop.index0 < etapa else 'radio_button_unchecked' }}</span>
+      <span>{{ texto }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+
+  <div class="gen-skeletons" aria-hidden="true">
+    {% for _ in range(3) %}
+    <div class="sk-card">
+      <div class="sk sk-avatar"></div>
+      <div class="sk-lines">
+        <div class="sk sk-line is-short"></div>
+        <div class="sk sk-line is-mid"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 </div>

@@ -7,32 +7,47 @@
 #
 # Máximo 4 componentes: `build_selection_schema` no admite más alimentos por comida.
 #
+# `name` describe el FORMATO y es como se habla del plato en la consola.
+# `naming` es lo que la persona lee en su semana, con sus alimentos dentro:
+# "{protein}", "{carb}", "{fat}" y "{fruit}" se sustituyen por lo que le tocó. Si
+# el patrón nombra un componente opcional que hoy no está, el nombre se arma con
+# la lista de alimentos en vez de prometer algo que no viene.
+#
 # `version` entra en compute_input_hash: si añades un plato, los planes se
 # regeneran en vez de servirse de la caché.
 # 2026.07.15: los carbos ganan peso por comida (`FoodItem.slot_weights`). El hash
 # de entrada mira la versión del catálogo, no los datos del alimento: sin subirla,
 # los planes ya generados se servirían de caché y parecería que el motor sigue
 # poniendo arepa en los almuerzos.
-version: "2026.08.01"
+# 2026.08.13: el almuerzo y la cena pasan de dos formas a seis. Con dos, las
+# catorce comidas principales de la semana salían con el mismo título y la gente
+# lo leía como "siempre lo mismo", aunque debajo cambiara la carne.
+# 2026.08.14: fruta opcional en huevos_carbo_grasa. Un desayuno de ~130 g de
+# carbo no cabe en arepa/pan solos; con fruta el plato sí entra al pool y deja
+# de ser solo bowls de avena.
+version: "2026.08.14"
 
 templates:
   # ---------------------------------------------------------------- DESAYUNO --
 
   - id: huevos_carbo_grasa
     name: Huevos con carbohidrato y grasa
+    naming: "{protein} con {carb} y {fruit}"
     recipe:
       - "Calienta una sartén antiadherente a fuego medio con unas gotas de aceite."
       - "Cocina los huevos como más te gusten: revueltos, en tortilla o al ojo. Salpimenta al final."
       - "Tuesta o calienta el carbohidrato mientras tanto."
-      - "Sirve, corta la grasa en láminas encima y come caliente."
+      - "Sirve, corta la grasa en láminas encima y come caliente. Si hay fruta, ponla al lado."
     slots: [desayuno]
     components:
       - {role: protein, sel: "@huevos"}
       - {role: carb, sel: "@carbo_desayuno"}
+      - {role: fruit, sel: "@fruta", optional: true}
       - {role: fat, sel: "@grasa_desayuno", optional: true}
 
   - id: bowl_lacteo_avena_fruta
     name: Bowl de lácteo con avena y fruta
+    naming: "Bowl de {protein} con {carb} y {fruit}"
     recipe:
       - "Sirve el lácteo en un tazón hondo."
       - "Agrega la avena y mezcla hasta que se hidrate."
@@ -45,6 +60,7 @@ templates:
 
   - id: lacteo_carbo_crema
     name: Lácteo con tostada y crema de frutos secos
+    naming: "{carb} con {fat} y {protein}"
     recipe:
       - "Tuesta el carbohidrato hasta que esté crujiente."
       - "Úntale la crema de frutos secos mientras está caliente, para que se extienda sola."
@@ -57,6 +73,7 @@ templates:
 
   - id: batido_avena_fruta
     name: Batido de proteína con avena y fruta
+    naming: "Batido de {fruit} con {carb}"
     recipe:
       - "Pon en la licuadora la fruta, la avena, la proteína en polvo y agua fría."
       - "Licúa un minuto hasta que no queden grumos."
@@ -69,6 +86,7 @@ templates:
 
   - id: loncha_carbo_aguacate
     name: Tostada con loncha y aguacate
+    naming: "{carb} con {protein} y {fat}"
     recipe:
       - "Tuesta el carbohidrato."
       - "Machaca el aguacate con un poco de sal y limón, y úntalo encima."
@@ -88,24 +106,30 @@ templates:
 
   - id: fruta_sola
     name: Fruta
+    naming: "{fruit}"
     recipe:
-      - "Lava la fruta y córtala como prefieras. Come."
+      - "Lava la fruta bajo el grifo."
+      - "Córtala en trozos fáciles de comer y sírvete. Lista."
     slots: [snack_am, snack_pm]
     components:
       - {role: fruit, sel: "@fruta"}
 
   - id: fruta_crema
     name: Fruta con crema de frutos secos
+    naming: "{fruit} con {fat}"
     recipe:
       - "Corta la fruta en tajadas."
       - "Sirve la crema de frutos secos al lado y ve mojando cada tajada."
     slots: [snack_am, snack_pm]
     components:
       - {role: fruit, sel: "@fruta"}
-      - {role: fat, sel: "@crema_frutos_secos"}
+      # Opcional: si el día ya lleva la grasa, el solver la dejaba en 0 g y
+      # el nombre/pasos seguían hablando de crema con solo banano.
+      - {role: fat, sel: "@crema_frutos_secos", optional: true}
 
   - id: fruta_frutos_secos
     name: Fruta con frutos secos
+    naming: "{fruit} con {fat}"
     recipe:
       - "Corta la fruta en trozos."
       - "Mézclala con los frutos secos en un tazón pequeño."
@@ -116,6 +140,7 @@ templates:
 
   - id: lacteo_fruta
     name: Yogur griego con fruta
+    naming: "{protein} con {fruit}"
     recipe:
       - "Sirve el yogur en un tazón."
       - "Lava y corta la fruta encima. Si la mezclas, queda más dulce."
@@ -127,14 +152,17 @@ templates:
   # La salida cuando el cliente no tiene fruta en su lista: el yogur solo.
   - id: lacteo_solo
     name: Yogur griego
+    naming: "{protein}"
     recipe:
-      - "Sirve el yogur en un tazón. Un toque de canela le cambia la vida."
+      - "Sirve el yogur en un tazón. Sacúdelo si viene en vaso."
+      - "Un toque de canela o limón le cambia la vida; opcional."
     slots: [snack_am, snack_pm]
     components:
       - {role: protein, sel: "@lacteo_magro"}
 
   - id: loncha_carbo_snack
     name: Loncha con galletas o tostada
+    naming: "{carb} con {protein}"
     recipe:
       - "Coloca las lonchas sobre las galletas o la tostada."
       - "Come al momento para que el carbohidrato no se ablande."
@@ -145,6 +173,7 @@ templates:
 
   - id: batido_fruta
     name: Batido de proteína con fruta
+    naming: "Batido de {fruit}"
     recipe:
       - "Licúa la fruta con la proteína en polvo y agua bien fría."
       - "Sirve enseguida."
@@ -157,6 +186,7 @@ templates:
 
   - id: proteina_carbo_ensalada
     name: Proteína con carbohidrato y ensalada
+    naming: "{protein} con {carb} y ensalada"
     recipe:
       - "Salpimenta la proteína y cocínala en una sartén caliente con poco aceite, girándola una sola vez para que no se seque."
       - "Cocina o calienta el carbohidrato aparte."
@@ -169,15 +199,102 @@ templates:
       - {role: carb, sel: "@carbo_principal"}
       - {role: fat, sel: "@grasa_cocina", optional: true}
 
+  # La grasa va como clase y no como `#aguacate`: exigir ese alimento exacto ataba
+  # el plato a que nadie más se lo hubiera comido ese día.
   - id: proteina_carbo_aguacate
-    name: Proteína con carbohidrato y aguacate
+    name: Proteína con carbohidrato y guarnición
+    naming: "{protein} con {carb} y {fat}"
     recipe:
       - "Cocina la proteína a fuego medio hasta que esté dorada por fuera y jugosa por dentro."
       - "Calienta el carbohidrato."
-      - "Corta el aguacate en láminas y colócalo al lado, con sal y limón."
+      - "Sirve la guarnición al lado, con sal y limón: si es aguacate, en láminas."
     slots: [almuerzo, cena]
     free_salad: true
     components:
       - {role: protein, sel: "@carne_magra"}
       - {role: carb, sel: "@carbo_principal"}
-      - {role: fat, sel: "#aguacate"}
+      - {role: fat, sel: "@guarnicion_grasa"}
+
+  # Las cuatro de abajo llevan los mismos roles que las dos de arriba: lo que
+  # cambia es CÓMO se cocina. Con solo dos formas de almorzar, catorce comidas
+  # principales a la semana se leían como el mismo plato una y otra vez, y eso
+  # es exactamente lo que la gente llama "se repite mucho" — aunque debajo
+  # cambiaran la carne y el carbohidrato.
+
+  - id: salteado_wok
+    name: Salteado con verduras
+    naming: "Salteado de {protein} con {carb}"
+    recipe:
+      - "Corta la proteína en tiras finas y sazónala con sal, pimienta y ajo."
+      - "Calienta la sartén o el wok a fuego ALTO con la grasa: si no humea un poco, se cuece en vez de saltear."
+      - "Saltea la proteína dos o tres minutos moviéndola, y sácala."
+      - "En la misma sartén saltea las verduras que tengas (cebolla, pimentón, brócoli, zanahoria) un par de minutos."
+      - "Devuelve la proteína, agrega el carbohidrato ya cocido y saltea todo junto un minuto más."
+    slots: [almuerzo, cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@carne_magra"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "@grasa_cocina"}
+
+  - id: guiso_criollo
+    name: Guiso criollo
+    naming: "Guiso de {protein} con {carb}"
+    recipe:
+      - "Haz un sofrito con cebolla y tomate picados finos hasta que se deshagan."
+      - "Agrega la proteína en trozos, sella y sazona con comino, sal y pimienta."
+      - "Cubre con un poco de agua o caldo y deja a fuego bajo hasta que esté tierna."
+      - "Sirve el guiso sobre el carbohidrato caliente, con su salsa por encima."
+    slots: [almuerzo, cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@carne_magra"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "@grasa_cocina", optional: true}
+
+  - id: horneado_bandeja
+    name: Al horno en una bandeja
+    naming: "{protein} al horno con {carb}"
+    recipe:
+      - "Precalienta el horno a 200 °C."
+      - "Pon la proteína y el carbohidrato en la misma bandeja, en trozos parejos."
+      - "Aliña con la grasa, sal, pimienta y lo que tengas: ajo, orégano, paprika, limón."
+      - "Hornea 20 a 30 minutos, dándoles la vuelta a la mitad, hasta que estén dorados."
+    slots: [almuerzo, cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@carne_magra"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "@grasa_cocina", optional: true}
+
+  - id: sopa_sustanciosa
+    name: Sopa sustanciosa
+    naming: "Sopa de {protein} con {carb}"
+    recipe:
+      - "Sofríe cebolla y ajo en la olla; agrega la proteína en trozos y séllala."
+      - "Cubre con agua o caldo y deja hervir a fuego medio."
+      - "Añade el carbohidrato y las verduras que tengas, y cocina hasta que todo esté blando."
+      - "Prueba de sal al final y sirve bien caliente, con cilantro si te gusta."
+    slots: [almuerzo, cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@carne_magra"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "@grasa_cocina", optional: true}
+
+  # Solo cena: los huevos del catálogo declaran desayuno y cena, así que en un
+  # almuerzo esta plantilla no encontraría proteína y se descartaría sola.
+  - id: huevos_cena
+    name: Huevos para la cena
+    naming: "Tortilla de {protein} con {carb}"
+    recipe:
+      - "Bate los huevos con sal y pimienta."
+      - "Calienta la sartén con la grasa a fuego medio."
+      - "Cuájalos como prefieras: tortilla, revueltos o al ojo. Mejor poco hechos que secos."
+      - "Acompaña con el carbohidrato caliente y una ensalada al lado."
+    slots: [cena]
+    free_salad: true
+    components:
+      - {role: protein, sel: "@huevos"}
+      - {role: carb, sel: "@carbo_principal"}
+      - {role: fat, sel: "@grasa_cocina", optional: true}

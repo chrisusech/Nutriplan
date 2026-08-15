@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Tu plan{% endblock %}
+{% block page_class %}page-profile{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="/perfil" aria-label="Volver">
+  <span class="icon">arrow_back</span>
+</a>
+<h1 class="app-title">Activar mi plan</h1>
+{% endblock %}
+
+{% block content %}
+{% if error %}<p class="alert">{{ error }}</p>{% endif %}
+
+<p class="muted">La semana de prueba se acabó. Elige mensual o anual. En el
+  iPhone el cobro lo hace Apple (Apple Pay, tarjeta o saldo); nosotros solo
+  activamos tus semanas cuando la tienda confirma.</p>
+
+{% if membership and membership.can_generate %}
+<p class="alert">Todavía te quedan {{ membership.weeks_left }} semana{{ '' if membership.weeks_left == 1 else 's' }}.</p>
+{% endif %}
+
+<div class="card">
+  <h2>Mensual</h2>
+  <p class="muted">4 semanas. El precio lo pone la ficha de App Store.</p>
+  <form method="post" action="/plan/activar">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="product_id" value="{{ monthly }}">
+    <input type="hidden" name="transaction_id" value="" data-iap-txn>
+    <button class="btn btn-primary btn-block" type="submit" data-iap="{{ monthly }}">
+      Continuar con Apple
+    </button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Anual</h2>
+  <p class="muted">52 semanas. El precio lo pone la ficha de App Store.</p>
+  <form method="post" action="/plan/activar">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="product_id" value="{{ annual }}">
+    <input type="hidden" name="transaction_id" value="" data-iap-txn>
+    <button class="btn btn-primary btn-block" type="submit" data-iap="{{ annual }}">
+      Continuar con Apple
+    </button>
+  </form>
+</div>
+
+<p class="muted">Si ya pagaste en otro iPhone, restaura la compra desde Ajustes
+  de Apple. Los términos están en <a href="/terminos">/terminos</a>.</p>
+{% endblock %}

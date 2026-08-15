@@ -1,0 +1,23 @@
+{% if steps %}
+<div class="recipe-block"{% if culinary_title %} data-culinary-title="{{ culinary_title }}"{% endif %}>
+  <h4>Preparación</h4>
+  <ol class="steps">
+    {% for step in steps %}<li>{{ step }}</li>{% endfor %}
+  </ol>
+  <div class="recipe-meta">
+    {% if prep_minutes %}
+    <span class="pill"><span class="icon">schedule</span>{{ prep_minutes }} min</span>
+    {% endif %}
+    {% if difficulty %}
+    <span class="pill"><span class="icon">signal_cellular_alt</span>{{ difficulty }}</span>
+    {% endif %}
+  </div>
+  {% if tips %}<p class="tip">{{ tips }}</p>{% endif %}
+</div>
+{% else %}
+<p class="muted tip">
+  Por ahora solo tienes los ingredientes.
+  <button type="button" class="btn btn-ghost recipe-retry"
+          data-recipe-retry>Reintentar receta</button>
+</p>
+{% endif %}

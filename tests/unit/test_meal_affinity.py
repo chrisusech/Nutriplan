@@ -60,7 +60,9 @@ def test_the_weight_says_whose_meal_it_is(foods) -> None:
     almuerzo. De ahí salía la arepa a mediodía y el pan en la cena.
     """
     arroz, arepa, pan = (
-        foods["arroz blanco cocido"], foods["arepa de maíz"], foods["pan integral"]
+        foods["arroz blanco cocido"],
+        foods["arepa de maíz"],
+        foods["pan integral"],
     )
     for main in (MealSlot.LUNCH, MealSlot.DINNER):
         assert arroz.weight_in(main) > arepa.weight_in(main)

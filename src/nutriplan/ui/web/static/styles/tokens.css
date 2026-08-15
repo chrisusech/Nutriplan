@@ -1,47 +1,58 @@
-/* Tokens del diseño "Generador v2 con Recetas".
-   Móvil primero: los tamaños son fluidos y las medidas van en rem, para que
-   quien tenga el texto del sistema en grande siga pudiendo usar la app. */
+/* Tokens del diseño. Oscuro por defecto, claro a petición.
+
+   El tema es un atributo (`<html data-theme>`) y no una media query: así el
+   servidor lo escribe desde la cookie y la pantalla nace ya en su color, sin el
+   parpadeo blanco de quien lo decide en el cliente. Quien no haya elegido nada
+   entra en oscuro, que es como se ve la app de noche, en la cocina, con el
+   móvil en una mano.
+
+   Móvil primero: todo en rem y con clamp(), para que quien tenga el texto del
+   sistema en grande siga pudiendo usar la app. */
 
 :root {
-  /* Superficies */
-  --bg: #F3EAE4;
-  --panel: #FBF6F3;
-  --card: #FFFFFF;
-  --line: #F1E4DD;
-  --line-strong: #EEDFD8;
-  --wash: #F6ECE7;
-  --wash-2: #FBF7F4;
-  --chip: #F4E9E3;
+  color-scheme: dark;
+
+  /* Superficies. El negro es cálido: debajo del coral, un gris azulado ensucia. */
+  --bg: #131010;
+  --panel: #1A1514;
+  --card: #211A18;
+  --card-2: #2A2220;      /* lo que flota sobre una tarjeta: sheet, seleccionado */
+  --line: #2E2724;
+  --line-strong: #3B322E;
+  --wash: #1D1715;
+  --wash-2: #191413;
+  --chip: #29201D;
 
   /* Texto */
-  --ink: #3B2E2B;
-  --ink-2: #5C4A44;
-  --ink-3: #6B564E;
-  --muted: #8A756C;
-  --muted-2: #9A857C;
-  --muted-3: #95817A;
-  --faint: #B0968C;
-  --faint-2: #C4A99E;
+  --ink: #F8F2EE;
+  --ink-2: #E3D8D2;
+  --ink-3: #CBBDB6;
+  --muted: #A39087;
+  --muted-2: #938077;
+  --muted-3: #8E7B72;
+  --faint: #7A675F;
+  --faint-2: #675550;
 
   /* Estado */
-  --ok: #2E9E6E;
-  --ok-soft: #E3F4EA;
-  --warn: #C9852E;
-  --warn-soft: #FBF0DA;
-  --danger: #D2544A;
+  --ok: #3DBE85;
+  --ok-soft: #16332A;
+  --warn: #E0A73F;
+  --warn-soft: #33280F;
+  --danger: #F0655A;
 
-  /* Marca. El servidor solo fija `--brand`; el tinte se deriva aquí para que
-     siga al tema: escribirlo desde JavaScript ponía un estilo inline en <html>
-     que ganaba sobre la media query, y en oscuro el nombre del plato abierto
-     salía blanco sobre rosa claro. */
-  --brand: #F26D5B;
-  --brand-soft: color-mix(in srgb, var(--brand) 14%, var(--card));
+  /* Marca. Sobre negro el coral de la web pierde fuerza, así que aquí se sube
+     medio tono. El texto encima va oscuro y no blanco: blanco sobre coral se
+     queda en 2.6:1 de contraste, que es ilegible al sol. */
+  --brand: #FF7A62;
+  --on-brand: #2B120C;
+  --brand-soft: color-mix(in srgb, var(--brand) 16%, var(--card));
+  --brand-line: color-mix(in srgb, var(--brand) 42%, var(--line));
 
   /* Macros */
-  --kcal: #F2704F;
-  --protein: #E8607A;
-  --carb: #E0A537;
-  --fat: #B08968;
+  --kcal: #FF8A5C;
+  --protein: #FF7E9B;
+  --carb: #F2B84B;
+  --fat: #D9A47A;
 
   /* Escala de texto. clamp() = crece con la pantalla sin pasarse. */
   --t-xs: clamp(0.6875rem, 0.66rem + 0.14vw, 0.75rem);
@@ -50,6 +61,8 @@
   --t-lg: clamp(0.9375rem, 0.9rem + 0.2vw, 1rem);
   --t-xl: clamp(1.125rem, 1.05rem + 0.35vw, 1.375rem);
   --t-2xl: clamp(1.375rem, 1.25rem + 0.6vw, 1.75rem);
+  --t-3xl: clamp(1.75rem, 1.5rem + 1.1vw, 2.25rem);
+  --t-hero: clamp(2.25rem, 1.7rem + 2.6vw, 3.25rem);
 
   /* Espaciado */
   --s-1: 0.25rem;
@@ -59,52 +72,85 @@
   --s-5: 1.25rem;
   --s-6: 1.5rem;
   --s-8: 2rem;
+  --s-10: 2.5rem;
 
-  /* Radios del diseño */
+  /* Radios: más generosos que antes, que es lo que separa una web de una app. */
   --r-sm: 0.75rem;
   --r-md: 1rem;
-  --r-lg: 1.125rem;
-  --r-xl: 1.375rem;
-  --r-2xl: 1.75rem;
+  --r-lg: 1.25rem;
+  --r-xl: 1.5rem;
+  --r-2xl: 2rem;
   --r-pill: 999px;
 
-  /* Sombras: cálidas, no grises — el fondo es crema */
-  --sh-1: 0 0.375rem 1.375rem rgba(180, 120, 100, 0.05);
-  --sh-2: 0 0.75rem 1.75rem rgba(242, 109, 91, 0.28);
-  --sh-3: 0 1.875rem 4.375rem rgba(150, 100, 80, 0.13);
+  /* Sombras. En oscuro la profundidad la da el negro, no el gris. */
+  --sh-1: 0 0.375rem 1.25rem rgba(0, 0, 0, 0.35);
+  --sh-2: 0 0.625rem 1.5rem rgba(255, 122, 98, 0.26);
+  --sh-3: 0 1.5rem 3.5rem rgba(0, 0, 0, 0.55);
+
+  /* Movimiento. Un solo vocabulario para toda la app. */
+  --dur-1: 0.12s;
+  --dur-2: 0.22s;
+  --dur-3: 0.42s;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* Lo que el pulgar necesita para acertar */
   --tap: 2.75rem;
 
-  /* Alto de la barra inferior + el notch del teléfono */
-  --nav-h: 4rem;
+  /* Barra inferior y los recortes del teléfono */
+  --nav-h: 4.25rem;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
 }
 
-/* El sistema en oscuro no debe dar un blanco en la cara a las 6 am. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1C1614;
-    --panel: #241D1A;
-    --card: #2B2320;
-    --line: #3A2F2B;
-    --line-strong: #453833;
-    --wash: #2B2320;
-    --wash-2: #241D1A;
-    --chip: #332A26;
+[data-theme="light"] {
+  color-scheme: light;
 
-    --ink: #F5EDE9;
-    --ink-2: #E4D6D0;
-    --ink-3: #D2C1B9;
-    --muted: #B0998F;
-    --muted-2: #A08C82;
-    --muted-3: #9A857C;
-    --faint: #8A756C;
-    --faint-2: #75625A;
+  --bg: #F4EBE5;
+  --panel: #FCF8F5;
+  --card: #FFFFFF;
+  --card-2: #FBF4F0;
+  --line: #EFE1DA;
+  --line-strong: #E6D4CB;
+  --wash: #F7EDE8;
+  --wash-2: #FCF8F5;
+  --chip: #F4E9E3;
 
-    --ok-soft: #1E3A2C;
-    --warn-soft: #3A2F1A;
-    --sh-1: 0 0.375rem 1.375rem rgba(0, 0, 0, 0.3);
-    --sh-3: 0 1.875rem 4.375rem rgba(0, 0, 0, 0.4);
-  }
+  --ink: #332724;
+  --ink-2: #55433D;
+  --ink-3: #6B564E;
+  --muted: #8A756C;
+  --muted-2: #9A857C;
+  --muted-3: #95817A;
+  --faint: #A98F84;
+  --faint-2: #C4A99E;
+
+  --ok: #2E9E6E;
+  --ok-soft: #E3F4EA;
+  --warn: #C9852E;
+  --warn-soft: #FBF0DA;
+  --danger: #D2544A;
+
+  --brand: #F2664F;
+  --on-brand: #FFF6F3;
+  --brand-soft: color-mix(in srgb, var(--brand) 12%, var(--card));
+  --brand-line: color-mix(in srgb, var(--brand) 38%, var(--line));
+
+  --kcal: #F2704F;
+  --protein: #E8607A;
+  --carb: #D89A2C;
+  --fat: #B08968;
+
+  --sh-1: 0 0.375rem 1.375rem rgba(180, 120, 100, 0.08);
+  --sh-2: 0 0.625rem 1.5rem rgba(242, 102, 79, 0.26);
+  --sh-3: 0 1.5rem 3.5rem rgba(150, 100, 80, 0.16);
+}
+
+/* El anillo y las barras animan un porcentaje, y un porcentaje solo se puede
+   interpolar si el navegador sabe que es un número. Registrarlo aquí es lo que
+   permite que el anillo salga desde cero en vez de aparecer ya lleno. */
+@property --pct {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
 }

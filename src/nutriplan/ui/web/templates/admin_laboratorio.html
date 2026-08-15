@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Laboratorio{% endblock %}
+{% block page_class %}page-admin{% endblock %}
+
+{% block content %}
+{% include "partials/admin_nav.html" %}
+<h1>Laboratorio</h1>
+<p class="muted">Tu cuenta usa el flujo normal sin puertas: sin membresía, sin
+   cierre de semana obligatorio y sin mínimo de calificaciones. Nada de lo que
+   generes aquí entra en las métricas.</p>
+
+<section class="card">
+  <h3>Probar</h3>
+  <div class="admin-acts">
+    <a class="btn btn-primary" href="/">Mi semana</a>
+    <a class="btn btn-outline" href="/compra">Lista de compra</a>
+    <a class="btn btn-outline" href="/check-in">Cierre de semana</a>
+    <a class="btn btn-ghost" href="/feedback">Opinar</a>
+  </div>
+  {% if perfil %}
+  <form method="post" action="/menu/generar" class="regen"
+        hx-post="/menu/generar" hx-target="main" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <button class="btn btn-primary btn-block" type="submit">
+      <span class="icon">auto_awesome</span>Generar una semana de prueba
+    </button>
+  </form>
+  {% else %}
+  <p class="muted">Tu cuenta todavía no tiene perfil:
+    <a href="/onboarding">créalo</a> para poder generar.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h3>Cómo está configurado el motor</h3>
+  <ul class="admin-history">
+    <li>IA disponible: <b>{{ 'sí' if motor.llm else 'no (modo offline)' }}</b></li>
+    <li>La IA elige alimentos: <b>{{ 'sí' if motor.selecciona else 'no (motor determinista)' }}</b></li>
+    <li>Pasada crítica de nombres: <b>{{ 'sí' if motor.refina else 'no' }}</b></li>
+    <li>Recetas al generar: <b>{{ 'sí' if motor.recetas_eager else 'bajo demanda' }}</b></li>
+    <li>Modelo: <b>{{ motor.modelo }}</b></li>
+    <li>Catálogo de platos: <b>{{ catalogo }}</b></li>
+    <li>Configuración nutricional: <b>{{ config_version }}</b></li>
+    <li>Recetas curadas: <b>{{ recetas_curadas }}</b></li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Tus últimas semanas</h3>
+  <ul class="admin-history">
+    {% for p in planes %}
+    <li>
+      <b>Semana del {{ p.week_start.strftime('%d/%m/%Y') }}</b>
+      <span class="muted">v{{ p.version }} · {{ p.model }} · hash {{ p.input_hash[:8] }}</span>
+    </li>
+    {% else %}
+    <li class="muted">Todavía no has generado ninguna.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

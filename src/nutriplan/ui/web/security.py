@@ -26,7 +26,7 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 # Rutas que un tercero SÍ puede invocar: el ID token de Google llega desde el
 # cliente nativo, que no tiene cookie de sesión ni de dónde sacar el token CSRF.
-CSRF_EXEMPT = ("/auth/oauth/",)
+CSRF_EXEMPT = ("/auth/oauth/", "/internal/tick")
 
 
 def csrf_token(request: Request) -> str:
@@ -51,9 +51,7 @@ async def _submitted_token(request: Request) -> str:
     if header:
         return header
     content_type = request.headers.get("content-type", "")
-    if not content_type.startswith(
-        ("application/x-www-form-urlencoded", "multipart/form-data")
-    ):
+    if not content_type.startswith(("application/x-www-form-urlencoded", "multipart/form-data")):
         return ""
 
     body = await request.body()
@@ -99,18 +97,20 @@ def security_headers_middleware(*, https: bool) -> Middleware:
     # `capacitor:` y `ionic:` son los orígenes que el WebView nativo usa para
     # servir su puente. Sin ellos, dentro de la app no habría login social —
     # pero sigue sin haber `unsafe-inline`, que es lo que importa.
-    csp = "; ".join([
-        "default-src 'self' capacitor: ionic:",
-        "script-src 'self' capacitor: ionic:",
-        "style-src 'self'",
-        "img-src 'self' data:",
-        "font-src 'self'",
-        "connect-src 'self' capacitor: ionic: https:",
-        "form-action 'self'",
-        "frame-ancestors 'none'",
-        "base-uri 'none'",
-        "object-src 'none'",
-    ])
+    csp = "; ".join(
+        [
+            "default-src 'self' capacitor: ionic:",
+            "script-src 'self' capacitor: ionic:",
+            "style-src 'self'",
+            "img-src 'self' data:",
+            "font-src 'self'",
+            "connect-src 'self' capacitor: ionic: https:",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+            "base-uri 'none'",
+            "object-src 'none'",
+        ]
+    )
 
     async def middleware(request: Request, call_next: Handler) -> Response:
         response = await call_next(request)
@@ -120,16 +120,14 @@ def security_headers_middleware(*, https: bool) -> Middleware:
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         response.headers["X-Frame-Options"] = "DENY"
         if https:
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
-            )
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
     return middleware
 
 
 class RateLimiter:
-    """Ventana deslizante por IP y ruta, en memoria.
+    """Ventana deslizante por quien pide y ruta, en memoria.
 
     En proceso a propósito: con un worker basta, y con varios el peor caso es
     que el tope efectivo se multiplique por el número de workers — sigue siendo
@@ -139,25 +137,54 @@ class RateLimiter:
     def __init__(self) -> None:
         self._hits: dict[tuple[str, str], list[float]] = defaultdict(list)
 
-    def check(self, key: str, ip: str, *, limit: int, window_s: float) -> bool:
+    def check(self, key: str, who: str, *, limit: int, window_s: float) -> bool:
         now = time.monotonic()
-        hits = self._hits[(key, ip)]
+        hits = self._hits[(key, who)]
         hits[:] = [t for t in hits if now - t < window_s]
         if len(hits) >= limit:
             return False
         hits.append(now)
         return True
 
+    def purge(self, *, older_than_s: float) -> None:
+        """Suelta las entradas que ya no cuentan nada.
 
-# Cuánto se tolera por IP. El login es el caro: adivinar contraseñas contra un
-# scrypt de 16 MB es además una forma de agotar la CPU del servidor.
+        Sin esto cada par (ruta, quien) vivo alguna vez se queda en el diccionario
+        para siempre, y en móvil las IP rotan sin parar.
+        """
+        now = time.monotonic()
+        for key, hits in list(self._hits.items()):
+            hits[:] = [t for t in hits if now - t < older_than_s]
+            if not hits:
+                del self._hits[key]
+
+
+# Cuánto se tolera por cuenta (o por IP si aún no entró). El login es el caro:
+# adivinar contraseñas contra un scrypt de 16 MB es además una forma de agotar
+# la CPU del servidor.
 RATE_LIMITS: dict[str, tuple[int, float]] = {
     "/login": (10, 300),
     "/registro": (5, 3600),
     "/recuperar": (5, 3600),
-    "/generar": (20, 3600),
+    "/menu/generar": (20, 3600),
+    "/check-in": (30, 3600),
     "/feedback": (20, 3600),
 }
+
+# Las lecturas no se limitan —abrir una pantalla no puede costar cupo—, salvo
+# las que por dentro llaman al proveedor de pago. Sin esto, repetir el GET de
+# una receta era barra libre de llamadas facturadas.
+#
+# El tope sale del uso real: siete días por cinco comidas son ~35 recetas en una
+# sesión larga de navegación.
+READ_RATE_LIMITS: dict[str, tuple[int, float]] = {
+    "/menu/receta": (120, 3600),
+}
+
+# Cada cuántas comprobaciones se barre el diccionario. Barato y suficiente:
+# la memoria solo crece entre barridos.
+_PURGE_EVERY = 500
+_PURGE_OLDER_THAN_S = 3600.0
 
 
 def _client_ip(request: Request) -> str:
@@ -169,15 +196,30 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "desconocido"
 
 
+def _caller(request: Request) -> str:
+    """A quién se le cuenta. La cuenta manda sobre la IP: en móvil media ciudad
+    sale por el mismo NAT, y la misma persona cambia de IP al salir del wifi."""
+    if "session" in request.scope:
+        email = str(request.session.get("email") or "")
+        if email:
+            return f"cuenta:{email}"
+    return f"ip:{_client_ip(request)}"
+
+
 def rate_limit_middleware(limiter: RateLimiter) -> Middleware:
+    checks = 0
+
     async def middleware(request: Request, call_next: Handler) -> Response:
-        if request.method in SAFE_METHODS:
-            return await call_next(request)
+        nonlocal checks
+        table = READ_RATE_LIMITS if request.method in SAFE_METHODS else RATE_LIMITS
         path = request.url.path
-        rule = next(((p, r) for p, r in RATE_LIMITS.items() if path.startswith(p)), None)
+        rule = next(((p, r) for p, r in table.items() if path.startswith(p)), None)
         if rule is not None:
             key, (limit, window) = rule[0], rule[1]
-            if not limiter.check(key, _client_ip(request), limit=limit, window_s=window):
+            checks += 1
+            if checks % _PURGE_EVERY == 0:
+                limiter.purge(older_than_s=_PURGE_OLDER_THAN_S)
+            if not limiter.check(key, _caller(request), limit=limit, window_s=window):
                 logger.warning("rate_limited", path=path)
                 return JSONResponse(
                     {"detail": "Demasiados intentos. Espera un momento."}, status_code=429

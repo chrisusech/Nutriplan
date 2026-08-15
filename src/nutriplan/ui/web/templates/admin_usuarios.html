@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block page_class %}page-admin{% endblock %}
+
+{% block content %}
+{% include "partials/admin_nav.html" %}
+<h1>Buscar una cuenta</h1>
+<p class="muted">Para conceder semanas o tocar macros. El padrón vive en Métricas.</p>
+
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+
+<form class="admin-search" method="get" action="/admin/usuarios">
+  <label class="field"><span>Correo o nombre</span>
+    <input name="q" type="search" value="{{ q or '' }}" placeholder="ana@correo.com" minlength="2" required></label>
+  <button class="btn btn-primary" type="submit">
+    <span class="icon">search</span>Buscar
+  </button>
+</form>
+
+<details class="card admin-new">
+  <summary>Crear una cuenta a mano</summary>
+  <form method="post" action="/admin/usuarios">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label class="field"><span>Nombre</span>
+      <input name="name" required placeholder="Ana Pérez"></label>
+    <label class="field"><span>Correo</span>
+      <input name="email" type="email" required placeholder="ana@correo.com"></label>
+    <label class="field"><span>Contraseña (mín. 8)</span>
+      <input name="password" type="password" required minlength="8"></label>
+    <p class="muted small">Recibe la misma semana de prueba que quien se registra solo.</p>
+    <button class="btn btn-primary btn-block" type="submit">
+      <span class="icon">person_add</span>Crear cuenta
+    </button>
+  </form>
+</details>
+
+<ul class="admin-list">
+  {% for fila in usuarios %}
+  {% set c = fila.cuenta %}
+  {% set m = fila.membresia %}
+  <li class="card admin-row">
+    <div class="admin-who">
+      <b><a href="/admin/usuarios/{{ c.user_id }}">{{ c.name }}</a></b>
+      <span class="muted">{{ c.email }}</span>
+      {% if not c.is_active %}<span class="pill pill-off">Desactivada</span>{% endif %}
+      {% if not c.has_profile %}<span class="pill">Sin perfil</span>{% endif %}
+    </div>
+    <div class="admin-meta">
+      {% if m %}
+      <span class="pill {{ 'pill-off' if not m.can_generate else '' }}">
+        {{ m.weeks_left }} semana{{ '' if m.weeks_left == 1 else 's' }}
+      </span>
+      {% if m.expires_at %}
+      <span class="muted">vence {{ m.expires_at.strftime('%d/%m') }}</span>
+      {% endif %}
+      {% endif %}
+      <span class="muted">{{ c.weeks_generated }} generada{{ '' if c.weeks_generated == 1 else 's' }}</span>
+      {% if c.weight_kg %}<span class="muted">{{ c.weight_kg }} kg</span>{% endif %}
+      {% if c.kcal %}<span class="muted">{{ c.kcal }} kcal</span>{% endif %}
+      {% if c.last_checkin %}
+      <span class="muted">último cierre {{ c.last_checkin.strftime('%d/%m') }}</span>
+      {% else %}
+      <span class="muted">sin cierres</span>
+      {% endif %}
+    </div>
+    <div class="admin-acts">
+      <a class="btn btn-outline" href="/admin/usuarios/{{ c.user_id }}">Ver ficha</a>
+    </div>
+  </li>
+  {% else %}
+  <li class="empty"><p>{% if q %}Nadie coincide con «{{ q }}».{% else %}Escribe un correo o un nombre.{% endif %}</p></li>
+  {% endfor %}
+</ul>
+{% endblock %}

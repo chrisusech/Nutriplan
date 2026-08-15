@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import (
     ClientFoodBanRow,
     ClientFoodPreferenceRow,
+    ClientPantryItemRow,
     ClientRow,
     UserRow,
 )
@@ -84,9 +85,7 @@ class SqlClientRepository:
             eating_pattern_raw=row.eating_pattern_raw,
             meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
             free_meal_day=row.free_meal_day,
-            free_meal_slot=(
-                MealSlot(row.free_meal_slot) if row.free_meal_slot else None
-            ),
+            free_meal_slot=(MealSlot(row.free_meal_slot) if row.free_meal_slot else None),
             active_plan_id=row.active_plan_id,
         )
 
@@ -142,9 +141,7 @@ class SqlClientRepository:
         row.context_tags = list(client.context_tags)
         row.meal_slots = [s.value for s in client.meal_slots]
         row.free_meal_day = client.free_meal_day
-        row.free_meal_slot = (
-            client.free_meal_slot.value if client.free_meal_slot else None
-        )
+        row.free_meal_slot = client.free_meal_slot.value if client.free_meal_slot else None
         # borrar preferencias viejas antes de insertar (unique client_id+food_id)
         row.preferences.clear()
         await self._s.flush()
@@ -185,9 +182,46 @@ class SqlClientRepository:
         )
         if (await self._s.execute(stmt)).scalar_one_or_none() is not None:
             return
-        self._s.add(
-            ClientFoodBanRow(
-                tenant_id=self._tenant, client_id=client_id, food_id=food_id
+        self._s.add(ClientFoodBanRow(tenant_id=self._tenant, client_id=client_id, food_id=food_id))
+        await self._s.flush()
+
+    async def unban_food(self, client_id: UUID, food_id: UUID) -> None:
+        await self._s.execute(
+            delete(ClientFoodBanRow).where(
+                ClientFoodBanRow.client_id == client_id,
+                ClientFoodBanRow.food_id == food_id,
+                ClientFoodBanRow.tenant_id == self._tenant,
             )
         )
+        await self._s.flush()
+
+    async def list_pantry_food_ids(self, client_id: UUID, week_start: date) -> list[UUID]:
+        stmt = select(ClientPantryItemRow.food_id).where(
+            ClientPantryItemRow.client_id == client_id,
+            ClientPantryItemRow.week_start == week_start,
+            ClientPantryItemRow.tenant_id == self._tenant,
+        )
+        return list((await self._s.execute(stmt)).scalars().all())
+
+    async def set_pantry(self, client_id: UUID, week_start: date, food_ids: list[UUID]) -> None:
+        """Reemplaza lo que tiene en casa esta semana. La pantalla manda la lista
+        entera de casillas marcadas, así que desmarcar tiene que poder borrar."""
+        await self._s.execute(
+            delete(ClientPantryItemRow).where(
+                ClientPantryItemRow.client_id == client_id,
+                ClientPantryItemRow.week_start == week_start,
+                ClientPantryItemRow.tenant_id == self._tenant,
+            )
+        )
+        ahora = datetime.now(UTC)
+        for food_id in dict.fromkeys(food_ids):
+            self._s.add(
+                ClientPantryItemRow(
+                    tenant_id=self._tenant,
+                    client_id=client_id,
+                    food_id=food_id,
+                    week_start=week_start,
+                    created_at=ahora,
+                )
+            )
         await self._s.flush()

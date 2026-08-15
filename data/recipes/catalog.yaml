@@ -1,0 +1,68 @@
+# Catálogo curado. Los gramos los pone el plan; aquí solo nombre y pasos.
+version: "0.2.0"
+recipes:
+  - id: huevos_revueltos_arepa
+    name_es: Huevos revueltos a la criolla con arepa
+    foods: [huevo_entero, arepa]
+    steps:
+      - Calienta un chorrito de aceite a fuego medio.
+      - Sofríe cebolla y tomate si tienes a mano; si no, solo ajo.
+      - Bate los huevos con un pellizco de sal y cuaja removiendo.
+      - Tuesta o calienta la arepa y sirve los huevos encima.
+    tips: Un toque de cilantro al final cambia el plato.
+    difficulty: fácil
+    prep_minutes: 12
+
+  - id: pechuga_limon_arroz
+    name_es: Pechuga al limón y orégano con arroz
+    foods: [pechuga_pollo, arroz_blanco]
+    steps:
+      - Marina la pechuga con limón, orégano, ajo y sal unos minutos.
+      - Dora en sartén a fuego medio-alto hasta cocinar el centro.
+      - Reposa un minuto, corta en tiras y sirve con la porción de arroz.
+    tips: El jugo de la sartén con un chorrito de agua hace salsa rápida.
+    difficulty: fácil
+    prep_minutes: 20
+
+  - id: lomo_plancha_batata
+    name_es: Lomo a la plancha con batata asada
+    foods: [lomo_cerdo, batata]
+    steps:
+      - Corta la batata y ásala o cuece hasta que esté tierna.
+      - Sella el lomo con sal, pimienta y un poco de aceite.
+      - Baja el fuego y termina la cocción; sirve con la batata.
+    tips: Un toque de comino en el lomo acerca el sabor a casa.
+    difficulty: media
+    prep_minutes: 25
+
+  - id: tilapia_batata
+    name_es: Tilapia a la plancha con batata
+    foods: [tilapia, batata]
+    steps:
+      - Cuece o asa la batata hasta que esté blanda.
+      - Sazona la tilapia con limón, ajo y sal.
+      - Cocina a la plancha 3–4 min por lado; sirve con la batata.
+    tips: Un chorrito de aceite al final evita que se seque.
+    difficulty: fácil
+    prep_minutes: 18
+
+  - id: yogur_banano
+    name_es: Yogur griego con banano
+    foods: [yogur, banano]
+    steps:
+      - Corta el banano en rodajas.
+      - Sirve el yogur en un bowl y cubre con la fruta.
+      - "Opcional: canela o un chorrito de miel si cabe en tu día."
+    tips: Bien frío sabe a postre.
+    difficulty: fácil
+    prep_minutes: 5
+
+  - id: queso_manzana
+    name_es: Queso fresco con manzana
+    foods: [queso_fresco, manzana]
+    steps:
+      - Lava y corta la manzana en gajos.
+      - Acompaña con el queso a temperatura ambiente.
+    tips: Un toque de pimienta en el queso lo vuelve snack de verdad.
+    difficulty: fácil
+    prep_minutes: 3

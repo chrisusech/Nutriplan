@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Cambiar este plato{% endblock %}
+{% block page_class %}page-week{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="/?dia={{ dia }}" aria-label="Volver">
+  <span class="icon">arrow_back</span>
+</a>
+<h1 class="app-title">Cambiar este plato</h1>
+{% endblock %}
+
+{% block content %}
+<p class="muted">Hoy te toca {{ plato or 'este plato' }}. Dinos qué quieres
+  distinto y elegimos entre platos que sí cuadran.</p>
+
+<form method="post" action="/menu/cambiar" class="onb-form"
+      data-wait-plate
+      data-wait-title="Buscando tu plato…"
+      data-wait-msg="Interpretamos lo que pediste y recuadramos el día.">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="dia" value="{{ dia }}">
+  <input type="hidden" name="slot" value="{{ slot }}">
+  <label class="field"><span>¿Qué te gustaría en su lugar?</span>
+    <textarea name="nota" rows="3" maxlength="400"
+      placeholder="Algo con pollo, menos frito, sin pescado…"></textarea>
+  </label>
+  <button class="btn btn-primary btn-big btn-block" type="submit">
+    Cambiar el plato
+  </button>
+</form>
+{% endblock %}

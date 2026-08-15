@@ -1,0 +1,136 @@
+/* Números que se ven: anillos, barras de macro y esqueletos de carga.
+
+   Ninguno puede usar `style="width:42%"` — la CSP lo bloquea, también cuando lo
+   pone el JavaScript. Así que el porcentaje llega en `data-pct` (redondeado de
+   cinco en cinco por el servidor) y la escala vive aquí abajo, en clases. */
+
+/* --- Anillo ---------------------------------------------------------------- */
+
+.ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  flex: 0 0 auto;
+}
+.ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);   /* empieza arriba, como un reloj */
+}
+.ring-svg circle {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+  /* 2·π·52, el perímetro del círculo del viewBox. */
+  stroke-dasharray: 326.726px;
+}
+.ring-track { stroke: var(--chip); }
+.ring-fill {
+  stroke: var(--brand);
+  stroke-dashoffset: calc(326.726px * (1 - var(--pct)));
+  animation: ring-in var(--dur-3) var(--ease-out);
+  transition: stroke var(--dur-2) var(--ease-out);
+}
+.ring[data-estado="bajo"] .ring-fill { stroke: var(--carb); }
+.ring[data-estado="alto"] .ring-fill { stroke: var(--danger); }
+
+.ring-center { display: flex; flex-direction: column; align-items: center; gap: 0.05rem; }
+.ring-value {
+  font: 800 var(--t-2xl) Poppins, sans-serif;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--ink);
+}
+.ring-unit { font: 600 var(--t-xs) Poppins, sans-serif; color: var(--muted); }
+
+/* La escala. De cinco en cinco basta: nadie distingue 63 % de 65 % en un anillo
+   de 7 rem, y a cambio esto sigue siendo CSS estático que la CSP acepta. */
+[data-pct="0"]   { --pct: 0; }
+[data-pct="5"]   { --pct: 0.05; }
+[data-pct="10"]  { --pct: 0.1; }
+[data-pct="15"]  { --pct: 0.15; }
+[data-pct="20"]  { --pct: 0.2; }
+[data-pct="25"]  { --pct: 0.25; }
+[data-pct="30"]  { --pct: 0.3; }
+[data-pct="35"]  { --pct: 0.35; }
+[data-pct="40"]  { --pct: 0.4; }
+[data-pct="45"]  { --pct: 0.45; }
+[data-pct="50"]  { --pct: 0.5; }
+[data-pct="55"]  { --pct: 0.55; }
+[data-pct="60"]  { --pct: 0.6; }
+[data-pct="65"]  { --pct: 0.65; }
+[data-pct="70"]  { --pct: 0.7; }
+[data-pct="75"]  { --pct: 0.75; }
+[data-pct="80"]  { --pct: 0.8; }
+[data-pct="85"]  { --pct: 0.85; }
+[data-pct="90"]  { --pct: 0.9; }
+[data-pct="95"]  { --pct: 0.95; }
+[data-pct="100"] { --pct: 1; }
+
+/* --- Barras de macro ------------------------------------------------------- */
+
+.macros { display: flex; flex-direction: column; gap: var(--s-3); }
+.macro { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem var(--s-2); }
+.macro-name { font: 600 var(--t-sm) Poppins, sans-serif; color: var(--ink-2); }
+.macro-val { font: 600 var(--t-sm) Poppins, sans-serif; color: var(--muted); }
+.macro-val b { color: var(--ink); font-weight: 700; }
+
+/* `<progress>` en vez de un div con ancho: el ancho lo pinta el navegador desde
+   el atributo `value`, que no es un estilo inline y por tanto la CSP no bloquea. */
+.bar {
+  grid-column: 1 / -1;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 0.5rem;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--chip);
+  color: var(--macro, var(--brand));
+  overflow: hidden;
+}
+.bar::-webkit-progress-bar { background: var(--chip); border-radius: var(--r-pill); }
+.bar::-webkit-progress-value {
+  background: var(--macro, var(--brand));
+  border-radius: var(--r-pill);
+  transition: width var(--dur-3) var(--ease-out);
+}
+.bar::-moz-progress-bar { background: var(--macro, var(--brand)); border-radius: var(--r-pill); }
+.bar-kcal { --macro: var(--kcal); }
+.bar-protein_g { --macro: var(--protein); }
+.bar-carb_g { --macro: var(--carb); }
+.bar-fat_g { --macro: var(--fat); }
+
+/* --- Esqueletos ------------------------------------------------------------ */
+
+.sk {
+  border-radius: var(--r-md);
+  background: linear-gradient(
+    90deg,
+    var(--chip) 0%,
+    color-mix(in srgb, var(--chip) 55%, var(--card-2)) 50%,
+    var(--chip) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.sk-line { height: 0.75rem; }
+.sk-line.is-short { width: 40%; }
+.sk-line.is-mid { width: 65%; }
+.sk-card {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+  padding: var(--s-4);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.sk-avatar { width: 2.5rem; height: 2.5rem; border-radius: var(--r-md); flex: 0 0 auto; }
+.sk-lines { display: flex; flex-direction: column; gap: var(--s-2); flex: 1 1 auto; }

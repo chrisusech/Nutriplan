@@ -1,0 +1,58 @@
+<section class="card day-hero" id="day-hero">
+  <div class="day-hero-top">
+    {% if progreso %}
+    <div class="ring" data-pct="{{ progreso.pct }}" data-estado="{{ progreso.estado }}">
+      <svg class="ring-svg" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+        <circle class="ring-fill" cx="60" cy="60" r="52"></circle>
+      </svg>
+      <span class="ring-center">
+        <span class="ring-value">{{ progreso.kcal }}</span>
+        <span class="ring-unit">de {{ progreso.objetivo }} kcal</span>
+      </span>
+    </div>
+    {% else %}
+    <div class="ring-plain">
+      <span class="ring-value">{{ day.kcal }}</span>
+      <span class="ring-unit">kcal del día</span>
+    </div>
+    {% endif %}
+    <div class="day-hero-text">
+      <h2 class="day-title">{{ day.label }}</h2>
+      {% if progreso %}
+      <p class="muted">{{ progreso.eaten_n }} de {{ progreso.meals_n }} comidas
+        · Quedan {{ progreso.restante }} kcal</p>
+      <p class="muted" data-racha{% if not racha %} hidden{% endif %}>
+        {% if racha == 1 %}Racha: 1 día{% elif racha %}Racha: {{ racha }} días{% endif %}
+      </p>
+      {% else %}
+      <p class="muted">{{ day.meals | length }} comidas</p>
+      {% endif %}
+      <div class="day-hero-pills">
+        <a class="pill" href="/compra"><span class="icon">shopping_cart</span>Lista de compra</a>
+        <a class="pill" href="/menu/fuera?dia={{ dia }}&slot={{ day.fuera_slot }}">
+          <span class="icon">restaurant</span>Voy a comer fuera
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <ul class="day-macros macros" aria-label="Lo que ya comiste hoy">
+    {% if progreso %}
+      {% for m in progreso.macros %}
+      <li class="macro">
+        <span class="macro-name">{{ m.label }}</span>
+        <span class="macro-val"><b>{{ m.value }}</b> / {{ m.target }} g</span>
+        <progress class="bar bar-{{ m.key }}" value="{{ m.value }}" max="{{ m.target }}"></progress>
+      </li>
+      {% endfor %}
+    {% else %}
+      {% for key, valor in [('protein_g', day.protein_g), ('carb_g', day.carb_g), ('fat_g', day.fat_g)] %}
+      <li class="macro">
+        <span class="macro-name">{{ MACRO_COLORS[key].label }}</span>
+        <span class="macro-val"><b>{{ valor }}</b> g</span>
+      </li>
+      {% endfor %}
+    {% endif %}
+  </ul>
+</section>

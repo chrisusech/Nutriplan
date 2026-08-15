@@ -54,9 +54,7 @@ class SqlFoodRepository:
             portion_min_g=row.portion_min_g,
             portion_max_g=row.portion_max_g,
             meal_slots=[MealSlot(s) for s in (row.meal_slots or [])],
-            slot_weights={
-                MealSlot(s): int(w) for s, w in (row.slot_weights or {}).items()
-            },
+            slot_weights={MealSlot(s): int(w) for s, w in (row.slot_weights or {}).items()},
             is_free=bool(row.is_free),
             free_text=row.free_text,
         )

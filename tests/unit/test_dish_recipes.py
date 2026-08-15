@@ -39,10 +39,14 @@ class _LLMQueCuenta:
         self.llamadas += 1
         if self.falla:
             raise LLMError("sin cuota")
-        return schema.model_validate({
-            "steps": ["Calienta la sartén.", "Cocina y sirve."],
-            "prep_minutes": 10, "difficulty": "fácil", "tips": "",
-        })
+        return schema.model_validate(
+            {
+                "steps": ["Calienta la sartén.", "Cocina y sirve."],
+                "prep_minutes": 10,
+                "difficulty": "fácil",
+                "tips": "",
+            }
+        )
 
     async def select_plan(self, **kw):  # type: ignore[no-untyped-def]
         raise NotImplementedError
@@ -58,11 +62,15 @@ def _semana_con_platos():  # type: ignore[no-untyped-def]
     for day in plan.days:
         for meal in day.meals:
             ids = [i.food_id for i in meal.items if i.food_id]
-            meals.append(meal.model_copy(update={
-                "template_id": f"tpl_{meal.slot.value}",
-                "dish_name": f"Plato de {meal.slot.value}",
-                "dish_key": dish_key(f"tpl_{meal.slot.value}", ids),
-            }))
+            meals.append(
+                meal.model_copy(
+                    update={
+                        "template_id": f"tpl_{meal.slot.value}",
+                        "dish_name": f"Plato de {meal.slot.value}",
+                        "dish_key": dish_key(f"tpl_{meal.slot.value}", ids),
+                    }
+                )
+            )
     return meals, foods
 
 
@@ -75,8 +83,12 @@ async def test_siete_veces_el_mismo_plato_es_una_sola_receta() -> None:
     repo, llm = _RepoEnMemoria(), _LLMQueCuenta()
 
     await recipes_for_week(
-        meals=meals, catalog=foods, repo=repo, llm=llm,
-        prompts_dir=PROMPTS, model="m",
+        meals=meals,
+        catalog=foods,
+        repo=repo,
+        llm=llm,
+        prompts_dir=PROMPTS,
+        model="m",
     )
     # 35 comidas en la semana, pero solo un puñado de platos distintos
     assert llm.llamadas < len(meals)
@@ -88,13 +100,15 @@ async def test_la_segunda_persona_con_el_mismo_plato_no_gasta_una_llamada() -> N
     meals, foods = _semana_con_platos()
     repo, llm = _RepoEnMemoria(), _LLMQueCuenta()
 
-    await recipes_for_week(meals=meals, catalog=foods, repo=repo, llm=llm,
-                           prompts_dir=PROMPTS, model="m")
+    await recipes_for_week(
+        meals=meals, catalog=foods, repo=repo, llm=llm, prompts_dir=PROMPTS, model="m"
+    )
     primera_tanda = llm.llamadas
     assert primera_tanda > 0
 
-    await recipes_for_week(meals=meals, catalog=foods, repo=repo, llm=llm,
-                           prompts_dir=PROMPTS, model="m")
+    await recipes_for_week(
+        meals=meals, catalog=foods, repo=repo, llm=llm, prompts_dir=PROMPTS, model="m"
+    )
     assert llm.llamadas == primera_tanda, "el segundo menú no debe llamar al modelo"
 
 
@@ -119,22 +133,99 @@ async def test_sin_ia_la_receta_sale_del_catalogo_escrito_a_mano() -> None:
     estaticas = {f"tpl_{m.slot.value}": ["Paso escrito a mano."] for m in meals}
 
     out = await recipes_for_week(
-        meals=meals, catalog=foods, repo=repo, llm=None,
-        prompts_dir=PROMPTS, model="", static=estaticas,
+        meals=meals,
+        catalog=foods,
+        repo=repo,
+        llm=None,
+        prompts_dir=PROMPTS,
+        model="",
+        static=estaticas,
     )
     assert out
     assert all(r.source == "yaml" for r in out.values())
     assert all(r.steps == ["Paso escrito a mano."] for r in out.values())
 
 
-async def test_el_catalogo_gana_a_la_ia_para_no_gastar_cuota() -> None:
+async def test_el_catalogo_curado_gana_a_la_ia_para_no_gastar_cuota() -> None:
+    """Recetas humanas primero: la IA solo cubre lo que falta."""
+    from nutriplan.domain.recipe_catalog import CuratedRecipe
+
+    meals, foods = _semana_con_platos()
+    repo, llm = _RepoEnMemoria(), _LLMQueCuenta()
+    # Misma firma de alimentos que el desayuno fijo del fixture.
+    curated = [
+        CuratedRecipe(
+            id="huevos_arepa",
+            name_es="Huevos revueltos con arepa",
+            foods=["huevo_entero", "arepa"],
+            steps=["Calienta.", "Sirve."],
+            prep_minutes=10,
+            difficulty="fácil",
+        ),
+        CuratedRecipe(
+            id="pollo_arroz",
+            name_es="Pechuga al limón con arroz",
+            foods=["pechuga_pollo", "arroz"],
+            steps=["Dora.", "Sirve."],
+            prep_minutes=20,
+            difficulty="fácil",
+        ),
+        CuratedRecipe(
+            id="pescado_batata",
+            name_es="Tilapia con batata",
+            foods=["tilapia", "batata"],
+            steps=["Plancha.", "Sirve."],
+            prep_minutes=15,
+            difficulty="fácil",
+        ),
+        CuratedRecipe(
+            id="yogur_banano",
+            name_es="Yogur con banano",
+            foods=["yogur", "banano"],
+            steps=["Sirve."],
+            prep_minutes=3,
+            difficulty="fácil",
+        ),
+        CuratedRecipe(
+            id="queso_manzana",
+            name_es="Queso con manzana",
+            foods=["queso", "manzana"],
+            steps=["Sirve."],
+            prep_minutes=3,
+            difficulty="fácil",
+        ),
+    ]
+
+    await recipes_for_week(
+        meals=meals,
+        catalog=foods,
+        repo=repo,
+        llm=llm,
+        prompts_dir=PROMPTS,
+        model="m",
+        curated=curated,
+    )
+    assert llm.llamadas == 0
+    assert all(r.source == "curated" for r in repo.almacen.values())
+
+
+async def test_la_plantilla_yaml_no_bloquea_a_la_ia() -> None:
+    """Los pasos genéricos de meal_templates solo son fallback sin modelo."""
     meals, foods = _semana_con_platos()
     repo, llm = _RepoEnMemoria(), _LLMQueCuenta()
     estaticas = {f"tpl_{m.slot.value}": ["Paso a mano."] for m in meals}
 
-    await recipes_for_week(meals=meals, catalog=foods, repo=repo, llm=llm,
-                           prompts_dir=PROMPTS, model="m", static=estaticas)
-    assert llm.llamadas == 0
+    await recipes_for_week(
+        meals=meals,
+        catalog=foods,
+        repo=repo,
+        llm=llm,
+        prompts_dir=PROMPTS,
+        model="m",
+        static=estaticas,
+    )
+    assert llm.llamadas > 0
+    assert all(r.source == "ai" for r in repo.almacen.values())
 
 
 async def test_si_el_modelo_falla_el_menu_se_queda_sin_receta_pero_entero() -> None:
@@ -142,17 +233,64 @@ async def test_si_el_modelo_falla_el_menu_se_queda_sin_receta_pero_entero() -> N
     meals, foods = _semana_con_platos()
     repo, llm = _RepoEnMemoria(), _LLMQueCuenta(falla=True)
 
-    out = await recipes_for_week(meals=meals, catalog=foods, repo=repo, llm=llm,
-                                 prompts_dir=PROMPTS, model="m")
+    out = await recipes_for_week(
+        meals=meals, catalog=foods, repo=repo, llm=llm, prompts_dir=PROMPTS, model="m"
+    )
     assert out == {}
     assert repo.escrituras == 0
+
+
+async def test_al_ver_el_dia_la_ia_reemplaza_la_plantilla_yaml() -> None:
+    """El día pide upgrade: no nos quedamos con el texto genérico de la plantilla."""
+    meals, foods = _semana_con_platos()
+    repo, llm = _RepoEnMemoria(), _LLMQueCuenta()
+    sample = meals[0]
+    assert sample.dish_key
+    repo.almacen[sample.dish_key] = DishRecipe(
+        dish_key=sample.dish_key,
+        template_id=sample.template_id,
+        name_es=sample.dish_name or "",
+        ingredients=["x"],
+        steps=["Paso genérico de plantilla."],
+        source="yaml",
+    )
+
+    out = await recipes_for_week(
+        meals=[sample],
+        catalog=foods,
+        repo=repo,
+        llm=llm,
+        prompts_dir=PROMPTS,
+        model="m",
+        prefer_ai=True,
+    )
+    assert llm.llamadas == 1
+    assert out[sample.dish_key].source == "ai"
+    assert "genérico" not in out[sample.dish_key].steps[0].lower()
+
+    await recipes_for_week(
+        meals=[sample],
+        catalog=foods,
+        repo=repo,
+        llm=llm,
+        prompts_dir=PROMPTS,
+        model="m",
+        prefer_ai=True,
+    )
+    assert llm.llamadas == 1, "si ya es IA no se vuelve a gastar cuota"
 
 
 async def test_una_comida_libre_no_lleva_receta() -> None:
     meals, foods = _semana_con_platos()
     libres = [m.model_copy(update={"is_free_meal": True}) for m in meals]
-    out = await recipes_for_week(meals=libres, catalog=foods, repo=_RepoEnMemoria(),
-                                 llm=_LLMQueCuenta(), prompts_dir=PROMPTS, model="m")
+    out = await recipes_for_week(
+        meals=libres,
+        catalog=foods,
+        repo=_RepoEnMemoria(),
+        llm=_LLMQueCuenta(),
+        prompts_dir=PROMPTS,
+        model="m",
+    )
     assert out == {}
 
 

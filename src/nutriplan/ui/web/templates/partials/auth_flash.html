@@ -1,0 +1,17 @@
+{# Lo que la pantalla de entrada tiene que decir: baja consumada, correo
+   confirmado o el fallo genérico de credenciales. #}
+{% if request.query_params.get('baja') %}
+<div class="alert alert-ok" role="status">
+  <span class="icon">check_circle</span>{{ request.query_params.get('baja') }}
+</div>
+{% elif request.query_params.get('verificado') %}
+<div class="alert alert-ok" role="status">
+  <span class="icon">check_circle</span>Correo confirmado. Ya puedes entrar.
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert" role="alert">
+  <span class="icon">error</span>{{ error }}
+</div>
+{% endif %}

@@ -36,3 +36,13 @@ def save_branding(branding_dir: Path, branding: Branding, tenant: str = "default
         yaml.safe_dump(branding.model_dump(), allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+
+
+class FileBrandingStore:
+    """`BrandingStore` sobre el directorio de config."""
+
+    def __init__(self, branding_dir: Path) -> None:
+        self._dir = branding_dir
+
+    def save(self, branding: Branding, *, tenant: str) -> None:
+        save_branding(self._dir, branding, tenant)

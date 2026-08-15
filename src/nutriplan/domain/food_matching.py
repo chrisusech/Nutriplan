@@ -53,10 +53,7 @@ def match_food_names(names: list[str], catalog: list[FoodItem]) -> MatchResult:
             continue
         norm = normalize(text)
         food = (
-            by_exact.get(text)
-            or by_norm.get(norm)
-            or by_alias.get(norm)
-            or _fuzzy(text, by_norm)
+            by_exact.get(text) or by_norm.get(norm) or by_alias.get(norm) or _fuzzy(text, by_norm)
         )
         if food is not None:
             result.matched[raw] = food

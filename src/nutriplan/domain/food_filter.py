@@ -65,8 +65,4 @@ def allowed_foods(
     if unrecognized:
         raise ValueError(f"Restricciones no reconocidas: {unrecognized}")
     banned = banned_ids or set()
-    return [
-        food
-        for food in liked
-        if not (set(food.tags) & tags) and food.id not in banned
-    ]
+    return [food for food in liked if not (set(food.tags) & tags) and food.id not in banned]

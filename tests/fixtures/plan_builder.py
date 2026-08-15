@@ -56,9 +56,7 @@ def build_fixed_plan() -> tuple[PlanCycle, dict, Branding]:
             meals.append(
                 MealEntry(
                     slot=slot,
-                    portions=[
-                        MealFoodPortion(food_id=f.id, grams=g) for f, g in portions
-                    ],
+                    portions=[MealFoodPortion(food_id=f.id, grams=g) for f, g in portions],
                     computed=_computed(portions),
                     free_salad=slot in (MealSlot.LUNCH, MealSlot.DINNER),
                 )

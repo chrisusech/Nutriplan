@@ -1,7 +1,5 @@
 """Motor y sesiones SQLAlchemy async con URL configurable (SQLite ↔ Postgres)."""
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import event
@@ -12,10 +10,17 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 # Cuánto espera una escritura a que otra suelte el lock antes de rendirse.
 SQLITE_BUSY_TIMEOUT_MS = 10_000
+
+# El pool de Postgres, por instancia. Diez conexiones como techo duro: hay que
+# poder multiplicarlo por el número de instancias y seguir cabiendo en el límite
+# del pooler.
+POOL_SIZE = 5
+POOL_MAX_OVERFLOW = 5
+POOL_RECYCLE_S = 300
 
 
 class Base(DeclarativeBase):
@@ -44,11 +49,26 @@ def create_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
         # Supabase enruta por pgbouncer en modo transaction (puerto 6543): la
         # conexión cambia entre statements, así que los prepared statements que
         # asyncpg cachea por defecto se evaporan
-        # (`prepared statement "__asyncpg_stmt_1__" does not exist`). Se apaga el
-        # caché y se deja el pooling a pgbouncer.
-        kwargs["poolclass"] = NullPool
+        # (`prepared statement "__asyncpg_stmt_1__" does not exist`). Eso lo
+        # arregla apagar los dos cachés de sentencias preparadas, y SOLO eso.
+        #
+        # Antes esto además usaba NullPool, y ahí estaba el problema: cada
+        # petición abría un TCP+TLS nuevo contra el pooler. La pantalla de
+        # generación hace polling cada ~900 ms y la de semana pide una receta
+        # por comida, así que con cien personas eran cientos de conexiones
+        # nuevas por segundo — se rompía la base mucho antes que la aplicación.
+        # pgbouncer poolea del lado del servidor; que este lado reutilice las
+        # suyas no le estorba.
+        kwargs["poolclass"] = AsyncAdaptedQueuePool
+        kwargs["pool_size"] = POOL_SIZE
+        kwargs["max_overflow"] = POOL_MAX_OVERFLOW
+        # Una conexión que el pooler ya cerró no puede descubrirse a mitad de
+        # una petición de alguien.
+        kwargs["pool_pre_ping"] = True
+        kwargs["pool_recycle"] = POOL_RECYCLE_S
         kwargs["connect_args"] = {
             "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
             "timeout": 10,
             "command_timeout": 60,
         }
@@ -60,16 +80,3 @@ def create_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, expire_on_commit=False)
-
-
-@asynccontextmanager
-async def session_scope(
-    factory: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncSession]:
-    async with factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise

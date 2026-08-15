@@ -53,9 +53,7 @@ class FallbackLLMClient:
                 total[key] = total.get(key, 0) + value
         return total
 
-    async def _try_each(
-        self, operation: str, call: Callable[[LLMClient], Awaitable[T]]
-    ) -> T:
+    async def _try_each(self, operation: str, call: Callable[[LLMClient], Awaitable[T]]) -> T:
         errors: list[str] = []
         for index, (name, client) in enumerate(self._clients):
             try:

@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Opinar{% endblock %}
 
+{% block head_lead %}
+<a class="back" href="/perfil" aria-label="Volver"><span class="icon">arrow_back</span></a>
+<h1 class="app-title">Cuéntanos</h1>
+{% endblock %}
+
 {% block content %}
-<h1>Cuéntanos</h1>
 <p class="muted">Esto es una BETA: lo que nos digas cambia lo que viene.</p>
 
 {% if enviado %}
@@ -14,7 +18,7 @@
 {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
 
 <form method="post" action="/feedback" class="card form-card">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
   <fieldset class="field">
     <legend>¿De qué nos hablas?</legend>
     <div class="chips">

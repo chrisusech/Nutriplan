@@ -1,0 +1,95 @@
+/* La consola: solo la ve quien administra, así que aquí basta con que los
+   tokens manden y todo se lea. Nada de coreografía. */
+
+/* Las tarjetas de la consola son secciones sueltas una tras otra: sin esto se
+   tocan entre sí y el título queda pegado al primer dato. */
+.page-admin main > .card { margin-top: var(--s-4); }
+.page-admin main > .card > h3 { margin-bottom: var(--s-3); }
+.page-admin .regen { margin-top: var(--s-4); }
+
+.admin-search {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-3);
+  margin: var(--s-4) 0;
+}
+.admin-search .field { flex: 1 1 14rem; }
+.kpi-grid {
+  display: grid; gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin-top: var(--s-4);
+}
+.kpi { padding: var(--s-4); }
+.kpi-n { font: 700 var(--t-xl) Poppins, sans-serif; margin: var(--s-1) 0; }
+
+.admin-new { padding: var(--s-4); margin: var(--s-4) 0; }
+.admin-new > summary { cursor: pointer; font: 700 var(--t-md) Poppins, sans-serif; }
+.admin-new form { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-4); }
+
+.admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.admin-row { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
+.admin-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.admin-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3);
+  font-size: var(--t-xs);
+}
+.admin-acts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.admin-acts form { display: flex; gap: var(--s-2); align-items: center; }
+.admin-acts input { width: 6rem; }
+.admin-acts .btn { min-height: 2.5rem; padding-inline: var(--s-4); font-size: var(--t-sm); }
+.pill-off { background: var(--warn-soft); color: var(--warn); }
+
+.admin-refresh {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3);
+  margin: var(--s-4) 0;
+}
+.admin-refresh .muted { flex: 1 1 14rem; font-size: var(--t-xs); }
+.admin-form { display: flex; flex-direction: column; gap: var(--s-4); margin-top: var(--s-4); }
+.admin-form .btn { align-self: flex-start; }
+.macro-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-3); }
+.admin-history { list-style: none; margin: var(--s-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.admin-state { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); }
+
+/* --- Métricas -------------------------------------------------------------- */
+
+.metric-card { padding: var(--s-5) var(--s-4); margin-top: var(--s-4); }
+.metric-card h2 { font-size: var(--t-lg); margin-bottom: var(--s-3); }
+.metric-pair { display: grid; gap: var(--s-4); }
+@media (min-width: 40rem) { .metric-pair { grid-template-columns: 1fr 1fr; } }
+
+.funnel { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.funnel-row { display: flex; justify-content: space-between; font: 600 var(--t-sm) Poppins, sans-serif; }
+.funnel-bar { height: 0.5rem; border-radius: var(--r-pill); background: var(--chip); margin-top: var(--s-1); }
+.funnel-fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--brand); }
+/* El ancho en clases y no en `style=`: la CSP bloquea el atributo. */
+.funnel-w0 { width: 0 } .funnel-w1 { width: 10% } .funnel-w2 { width: 20% }
+.funnel-w3 { width: 30% } .funnel-w4 { width: 40% } .funnel-w5 { width: 50% }
+.funnel-w6 { width: 60% } .funnel-w7 { width: 70% } .funnel-w8 { width: 80% }
+.funnel-w9 { width: 90% } .funnel-w10 { width: 100% }
+
+.funnel-aside {
+  display: flex; flex-wrap: wrap; gap: var(--s-3);
+  margin: var(--s-4) 0 0; padding: var(--s-3) 0 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.funnel-aside li {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  font: 500 var(--t-sm) Poppins, sans-serif; color: var(--muted);
+}
+.funnel-aside b { font-weight: 700; color: var(--ink); }
+.funnel-note { margin-top: var(--s-2); font-size: var(--t-xs); }
+
+.rank, .tally { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.rank li, .tally li {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  font: 500 var(--t-sm) Poppins, sans-serif; color: var(--ink-2);
+}
+.rank li span, .tally li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rank li b { color: var(--ok); font-size: var(--t-md); }
+.rank-bad li b { color: var(--warn); }
+.rank li i { color: var(--muted); font-style: normal; font-size: var(--t-xs); }
+
+.quotes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.quotes li {
+  padding: var(--s-3); border-radius: var(--r-md); background: var(--wash-2);
+  font: 500 var(--t-sm) Poppins, sans-serif; color: var(--ink-2); line-height: 1.55;
+}

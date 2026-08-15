@@ -1,141 +1,254 @@
 {% extends "base.html" %}
 {% block title %}Cuéntanos cómo comes{% endblock %}
+{% block page_class %}page-onboarding{% endblock %}
+
+{% block head_lead %}
+<button type="button" class="back" data-back aria-label="Volver">
+  <span class="icon">arrow_back</span>
+</button>
+<div class="onb-progress" role="progressbar" aria-label="Progreso del cuestionario">
+  <i class="onb-progress-fill" data-progress></i>
+</div>
+{% endblock %}
 
 {% block content %}
+{# `form` solo trae algo cuando el alta rebotó con un error (o el nombre de la
+   cuenta): todo lo demás cae en su valor por defecto para que las ruedas nazcan
+   en un sitio razonable y no en blanco. #}
+{% set f = form or {} %}
+{% set edad_actual = f.get('age_years', 28) %}
+{% set altura_actual = f.get('height_cm', 170) %}
+{% set peso_actual = f.get('weight_kg', 70) | float %}
+{% set peso_entero = peso_actual | int %}
+{% set peso_decimal = ((peso_actual - peso_entero) * 10) | round | int %}
 <div class="onboarding" data-stepper>
-  <header class="onb-head">
-    <div class="onb-progress" role="progressbar" aria-label="Progreso del cuestionario">
-      <i class="onb-progress-fill" data-progress></i>
-    </div>
-    <p class="onb-count" data-count>Cuéntanos cómo comes</p>
-  </header>
+  <p class="onb-count sr-only" data-count>Cuéntanos cómo comes</p>
 
   {% if error %}<div class="alert">{{ error }}</div>{% endif %}
 
   <form method="post" action="/onboarding" class="onb-form">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
 
     <section class="onb-step">
-      <h2>Empecemos por ti</h2>
-      <p class="onb-hint">Con esto calculamos tus calorías. Nada de esto se comparte.</p>
-      <label>Nombre
-        <input name="name" required maxlength="200" value="{{ form.name if form else '' }}">
-      </label>
-      <label>Sexo
-        <select name="sex">
-          {% for value, label in SEX_LABELS.items() %}
-            <option value="{{ value }}" {% if form and form.sex == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <div class="onb-row">
-        <label>Edad
-          <input name="age_years" type="number" min="13" max="100" required
-                 value="{{ form.age_years if form else '' }}">
-        </label>
-        <label>Altura (cm)
-          <input name="height_cm" type="number" step="0.5" min="120" max="230" required
-                 value="{{ form.height_cm if form else '' }}">
-        </label>
-        <label>Peso (kg)
-          <input name="weight_kg" type="number" step="0.1" min="30" max="300" required
-                 value="{{ form.weight_kg if form else '' }}">
-        </label>
-      </div>
+      <span class="onb-badge"><span class="icon">waving_hand</span></span>
+      <h2>¿Cómo te llamas?</h2>
+      <p class="onb-hint">Así te saludamos cada mañana. Nada de esto se comparte.</p>
+      <input name="name" required maxlength="200" placeholder="Ana"
+             autocomplete="given-name" value="{{ f.get('name', '') }}">
     </section>
 
     <section class="onb-step">
-      <h2>¿Qué quieres lograr?</h2>
-      <p class="onb-hint">De aquí sale cuánto comes al día.</p>
-      <label>¿Qué buscas?
-        <select name="goal">
-          {% for goal_value, meta in GOAL_META.items() %}
-            <option value="{{ goal_value.value }}"
-              {% if form and form.goal == goal_value.value %}selected{% endif %}>{{ meta.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>¿Cuánto te mueves?
-        <select name="activity_level">
-          {% for value, label in ACTIVITY_LABELS.items() %}
-            <option value="{{ value }}" {% if form and form.activity_level == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </section>
-
-    <section class="onb-step">
-      <h2>¿Cuántas veces comes?</h2>
-      <p class="muted">Desayuno, almuerzo y cena van siempre. Los snacks los eliges tú.</p>
-      <div class="chips">
-        {% for m in MEAL_TOGGLES %}
-          <label class="chip">
-            <input type="checkbox" name="meal_slots" value="{{ m.slot.value }}" checked
-                   {% if m.core %}disabled{% endif %}> {{ m.label }}
-            {% if m.core %}<input type="hidden" name="meal_slots" value="{{ m.slot.value }}">{% endif %}
-          </label>
+      <span class="onb-badge"><span class="icon">person</span></span>
+      <h2>¿Con qué te identificas?</h2>
+      <p class="onb-hint">Cambia cuántas calorías necesita tu cuerpo en reposo.</p>
+      <div class="opts">
+        {% for s in SEX_META %}
+        <label class="opt">
+          <input type="radio" name="sex" value="{{ s.key }}" required
+                 {% if f.get('sex') == s.key %}checked{% endif %}>
+          <span class="opt-icon"><span class="icon">{{ s.icon }}</span></span>
+          <span class="opt-text"><span class="opt-title">{{ s.label }}</span></span>
+        </label>
         {% endfor %}
       </div>
     </section>
 
     <section class="onb-step">
+      <span class="onb-badge"><span class="icon">badge</span></span>
+      <h2>Sobre ti</h2>
+      <p class="onb-hint">Con esto calculamos tus calorías objetivo.</p>
+      <ul class="rows">
+        <li>
+          <button type="button" class="row" data-sheet-open="sheet-edad">
+            <span class="row-icon"><span class="icon">cake</span></span>
+            <span class="row-text">Edad</span>
+            <span class="row-value" data-display="age_years">{{ edad_actual }} años</span>
+            <span class="row-chevron"><span class="icon">chevron_right</span></span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="row" data-sheet-open="sheet-altura">
+            <span class="row-icon"><span class="icon">straighten</span></span>
+            <span class="row-text">Altura</span>
+            <span class="row-value" data-display="height_cm">{{ altura_actual }} cm</span>
+            <span class="row-chevron"><span class="icon">chevron_right</span></span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="row" data-sheet-open="sheet-peso">
+            <span class="row-icon"><span class="icon">monitor_weight</span></span>
+            <span class="row-text">Peso</span>
+            <span class="row-value" data-display="weight_kg">{{ peso_actual }} kg</span>
+            <span class="row-chevron"><span class="icon">chevron_right</span></span>
+          </button>
+        </li>
+      </ul>
+      <input type="hidden" name="age_years" value="{{ edad_actual }}">
+      <input type="hidden" name="height_cm" value="{{ altura_actual }}">
+      <input type="hidden" name="weight_kg" value="{{ peso_actual }}">
+    </section>
+
+    <section class="onb-step">
+      <span class="onb-badge"><span class="icon">monitor_weight</span></span>
+      <h2>¿Ya conoces tus kcal y macros?</h2>
+      <p class="onb-hint">Si no, los calculamos con tu peso y tu objetivo. Siempre
+        los puedes cambiar después en el perfil.</p>
+      <div class="opts">
+        <label class="opt">
+          <input type="radio" name="conoce_macros" value="no" required
+                 {% if f.get('conoce_macros', 'no') != 'si' %}checked{% endif %}>
+          <span class="opt-text"><span class="opt-title">No, calcúlalos tú</span></span>
+        </label>
+        <label class="opt">
+          <input type="radio" name="conoce_macros" value="si"
+                 {% if f.get('conoce_macros') == 'si' %}checked{% endif %}>
+          <span class="opt-text"><span class="opt-title">Sí, los pongo yo</span></span>
+        </label>
+      </div>
+      <div class="macros-fields" data-macros-fields hidden>
+        <label class="field"><span>kcal al día</span>
+          <input type="number" name="kcal" min="1200" max="4000" step="10"
+                 inputmode="numeric" value="{{ f.get('kcal', '') }}">
+        </label>
+        <label class="field"><span>Proteína (g)</span>
+          <input type="number" name="protein_g" min="1" max="300" step="1"
+                 inputmode="decimal" value="{{ f.get('protein_g', '') }}">
+        </label>
+        <label class="field"><span>Carbohidrato (g)</span>
+          <input type="number" name="carb_g" min="0" max="500" step="1"
+                 inputmode="decimal" value="{{ f.get('carb_g', '') }}">
+        </label>
+        <label class="field"><span>Grasa (g)</span>
+          <input type="number" name="fat_g" min="1" max="200" step="1"
+                 inputmode="decimal" value="{{ f.get('fat_g', '') }}">
+        </label>
+      </div>
+    </section>
+
+    <section class="onb-step">
+      <span class="onb-badge"><span class="icon">target</span></span>
+      <h2>¿Cuál es tu objetivo?</h2>
+      <p class="onb-hint">De aquí sale cuánto comes al día.</p>
+      <div class="opts">
+        {% for goal_value, meta in GOAL_META.items() %}
+        <label class="opt">
+          <input type="radio" name="goal" value="{{ goal_value.value }}" required
+                 {% if f.get('goal') == goal_value.value %}checked{% endif %}>
+          <span class="opt-icon"><span class="icon">{{ meta.icon }}</span></span>
+          <span class="opt-text">
+            <span class="opt-title">{{ meta.title }}</span>
+            <span class="opt-sub">{{ meta.sub }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="onb-step">
+      <span class="onb-badge"><span class="icon">directions_run</span></span>
+      <h2>¿Cuánto te mueves?</h2>
+      <p class="onb-hint">No te preocupes, luego lo puedes cambiar.</p>
+      <div class="opts">
+        {% for a in ACTIVITY_META %}
+        <label class="opt">
+          <input type="radio" name="activity_level" value="{{ a.key }}" required
+                 {% if f.get('activity_level') == a.key %}checked{% endif %}>
+          <span class="opt-icon"><span class="icon">{{ a.icon }}</span></span>
+          <span class="opt-text">
+            <span class="opt-title">{{ a.title }}</span>
+            <span class="opt-sub">{{ a.sub }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="onb-step">
+      <span class="onb-badge"><span class="icon">restaurant</span></span>
+      <h2>¿Cuántas veces comes?</h2>
+      <p class="onb-hint">Desayuno, almuerzo y cena van siempre. Los snacks los eliges tú.</p>
+      <div class="chips">
+        {% for m in MEAL_TOGGLES %}
+        <label class="chip">
+          <input type="checkbox" name="meal_slots" value="{{ m.slot.value }}" checked
+                 {% if m.core %}disabled{% endif %}> {{ m.label }}
+          {% if m.core %}<input type="hidden" name="meal_slots" value="{{ m.slot.value }}">{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="onb-step">
+      <span class="onb-badge"><span class="icon">no_meals</span></span>
       <h2>¿Algo que no comes?</h2>
       <p class="onb-hint">Si no aplica ninguna, sigue de largo.</p>
       <div class="chips">
         {% for r in RESTRICTION_TOGGLES %}
-          <label class="chip">
-            <input type="checkbox" name="restrictions" value="{{ r.key }}"
-                   {% if form and r.key in form.restrictions %}checked{% endif %}> {{ r.label }}
-          </label>
+        <label class="chip">
+          <input type="checkbox" name="restrictions" value="{{ r.key }}"
+                 {% if r.key in f.get('restrictions', []) %}checked{% endif %}>
+          <span class="icon">{{ r.icon }}</span>{{ r.label }}
+        </label>
         {% endfor %}
       </div>
-      <label>¿Algo que no quieres ver aunque no sea alergia?
+      <label class="field"><span>Y algo que no quieres ver, aunque no sea alergia</span>
         <input name="dislikes" placeholder="hígado, coliflor, atún…" maxlength="500">
       </label>
     </section>
 
     <section class="onb-step">
+      <span class="onb-badge"><span class="icon">edit_note</span></span>
       <h2>¿Cómo es un día tuyo?</h2>
-      <p class="muted">Esto es lo que más nos ayuda: cuéntanoslo como se lo contarías a alguien.</p>
+      <p class="onb-hint">Esto es lo que más nos ayuda: cuéntanoslo como se lo contarías a alguien.</p>
       <textarea name="eating_pattern_raw" rows="6" maxlength="2000"
-        placeholder="Ej: desayuno rápido, casi siempre huevos o avena. Almuerzo en la oficina y prefiero algo que no lleve mucha preparación. Pico entre comidas. Ceno sobre las 7:30 porque entreno a las 8…">{{ form.eating_pattern_raw if form else '' }}</textarea>
+        placeholder="Ej: desayuno rápido, casi siempre huevos o avena. Almuerzo en la oficina y prefiero algo que no lleve mucha preparación. Pico entre comidas. Ceno sobre las 7:30 porque entreno a las 8…">{{ f.get('eating_pattern_raw', '') }}</textarea>
       <div class="chips">
-        <label class="chip"><input type="checkbox" name="context_tags" value="cocina"> Me encanta cocinar</label>
-        <label class="chip"><input type="checkbox" name="context_tags" value="come_afuera"> Como mucho afuera</label>
-        <label class="chip"><input type="checkbox" name="context_tags" value="entrena_noche"> Entreno de noche</label>
-        <label class="chip"><input type="checkbox" name="context_tags" value="come_rapido"> Como rápido</label>
+        {% for c in CONTEXT_TOGGLES %}
+        <label class="chip">
+          <input type="checkbox" name="context_tags" value="{{ c.key }}">
+          <span class="icon">{{ c.icon }}</span>{{ c.label }}
+        </label>
+        {% endfor %}
       </div>
-      <label>¿En qué ciudad vives?
+      <label class="field"><span>¿En qué ciudad vives?</span>
         <input name="city" placeholder="Medellín" maxlength="120">
       </label>
     </section>
 
     <section class="onb-step">
+      <span class="onb-badge"><span class="icon">favorite</span></span>
       <h2>¿Algo que te encante?</h2>
       <p class="onb-hint">Opcional. Si no marcas nada, elegimos nosotros.</p>
       {% for group in groups %}
-        <details class="food-group">
-          <summary>
-            <span>{{ group.label }}</span>
-            <span class="food-count">{{ group['items'] | length }}</span>
-          </summary>
-          <div class="chips">
-            {% for item in group['items'] %}
-              <label class="chip">
-                <input type="checkbox" name="food_ids" value="{{ item.id }}"
-                       {% if item.on %}checked{% endif %}> {{ item.name }}
-              </label>
-            {% endfor %}
-          </div>
-        </details>
+      <details class="food-group">
+        <summary>
+          <span class="food-group-name">
+            <span class="icon">{{ group.icon }}</span>{{ group.label }}
+          </span>
+          <span class="food-count">{{ group['items'] | length }}</span>
+        </summary>
+        <div class="chips">
+          {% for item in group['items'] %}
+          <label class="chip">
+            <input type="checkbox" name="food_ids" value="{{ item.id }}"
+                   {% if item.on %}checked{% endif %}> {{ item.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </details>
       {% endfor %}
     </section>
 
     <div class="onb-nav">
-      <button type="button" class="btn btn-outline" data-back hidden>Atrás</button>
-      <button type="button" class="btn btn-primary btn-block" data-next hidden>Siguiente</button>
-      <button type="submit" class="btn btn-primary btn-block" data-submit>Crear mi menú</button>
+      <button type="button" class="btn btn-primary btn-big btn-block" data-next hidden>
+        Continuar
+      </button>
+      <button type="submit" class="btn btn-primary btn-big btn-block" data-submit>
+        Crear mi menú
+      </button>
     </div>
   </form>
 </div>
+
+{% include "partials/sheet_medidas.html" %}
 {% endblock %}

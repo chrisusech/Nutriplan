@@ -44,6 +44,9 @@ dev = [
     "httpx>=0.28.1",
     # Solo para generar los .docx de fixture del intake; la app ya no exporta Word.
     "python-docx>=1.1",
+    # Lee las ligaduras de la fuente subseteada. Sin ella, el test que vigila que
+    # los iconos existan se salta y un icono nuevo sale escrito en la pantalla.
+    "fonttools[woff]>=4.53",
     "playwright>=1.62.0",
     # Extra `apple` también en CI: los tests de OAuth Apple necesitan jwt.
     "pyjwt[crypto]>=2.9",

@@ -1,0 +1,114 @@
+/* Hojas que suben desde abajo y la rueda de valores que viven dentro.
+
+   Es un `<dialog>` de verdad: el navegador ya sabe atrapar el foco, cerrar con
+   Escape y pintar el velo. Reimplementarlo con divs es cómo se acaba con una
+   pantalla que el lector de pantalla no puede abandonar. */
+
+.sheet {
+  width: 100%;
+  max-width: 34rem;
+  max-height: 92dvh;
+  margin: auto auto 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(0.125rem);
+  -webkit-backdrop-filter: blur(0.125rem);
+}
+
+.sheet-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4) calc(var(--s-4) + var(--safe-b));
+  border-radius: var(--r-2xl) var(--r-2xl) 0 0;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--sh-3);
+}
+.sheet-grip {
+  width: 2.5rem;
+  height: 0.25rem;
+  margin: 0 auto var(--s-1);
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.sheet-title { font: 700 var(--t-lg) Poppins, sans-serif; color: var(--ink); }
+.sheet-body { overflow-y: auto; }
+
+/* La hoja entra deslizando y el velo funde. `@starting-style` es lo que permite
+   animar la entrada de un elemento que acaba de existir. */
+.sheet[open] { animation: sheet-in var(--dur-3) var(--ease-out); }
+.sheet[open]::backdrop { animation: fade-in var(--dur-2) var(--ease-out); }
+.sheet.is-closing { animation: sheet-out var(--dur-2) var(--ease-out) forwards; }
+.sheet.is-closing::backdrop { animation: fade-out var(--dur-2) var(--ease-out) forwards; }
+
+@keyframes sheet-in {
+  from { transform: translateY(2rem); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@keyframes sheet-out {
+  to { transform: translateY(2rem); opacity: 0; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- Rueda de valores ------------------------------------------------------ */
+
+.wheels { display: flex; align-items: center; justify-content: center; gap: var(--s-2); }
+.wheel-sep { font: 700 var(--t-xl) Poppins, sans-serif; color: var(--ink); }
+.wheel-unit { font: 600 var(--t-md) Poppins, sans-serif; color: var(--muted); }
+
+.wheel-frame { position: relative; flex: 0 1 7rem; }
+/* La banda del centro dice cuál es el valor elegido sin escribirlo dos veces. */
+.wheel-band {
+  position: absolute;
+  inset: calc(50% - 1.375rem) 0 auto 0;
+  height: 2.75rem;
+  border-radius: var(--r-md);
+  background: var(--card-2);
+  pointer-events: none;
+}
+.wheel {
+  position: relative;
+  height: 13.75rem;      /* cinco filas de 2.75rem */
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* Los extremos se desvanecen: así se lee como una rueda y no como una lista. */
+  mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+}
+.wheel::-webkit-scrollbar { display: none; }
+.wheel-list {
+  list-style: none;
+  margin: 0;
+  /* Media rueda de aire arriba y abajo para que el primer y el último valor
+     puedan llegar al centro. */
+  padding: 5.5rem 0;
+}
+.wheel-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.75rem;
+  scroll-snap-align: center;
+  font: 600 var(--t-lg) Poppins, sans-serif;
+  color: var(--faint);
+  transition: color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+.wheel-item.on {
+  color: var(--ink);
+  font-weight: 800;
+  transform: scale(1.1);
+}

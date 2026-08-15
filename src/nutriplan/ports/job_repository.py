@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -36,19 +36,30 @@ class JobStatusSink(Protocol):
 
     async def update(self, job: Job) -> None: ...
 
+    async def touch(self, job_id: UUID) -> None:
+        """Solo dice «sigo vivo», y solo si el job sigue corriendo.
 
-class JobRepository(JobStatusSink, Protocol):
+        Es lo que separa el latido del resultado: un latido que llegue tarde no
+        puede resucitar un job que ya terminó.
+        """
+        ...
+
+
+class JobPrefixCounter(Protocol):
+    """Contar intentos por prefijo de clave. Lo pide la puerta de la semana."""
+
+    async def count_for_prefix(self, prefix: str) -> int: ...
+
+
+class JobRepository(JobStatusSink, JobPrefixCounter, Protocol):
     async def add(self, job: Job) -> None: ...
     async def get(self, job_id: UUID) -> Job | None: ...
     async def get_by_idempotency_key(self, key: str) -> Job | None: ...
 
+    async def claim(self, job_id: UUID, *, stale_before: datetime) -> bool:
+        """Toma el job para ejecutarlo; True solo para quien gana la carrera.
 
-class AuditLogRepository(Protocol):
-    async def record(
-        self,
-        *,
-        action: str,
-        entity_type: str,
-        entity_id: UUID,
-        details: dict[str, Any] | None = None,
-    ) -> None: ...
+        Un solo UPDATE condicional: con dos instancias detrás de un balanceador,
+        las dos ven el mismo job encolado y las dos querrían lanzarlo.
+        """
+        ...

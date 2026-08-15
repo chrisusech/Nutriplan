@@ -1,0 +1,25 @@
+{# Las secciones de la consola viven aquí y no en la barra de abajo: esa barra
+   es de quien usa la app, y cuatro pestañas más la dejaban ilegible en un
+   móvil. #}
+<nav class="chips subnav" aria-label="Secciones de la consola">
+  <a class="chip {{ 'on' if active_tab == 'usuarios' }}" href="/admin/usuarios"
+     {% if active_tab == 'usuarios' %}aria-current="page"{% endif %}>
+    <span class="icon">groups</span>Usuarios
+  </a>
+  <a class="chip {{ 'on' if active_tab == 'metricas' }}" href="/admin/metricas"
+     {% if active_tab == 'metricas' %}aria-current="page"{% endif %}>
+    <span class="icon">insights</span>Métricas
+  </a>
+  <a class="chip {{ 'on' if active_tab == 'recetas' }}" href="/admin/recetas"
+     {% if active_tab == 'recetas' %}aria-current="page"{% endif %}>
+    <span class="icon">menu_book</span>Recetas
+  </a>
+  <a class="chip {{ 'on' if active_tab == 'restaurantes' }}" href="/admin/restaurantes"
+     {% if active_tab == 'restaurantes' %}aria-current="page"{% endif %}>
+    <span class="icon">restaurant</span>Restaurantes
+  </a>
+  <a class="chip {{ 'on' if active_tab == 'laboratorio' }}" href="/admin/laboratorio"
+     {% if active_tab == 'laboratorio' %}aria-current="page"{% endif %}>
+    <span class="icon">science</span>Laboratorio
+  </a>
+</nav>

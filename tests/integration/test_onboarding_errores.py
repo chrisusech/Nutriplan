@@ -15,8 +15,13 @@ from nutriplan.domain.models import MealSlot
 from nutriplan.ui.web.app import create_app
 
 BASE = {
-    "name": "Ana", "sex": "female", "age_years": 28, "height_cm": 165,
-    "weight_kg": 62, "goal": "lose_fat", "activity_level": "moderate",
+    "name": "Ana",
+    "sex": "female",
+    "age_years": 28,
+    "height_cm": 165,
+    "weight_kg": 62,
+    "goal": "lose_fat",
+    "activity_level": "moderate",
 }
 
 
@@ -143,3 +148,32 @@ def test_el_nombre_que_pone_aqui_pasa_a_su_cuenta(app, container) -> None:
             return str(fila.scalars().one())
 
     assert asyncio.run(_nombre()) == "Ana María"
+
+
+def test_si_pone_sus_macros_en_el_alta_quedan_guardados(app) -> None:
+    resp = _enviar(
+        app,
+        conoce_macros="si",
+        kcal="2000",
+        protein_g="140",
+        carb_g="180",
+        fat_g="80",
+    )
+    assert resp.status_code == 303
+    perfil = app.get("/perfil").text
+    assert "Ajustar mis números" in perfil
+    assert "2000" in perfil
+
+
+def test_unos_macros_imposibles_en_el_alta_no_repiten_el_onboarding(app) -> None:
+    """El perfil ya existe: el error se explica en /perfil, no se borra el alta."""
+    resp = _enviar(
+        app,
+        conoce_macros="si",
+        kcal="800",
+        protein_g="10",
+        carb_g="10",
+        fat_g="5",
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/perfil")

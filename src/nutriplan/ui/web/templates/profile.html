@@ -1,15 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Perfil{% endblock %}
+{% block page_class %}page-profile{% endblock %}
+
+{% block head_lead %}
+<h1 class="app-title">Perfil</h1>
+{% endblock %}
+
+{% block head_action %}
+<button type="button" class="btn-icon" data-theme-toggle aria-label="Cambiar el tema"
+        aria-pressed="{{ 'true' if tema == 'dark' else 'false' }}">
+  <span class="icon">contrast</span>
+</button>
+{% endblock %}
 
 {% block content %}
-<h1>Tu perfil</h1>
-<p class="muted">{{ cuenta.email }}</p>
+<header class="profile-head">
+  <span class="avatar avatar-lg">{{ iniciales }}</span>
+  <div>
+    <h2>{{ cuenta.name }}</h2>
+    <p class="muted">{{ cuenta.email }}</p>
+  </div>
+</header>
 
 {% if perfil %}
 <section class="card profile-card">
   <dl class="facts">
     <div><dt>Objetivo</dt><dd>{{ GOAL_META[perfil.goal].label }}</dd></div>
     <div><dt>Peso</dt><dd>{{ perfil.weight_kg }} kg</dd></div>
+    {% if racha %}<div><dt>Racha</dt><dd>{{ racha }} día{{ 's' if racha != 1 else '' }}</dd></div>{% endif %}
     <div><dt>Altura</dt><dd>{{ perfil.height_cm }} cm</dd></div>
     <div><dt>Edad</dt><dd>{{ perfil.age_years }} años</dd></div>
     <div><dt>Comidas al día</dt><dd>{{ perfil.meal_slots|length }}</dd></div>
@@ -22,19 +40,178 @@
   </div>
   {% endif %}
 </section>
+
+{% if aviso %}<p class="alert">{{ aviso }}</p>{% endif %}
+{% if error %}<p class="alert">{{ error }}</p>{% endif %}
+
+{% if targets %}
+<section class="card profile-card">
+  <h3>Ajustar mis números</h3>
+  <p class="muted">Aunque al empezar hayas dicho que no, aquí siempre puedes
+    poner tus números en gramos o en g × kg: kcal, proteína, carbohidrato y
+    grasa se mueven juntos. El check-in de peso no los pisa si dejas el candado.</p>
+  {% set ppk = targets.formula.protein_g_per_kg or (targets.daily.protein_g / perfil.weight_kg) %}
+  {% set fpk = targets.formula.fat_g_per_kg or (targets.daily.fat_g / perfil.weight_kg) %}
+  <form method="post" action="/perfil/macros" class="onb-form"
+        data-macros data-peso="{{ perfil.weight_kg }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label class="field"><span>kcal al día</span>
+      <input data-kcal type="number" name="kcal" min="1200" max="4000" step="10"
+             inputmode="numeric" value="{{ targets.daily.kcal|int }}" required>
+    </label>
+    <div class="macro-modo" data-macro-modo>
+      <div class="seg" role="radiogroup" aria-label="Cómo ajustas los números">
+        <label><input type="radio" name="macro_modo" value="gramos" checked>Gramos</label>
+        <label><input type="radio" name="macro_modo" value="formula">g × kg</label>
+      </div>
+    </div>
+    <div data-panel-gramos>
+      <label class="field"><span>Proteína (g)</span>
+        <input data-macro="protein" type="number" name="protein_g" min="1" max="300"
+               step="1" inputmode="numeric" value="{{ targets.daily.protein_g|int }}" required>
+      </label>
+      <label class="field"><span>Carbohidrato (g)</span>
+        <input data-macro="carb" type="number" name="carb_g" min="0" max="500"
+               step="1" inputmode="numeric" value="{{ targets.daily.carb_g|int }}" required>
+      </label>
+      <label class="field"><span>Grasa (g)</span>
+        <input data-macro="fat" type="number" name="fat_g" min="1" max="200"
+               step="1" inputmode="numeric" value="{{ targets.daily.fat_g|int }}" required>
+      </label>
+    </div>
+    <div data-panel-formula hidden>
+      <label class="field">
+        <span>Proteína · <b data-ppk-g>{{ targets.daily.protein_g|int }}</b> g</span>
+        <div class="gkg-row">
+          <button type="button" class="btn-icon" data-gkg-delta="ppk" data-step="-0.1"
+                  aria-label="Bajar proteína">
+            <span class="icon">remove</span>
+          </button>
+          <input data-ppk type="number" min="1.0" max="3.0" step="0.1"
+                 inputmode="decimal" value="{{ '%.1f'|format(ppk) }}">
+          <span class="gkg-unit">g × kg</span>
+          <button type="button" class="btn-icon" data-gkg-delta="ppk" data-step="0.1"
+                  aria-label="Subir proteína">
+            <span class="icon">add</span>
+          </button>
+        </div>
+      </label>
+      <label class="field">
+        <span>Grasa · <b data-fpk-g>{{ targets.daily.fat_g|int }}</b> g</span>
+        <div class="gkg-row">
+          <button type="button" class="btn-icon" data-gkg-delta="fpk" data-step="-0.1"
+                  aria-label="Bajar grasa">
+            <span class="icon">remove</span>
+          </button>
+          <input data-fpk type="number" min="0.4" max="1.5" step="0.1"
+                 inputmode="decimal" value="{{ '%.1f'|format(fpk) }}">
+          <span class="gkg-unit">g × kg</span>
+          <button type="button" class="btn-icon" data-gkg-delta="fpk" data-step="0.1"
+                  aria-label="Subir grasa">
+            <span class="icon">add</span>
+          </button>
+        </div>
+      </label>
+      <p class="muted">El carbohidrato cierra lo que queda de las kcal:
+        <strong data-carb-g>{{ targets.daily.carb_g|int }}</strong> g.</p>
+    </div>
+    <p class="muted" data-gkg>Sobre {{ perfil.weight_kg }} kg de peso.</p>
+    <label class="chip">
+      <input type="checkbox" name="adaptar" value="1" {% if not macros_locked %}checked{% endif %}>
+      Que se adapten según mi peso
+    </label>
+    <button class="btn btn-primary btn-block" type="submit">Guardar mis números</button>
+  </form>
+</section>
 {% endif %}
 
+<ul class="rows section">
+  <li>
+    <a class="row" href="/check-in">
+      <span class="row-icon"><span class="icon">monitor_weight</span></span>
+      <span class="row-text">Actualizar mi peso<span class="row-sub">Cierra la semana y adapta las kcal</span></span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+  <li>
+    <a class="row" href="/progreso">
+      <span class="row-icon"><span class="icon">insights</span></span>
+      <span class="row-text">Mi progreso</span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+  <li>
+    <a class="row" href="/mis-alimentos">
+      <span class="row-icon"><span class="icon">grocery</span></span>
+      <span class="row-text">Mis alimentos<span class="row-sub">Lo que sí y lo que no quieres ver</span></span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+  <li>
+    {# Opinar deja de ser una pestaña: se usa una vez cada mucho, y ocupaba un
+       quinto del pulgar en todas las pantallas. #}
+    <a class="row" href="/feedback">
+      <span class="row-icon"><span class="icon">campaign</span></span>
+      <span class="row-text">Opinar<span class="row-sub">Esto es una BETA: lo que digas cambia lo que viene</span></span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+</ul>
+
+{% include "partials/membership.html" %}
+
+{% if needs_checkin %}
+<p class="alert">
+  Antes de regenerar, <a href="/check-in">cierra tu semana</a>:
+  {% if closure and closure.missing %}{{ closure.missing|join('; ') }}.{% else %}
+  peso y comentario.{% endif %}
+</p>
+{% elif can_regenerate %}
+<form method="post" action="/menu/generar" class="regen"
+      hx-post="/menu/generar" hx-target="main" hx-swap="innerHTML">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <button class="btn btn-primary btn-block btn-big" type="submit">
+    <span class="icon">auto_awesome</span>Generar otra semana
+  </button>
+</form>
+{% elif waiting_sunday %}
+<p class="alert">El domingo preparamos tu siguiente menú.</p>
+{% elif unlock_hint %}
+<p class="alert">{{ unlock_hint }}</p>
+{% endif %}
+{% endif %}
+
+<ul class="rows section">
+  <li>
+    <a class="row" href="/privacidad">
+      <span class="row-icon"><span class="icon">shield</span></span>
+      <span class="row-text">Qué hacemos con tus datos</span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+  <li>
+    <a class="row" href="/terminos">
+      <span class="row-icon"><span class="icon">description</span></span>
+      <span class="row-text">Términos</span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+  <li>
+    <a class="row" href="/soporte">
+      <span class="row-icon"><span class="icon">support_agent</span></span>
+      <span class="row-text">Soporte</span>
+      <span class="row-chevron"><span class="icon">chevron_right</span></span>
+    </a>
+  </li>
+</ul>
+
 <section class="card danger-zone">
-  <h3>Tu cuenta</h3>
   <form method="post" action="/logout">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline btn-block" type="submit">
       <span class="icon">logout</span>Cerrar sesión
     </button>
   </form>
-  <p><a href="/privacidad">Qué hacemos con tus datos</a>
-     · <a href="/terminos">Términos</a>
-     · <a href="/soporte">Soporte</a></p>
   <details class="delete">
     <summary>Eliminar mi cuenta</summary>
     <p class="muted">Se borran tu perfil, tus menús, tus calificaciones y tus

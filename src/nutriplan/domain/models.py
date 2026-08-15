@@ -4,12 +4,14 @@ Todos los IDs son UUID. Todos los agregados con datos de personas llevan
 tenant_id. Ningún modelo de este módulo conoce I/O, frameworks ni la IA.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from nutriplan.domain.week import iso_week_start
 
 
 class Sex(StrEnum):
@@ -52,9 +54,9 @@ class FoodCategory(StrEnum):
 class UnitGranularity(StrEnum):
     """Cómo se porciona un alimento. Evita '5.5 huevos'."""
 
-    GRAMS = "grams"   # arroz, pollo, yogur → gramos libres (múltiplos de 5 g)
-    WHOLE = "whole"   # huevo, lata de atún → solo unidades enteras
-    HALF = "half"     # aguacate, pan, banano → medias unidades permitidas
+    GRAMS = "grams"  # arroz, pollo, yogur → gramos libres (múltiplos de 5 g)
+    WHOLE = "whole"  # huevo, lata de atún → solo unidades enteras
+    HALF = "half"  # aguacate, pan, banano → medias unidades permitidas
 
 
 # Las comidas que un plan no puede quitar. Los snacks sí: hay clientes de cuatro
@@ -63,6 +65,26 @@ CORE_MEAL_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
 
 # El menú es de una semana. No es una configuración: es el producto.
 DAYS_PER_WEEK = 7
+
+
+class WeightEntry(BaseModel):
+    """El cierre de una semana: el peso y lo que la persona tuvo que decir.
+
+    Uno por semana ISO (lunes); el historial no se borra. Es la fila que cierra
+    la semana N y abre la N+1.
+    """
+
+    id: UUID
+    tenant_id: UUID
+    client_id: UUID
+    weight_kg: float = Field(gt=0, le=400)
+    week_start: date  # lunes de esa semana
+    logged_at: datetime
+    # Nota generada por la IA tras adaptar; opcional y soft-fail.
+    note: str | None = Field(default=None, max_length=400)
+    # Lo que escribió la PERSONA sobre su semana. No confundir con `note`: esto
+    # es materia prima del plan siguiente, aquello es narración de lo ya hecho.
+    client_comment: str | None = Field(default=None, max_length=1200)
 
 
 class Client(BaseModel):
@@ -230,9 +252,7 @@ class FoodItem(BaseModel):
         if not self.meal_slots:
             self.meal_slots = list(_DEFAULT_SLOTS[self.category])
         if "portion_step_g" not in self.model_fields_set:
-            self.portion_step_g = _derive_portion_step(
-                self.unit_granularity, self.default_unit_g
-            )
+            self.portion_step_g = _derive_portion_step(self.unit_granularity, self.default_unit_g)
         return self
 
     def weight_in(self, slot: MealSlot) -> int:
@@ -287,7 +307,8 @@ class NutritionTargets(BaseModel):
     per_meal: dict[MealSlot, MacroTargets]
     method: str = "mifflin_st_jeor"
     config_version: str  # procedencia
-    overrides: dict[str, float] = {}  # ajustes manuales del entrenador (gramos sueltos)
+    # Ajustes manuales (gramos sueltos) y, además, las marcas de `OVERRIDE_FLAGS`.
+    overrides: dict[str, float] = {}
     formula: MacroFormula = Field(default_factory=MacroFormula)  # g/kg y kcal elegidos
     # CON QUÉ PESO se calcularon estos macros. `Client.weight_kg` es mutable: al
     # registrar el peso del mes siguiente se perdía el del mes anterior, y con él la
@@ -348,6 +369,9 @@ class MealEntry(BaseModel):
     # PlanCycle porque un plan ya exportado tiene que seguir diciendo lo que decía
     # aunque el cliente cambie de preferencia mañana.
     is_free_meal: bool = False
+    # Lo marcó como comido hoy. El anillo cuenta estas kcal; el solver no
+    # reporciona un plato que ya se comió.
+    eaten: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -383,8 +407,7 @@ class MealEntry(BaseModel):
     def portions(self, value: list[MealFoodPortion]) -> None:
         """Traduce ediciones legacy (por food_id+grams) a items."""
         self.items = [
-            MealItem(food_id=p.food_id, grams=p.grams, position=i)
-            for i, p in enumerate(value)
+            MealItem(food_id=p.food_id, grams=p.grams, position=i) for i, p in enumerate(value)
         ]
 
 
@@ -405,6 +428,10 @@ class PlanCycle(BaseModel):
     client_id: UUID
     targets_id: UUID
     days: list[DayPlan]  # exactamente 7, uno por día de la semana
+    # A QUÉ semana pertenece el plan (lunes ISO). Sin esto, `day_index` es un
+    # rótulo suelto: no hay forma de saber si un plan es el de esta semana o el
+    # de hace un mes, y ni el historial ni el consumo de la membresía existen.
+    week_start: date = Field(default_factory=iso_week_start)
     variant: int = Field(default=0, ge=0)
     # El número humano del plan ("Plan nutricional v3"). `variant` es su gemelo
     # técnico: entra en el input_hash para que dos versiones no colisionen en la
@@ -430,10 +457,6 @@ class PlanCycle(BaseModel):
     refine_model: str | None = None
     refine_prompt_version: str | None = None
 
-    @property
-    def is_edited(self) -> bool:
-        return self.edit_count > 0 or self.edited_at is not None
-
 
 class MealSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -441,6 +464,9 @@ class MealSelection(BaseModel):
     slot: MealSlot
     food_ids: list[str]  # enum restringido en runtime al conjunto permitido
     free_salad: bool = False
+    # Nombre culinario que propone la IA (o vacío en el motor). El solver no lo
+    # mira; alimenta la UI y las recetas.
+    dish_name: str | None = Field(default=None, max_length=80)
 
 
 class DaySelection(BaseModel):
@@ -487,8 +513,8 @@ class Account(BaseModel):
     Existe desde el registro; su perfil nutricional (`Client`) solo aparece al
     terminar el onboarding, así que el nombre vive aquí y no allá.
 
-    `max_menus` es el override manual del super_user: `None` = se aplica la regla
-    del BETA (un menú, y el segundo se desbloquea calificando y dejando feedback).
+    Cuántas semanas puede generar NO se guarda aquí: es el saldo de sus
+    concesiones (`domain/membership.py`), que se calcula, no se copia.
     """
 
     id: UUID
@@ -500,6 +526,3 @@ class Account(BaseModel):
     is_active: bool = True
     email_verified_at: datetime | None = None
     consent_analytics_at: datetime | None = None
-    max_menus: int | None = None
-
-

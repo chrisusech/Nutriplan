@@ -174,15 +174,22 @@ def build_sqlite(csv_dir: Path, db_path: Path) -> int:
         conn.executescript(_SCHEMA)
         rows = (
             (
-                f.fdc_id, f.data_type, f.description, f.description_norm, f.food_category,
-                f.kcal_100g, f.protein_100g, f.carb_100g, f.fat_100g,
-                f.fiber_100g, f.sugar_100g, f.sodium_mg_100g,
+                f.fdc_id,
+                f.data_type,
+                f.description,
+                f.description_norm,
+                f.food_category,
+                f.kcal_100g,
+                f.protein_100g,
+                f.carb_100g,
+                f.fat_100g,
+                f.fiber_100g,
+                f.sugar_100g,
+                f.sodium_mg_100g,
             )
             for f in stream_foods(csv_dir)
         )
-        conn.executemany(
-            "INSERT INTO usda_foods VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows
-        )
+        conn.executemany("INSERT INTO usda_foods VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         return int(conn.execute("SELECT count(*) FROM usda_foods").fetchone()[0])
 
 
@@ -202,9 +209,7 @@ def get(conn: sqlite3.Connection, fdc_id: int) -> UsdaFood | None:
     return UsdaFood(**dict(row)) if row else None
 
 
-def search(
-    conn: sqlite3.Connection, query: str, *, limit: int = 5
-) -> list[tuple[UsdaFood, float]]:
+def search(conn: sqlite3.Connection, query: str, *, limit: int = 5) -> list[tuple[UsdaFood, float]]:
     """Candidatos por similitud contra description_norm.
 
     Puntuar 13.694 descripciones con SequenceMatcher por cada alimento es lento

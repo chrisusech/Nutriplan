@@ -10,7 +10,9 @@
 # (topping de desayuno, no algo que echar a 20 g en una carne molida). El cambio vive
 # en el CSV del catálogo, así que se sube la versión aquí para que el hash de entrada
 # cambie y los planes ya generados se regeneren en vez de servirse de caché.
-version: "2026.07.16"
+# 2026.08.13: nace `guarnicion_grasa` para que el plato del aguacate no dependa de
+# un solo alimento.
+version: "2026.08.13"
 
 classes:
   # --- Proteínas -------------------------------------------------------------
@@ -136,3 +138,14 @@ classes:
     label: aguacate
     categories: [fat]
     names_any: [aguacate]
+
+  # La grasa que se sirve AL LADO, sin sartén: aguacate o hummus. Nació porque el
+  # plato del aguacate exigía ese alimento exacto y era el único: si el desayuno
+  # ya se lo había comido, la cena tenía prohibido repetirlo el mismo día y salía
+  # siempre el otro plato — 27 cenas iguales contra 1 en el beta.
+  # Las aceitunas quedan fuera por lo mismo que en `grasa_cocina`: con 30 g de tope
+  # dan tres gramos de grasa y no pueden cerrar el presupuesto del día.
+  guarnicion_grasa:
+    label: aguacate o hummus, al lado
+    categories: [fat]
+    names_any: [aguacate, hummus]

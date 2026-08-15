@@ -39,6 +39,14 @@ KCAL_PER_G_FAT = 9.0
 # Campos de MacroTargets que el entrenador puede fijar manualmente.
 OVERRIDABLE_FIELDS = ("kcal", "protein_g", "carb_g", "fat_g")
 
+# Marca en `overrides` que dice "estas kcal las puso una persona a mano".
+ADMIN_LOCK = "bloqueo_admin"
+# La persona fijó sus números en el perfil: el check-in de peso no los pisa.
+USER_LOCK = "bloqueo_usuario"
+# Lo que viaja en `overrides` sin ser un macro: no entra al cálculo, solo deja
+# constancia. Sin esta lista una marca nueva parecería un campo mal escrito.
+OVERRIDE_FLAGS = (ADMIN_LOCK, USER_LOCK)
+
 
 def bmr_mifflin_st_jeor(sex: Sex, weight_kg: float, height_cm: float, age_years: int) -> float:
     base = 10.0 * weight_kg + 6.25 * height_cm - 5.0 * age_years
@@ -149,9 +157,7 @@ def compute_daily_macros(
 def energy_kcal(protein_g: float, carb_g: float, fat_g: float) -> float:
     """Las kcal de unos macros. La identidad que todo plato real cumple."""
     return round(
-        protein_g * KCAL_PER_G_PROTEIN
-        + carb_g * KCAL_PER_G_CARB
-        + fat_g * KCAL_PER_G_FAT,
+        protein_g * KCAL_PER_G_PROTEIN + carb_g * KCAL_PER_G_CARB + fat_g * KCAL_PER_G_FAT,
         1,
     )
 
@@ -172,18 +178,17 @@ def apply_overrides(daily: MacroTargets, overrides: dict[str, float]) -> MacroTa
       · se toca un macro  → las kcal se recalculan (son su consecuencia);
       · se tocan las kcal → el carbohidrato cierra, igual que en la fórmula.
     """
-    unknown = set(overrides) - set(OVERRIDABLE_FIELDS)
+    macros = {k: v for k, v in overrides.items() if k not in OVERRIDE_FLAGS}
+    unknown = set(macros) - set(OVERRIDABLE_FIELDS)
     if unknown:
         raise CalculationError(f"Overrides desconocidos: {sorted(unknown)}")
 
     values = daily.model_dump()
-    values.update({k: float(v) for k, v in overrides.items()})
+    values.update({k: float(v) for k, v in macros.items()})
 
-    if {"protein_g", "carb_g", "fat_g"} & set(overrides):
-        values["kcal"] = energy_kcal(
-            values["protein_g"], values["carb_g"], values["fat_g"]
-        )
-    elif "kcal" in overrides:
+    if {"protein_g", "carb_g", "fat_g"} & set(macros):
+        values["kcal"] = energy_kcal(values["protein_g"], values["carb_g"], values["fat_g"])
+    elif "kcal" in macros:
         values["carb_g"] = round(
             (
                 values["kcal"]

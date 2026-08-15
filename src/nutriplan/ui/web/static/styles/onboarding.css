@@ -1,0 +1,123 @@
+/* El cuestionario: una pregunta por pantalla.
+
+   Un paso ocupa la pantalla entera y el botón vive abajo, pegado al pulgar. La
+   barra de arriba responde a la única pregunta que importa mientras rellenas un
+   formulario: cuánto falta. */
+
+.page-onboarding .app { padding-bottom: calc(var(--safe-b) + 6rem); }
+
+.onb-progress {
+  flex: 1 1 6rem;
+  height: 0.375rem;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+/* El ancho va en clases y no en `style`: la CSP bloquea los estilos inline
+   TAMBIÉN cuando los pone el JavaScript, no solo el atributo del HTML. */
+.onb-progress-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  transition: width var(--dur-3) var(--ease-out);
+}
+.onb-progress-fill[data-of="9"][data-at="1"] { width: 11.1%; }
+.onb-progress-fill[data-of="9"][data-at="2"] { width: 22.2%; }
+.onb-progress-fill[data-of="9"][data-at="3"] { width: 33.3%; }
+.onb-progress-fill[data-of="9"][data-at="4"] { width: 44.4%; }
+.onb-progress-fill[data-of="9"][data-at="5"] { width: 55.5%; }
+.onb-progress-fill[data-of="9"][data-at="6"] { width: 66.6%; }
+.onb-progress-fill[data-of="9"][data-at="7"] { width: 77.7%; }
+.onb-progress-fill[data-of="9"][data-at="8"] { width: 88.8%; }
+.onb-progress-fill[data-of="9"][data-at="9"] { width: 100%; }
+.onb-progress-fill[data-of="10"][data-at="1"] { width: 10%; }
+.onb-progress-fill[data-of="10"][data-at="2"] { width: 20%; }
+.onb-progress-fill[data-of="10"][data-at="3"] { width: 30%; }
+.onb-progress-fill[data-of="10"][data-at="4"] { width: 40%; }
+.onb-progress-fill[data-of="10"][data-at="5"] { width: 50%; }
+.onb-progress-fill[data-of="10"][data-at="6"] { width: 60%; }
+.onb-progress-fill[data-of="10"][data-at="7"] { width: 70%; }
+.onb-progress-fill[data-of="10"][data-at="8"] { width: 80%; }
+.onb-progress-fill[data-of="10"][data-at="9"] { width: 90%; }
+.onb-progress-fill[data-of="10"][data-at="10"] { width: 100%; }
+
+.onb-form { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.onb-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-top: var(--s-4);
+  animation: rise var(--dur-3) var(--ease-out);
+}
+/* `display` de la hoja gana al atributo `hidden` del navegador: sin esto los
+   nueve pasos se ven a la vez y el contador miente. */
+.onb-step[hidden], .onb-nav [hidden] { display: none; }
+.onb-step > h2 {
+  font-size: var(--t-3xl);
+  line-height: 1.15;
+  outline: none;  /* recibe el foco al cambiar de paso, pero no es un control */
+}
+.onb-hint {
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  margin-top: calc(var(--s-3) * -1);
+}
+
+/* El icono en un círculo: le pone cara a la pregunta. */
+.onb-badge {
+  display: flex; align-items: center; justify-content: center;
+  width: 3.25rem; height: 3.25rem;
+  border-radius: var(--r-pill);
+  background: var(--brand-soft);
+  color: var(--brand);
+  animation: pop var(--dur-3) var(--ease-spring);
+}
+.onb-badge .icon { font-size: 1.75rem; }
+
+/* La navegación no se persigue con el scroll: vive abajo. */
+.onb-nav {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 10;
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  padding: var(--s-4) var(--s-4) calc(var(--s-4) + var(--safe-b));
+  background: linear-gradient(to top, var(--bg) 62%, transparent);
+}
+.onb-nav > .btn { max-width: 34rem; margin: 0 auto; }
+
+/* Plegados a propósito: 172 casillas de golpe eran justo el agobio que este
+   paso venía a quitar. Quien quiera afinar, abre su grupo. */
+.food-group + .food-group { margin-top: var(--s-2); }
+.food-group > summary {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 3.25rem;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  list-style: none;
+  font: 600 var(--t-md) Poppins, sans-serif;
+  color: var(--ink);
+}
+.food-group > summary::-webkit-details-marker { display: none; }
+.food-group[open] > summary { border-color: var(--brand); color: var(--brand); }
+.food-group-name { display: flex; align-items: center; gap: var(--s-2); margin-right: auto; }
+.food-chevron { display: flex; color: var(--faint); transition: transform var(--dur-2) var(--ease-out); }
+.food-group[open] .food-chevron { transform: rotate(180deg); color: var(--brand); }
+.food-group-name .icon { font-size: 1.25rem; color: var(--brand); }
+.food-count {
+  font: 600 var(--t-xs) Poppins, sans-serif;
+  color: var(--muted);
+  padding: 0.125rem var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--chip);
+}
+.food-group .chips { padding: var(--s-3) var(--s-1); }

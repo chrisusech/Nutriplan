@@ -35,12 +35,35 @@ DAILY = MacroTargets(kcal=1800, protein_g=104.0, carb_g=200.0, fat_g=52.0)
 # La lista EXACTA del cliente "Testing", el del plan que salía con yogur los siete
 # días. Es el caso de regresión del bug reportado.
 TESTING_FOODS = [
-    "arepa de maíz", "arroz integral cocido", "batata cocida", "garbanzos cocidos",
-    "maíz dulce", "pan integral", "yogur griego natural", "aceitunas", "aguacate",
-    "mantequilla de almendras", "arándanos", "banano", "fresa", "kiwi", "mango",
-    "papaya", "atún en agua", "carne molida de res", "huevo entero", "lentejas cocidas",
-    "pechuga de pollo", "salmón", "tilapia", "brócoli", "cebolla", "espinaca",
-    "lechuga", "pimentón", "zanahoria",
+    "arepa de maíz",
+    "arroz integral cocido",
+    "batata cocida",
+    "garbanzos cocidos",
+    "maíz dulce",
+    "pan integral",
+    "yogur griego natural",
+    "aceitunas",
+    "aguacate",
+    "mantequilla de almendras",
+    "arándanos",
+    "banano",
+    "fresa",
+    "kiwi",
+    "mango",
+    "papaya",
+    "atún en agua",
+    "carne molida de res",
+    "huevo entero",
+    "lentejas cocidas",
+    "pechuga de pollo",
+    "salmón",
+    "tilapia",
+    "brócoli",
+    "cebolla",
+    "espinaca",
+    "lechuga",
+    "pimentón",
+    "zanahoria",
 ]
 
 
@@ -115,14 +138,17 @@ def test_a_component_whose_class_breaks_its_role_fails_at_load(catalog, foods) -
 
 def test_pool_health_warns_when_a_slot_has_too_few_dishes(catalog, foods) -> None:
     solo_uno = [
-        foods["yogur griego natural"], foods["banano"], foods["huevo entero"],
-        foods["pechuga de pollo"], foods["arroz blanco cocido"], foods["aguacate"],
+        foods["yogur griego natural"],
+        foods["banano"],
+        foods["huevo entero"],
+        foods["pechuga de pollo"],
+        foods["aguacate"],
         foods["pan integral"],
     ]
     pools = expand(catalog, solo_uno)
-    warnings = pool_health(pools, minimum=4)
+    warnings = pool_health(pools, minimum=5)
     assert warnings
-    assert all(w.dish_count < 4 for w in warnings)
+    assert all(w.dish_count < 5 for w in warnings)
 
 
 def test_selection_is_deterministic_and_the_seed_changes_it(catalog, foods) -> None:
@@ -214,9 +240,7 @@ def test_the_selection_fits_the_schema_the_engine_expects(catalog, foods) -> Non
             assert 1 <= len(meal.food_ids) <= 4  # el tope del schema
 
 
-def test_lunch_and_dinner_are_rice_and_potato_not_bread_and_arepa(
-    catalog, testing_allowed
-) -> None:
+def test_lunch_and_dinner_are_rice_and_potato_not_bread_and_arepa(catalog, testing_allowed) -> None:
     """El bug reportado: "en muchos almuerzos o cenas colocas pan o arepa".
 
     La lista de Testing tiene arepa y pan integral (que son de desayuno) junto a
@@ -250,6 +274,34 @@ def test_lunch_and_dinner_are_rice_and_potato_not_bread_and_arepa(
     assert breakfasts & breads
 
 
+def test_un_desayuno_alto_en_carbo_puede_ser_huevos_con_arepa(
+    catalog, foods, nutrition_config
+) -> None:
+    """~130 g de carbo en el desayuno no cabe en arepa sola, pero sí con fruta.
+
+    Sin eso el pool se queda en bowls de avena y la semana parece siempre lo
+    mismo, aunque la receta IA le ponga otro nombre.
+    """
+    diario = MacroTargets(kcal=2900, protein_g=140.0, carb_g=430.0, fat_g=80.0)
+    selector = TemplateSelector(
+        list(foods.values()), catalog, diario, seed=0, config=nutrition_config
+    )
+    pool = selector.pools[MealSlot.BREAKFAST]
+    huevos_arepa_fruta = [
+        d
+        for d in pool
+        if d.template_id == "huevos_carbo_grasa"
+        and any("arepa" in f.name_es.lower() for f in d.foods)
+        and any(f.category is FoodCategory.FRUIT for f in d.foods)
+    ]
+    assert huevos_arepa_fruta, "huevos+arepa+fruta debía entrar al pool"
+
+    desayunos = [meals[MealSlot.BREAKFAST] for meals in selector.select_week(seed=0)]
+    plantillas = {d.template_id for d in desayunos}
+    avena_fija = {"bowl_lacteo_avena_fruta", "batido_avena_fruta"}
+    assert plantillas - avena_fija, f"los 7 desayunos fueron solo avena: {plantillas}"
+
+
 def test_the_only_carb_you_have_is_the_one_you_eat(catalog, foods) -> None:
     """El peso ORDENA, no prohíbe.
 
@@ -259,8 +311,15 @@ def test_the_only_carb_you_have_is_the_one_you_eat(catalog, foods) -> None:
     only_arepa = [
         foods[name]
         for name in (
-            "arepa de maíz", "pechuga de pollo", "huevo entero", "yogur griego natural",
-            "aguacate", "aceite de oliva", "banano", "fresa", "avena en hojuelas",
+            "arepa de maíz",
+            "pechuga de pollo",
+            "huevo entero",
+            "yogur griego natural",
+            "aguacate",
+            "aceite de oliva",
+            "banano",
+            "fresa",
+            "avena en hojuelas",
         )
     ]
     selector = TemplateSelector(only_arepa, catalog, DAILY, seed=0)  # no lanza
@@ -276,7 +335,7 @@ def test_the_only_carb_you_have_is_the_one_you_eat(catalog, foods) -> None:
 
 
 def test_an_optional_component_can_actually_be_left_out(catalog, foods) -> None:
-    """"Opcional" significaba "solo si no hay nada que lo cubra" — o sea, nunca.
+    """ "Opcional" significaba "solo si no hay nada que lo cubra" — o sea, nunca.
 
     En cuanto existía UN candidato el componente pasaba a ser obligatorio, y el
     plato no tenía la versión que la plantilla promete ("proteína + carbohidrato +
@@ -284,16 +343,13 @@ def test_an_optional_component_can_actually_be_left_out(catalog, foods) -> None:
     servía en el almuerzo Y en la cena, y el día se pasaba de grasa sin salida.
     """
     allowed = [
-        foods[name]
-        for name in ("pechuga de pollo", "arroz blanco cocido", "aceite de oliva")
+        foods[name] for name in ("pechuga de pollo", "arroz blanco cocido", "aceite de oliva")
     ]
     pool = expand(catalog, allowed)[MealSlot.LUNCH]
     assert pool, "el almuerzo tiene platos"
 
     with_fat = [d for d in pool if any(f.category is FoodCategory.FAT for f in d.foods)]
-    without_fat = [d for d in pool if not any(
-        f.category is FoodCategory.FAT for f in d.foods
-    )]
+    without_fat = [d for d in pool if not any(f.category is FoodCategory.FAT for f in d.foods)]
     assert with_fat, "la grasa existe y el plato completo se puede servir"
     assert without_fat, "y también la versión sin ella, que es lo que 'opcional' dice"
     assert all(d.dropped == 0 for d in with_fat)

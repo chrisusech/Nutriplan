@@ -19,6 +19,7 @@ from nutriplan.ui.web.security import csrf_token
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 
+
 def _asset_version() -> int:
     """Versión de los estáticos, para que el navegador no sirva una copia vieja.
 
@@ -27,8 +28,12 @@ def _asset_version() -> int:
     entrada, editar `tokens.css` no invalidaba nada y el navegador seguía
     pintando con el CSS anterior.
     """
-    files = [*STATIC_DIR.glob("*.css"), *STATIC_DIR.glob("*.js"),
-             *(STATIC_DIR / "styles").glob("*.css")]
+    files = [
+        *STATIC_DIR.glob("*.css"),
+        *STATIC_DIR.glob("*.js"),
+        *(STATIC_DIR / "styles").glob("*.css"),
+        *(STATIC_DIR / "js").glob("*.js"),
+    ]
     return int(max(f.stat().st_mtime for f in files))
 
 
@@ -44,10 +49,29 @@ templates.env.globals.update(
     RESTRICTION_TOGGLES=presenter.RESTRICTION_TOGGLES,
     MEAL_TOGGLES=presenter.MEAL_TOGGLES,
     ACTIVITY_LABELS=presenter.ACTIVITY_LABELS,
+    ACTIVITY_META=presenter.ACTIVITY_META,
+    CONTEXT_TOGGLES=presenter.CONTEXT_TOGGLES,
     SEX_LABELS=presenter.SEX_LABELS,
+    SEX_META=presenter.SEX_META,
     DAY_SHORT=fmt.DAY_SHORT,
     SLOT_META=week_view.SLOT_META,
 )
+
+
+THEME_COOKIE = "tema"
+# El color de la barra de estado del teléfono: el mismo `--bg` de cada tema. Si
+# no coincide, en la app nativa se ve una franja de otro color sobre la página.
+THEMES = {"dark": "#131010", "light": "#F4EBE5"}
+
+
+def theme_of(request: Request) -> str:
+    """Oscuro salvo que esta persona haya pedido claro.
+
+    Lo decide el servidor y no el cliente para que la página nazca ya en su
+    color: resolverlo en JavaScript deja un fogonazo blanco en cada carga.
+    """
+    raw = request.cookies.get(THEME_COOKIE, "")
+    return raw if raw in THEMES else "dark"
 
 
 def safe_uuid(raw: str) -> UUID:
@@ -102,8 +126,11 @@ def tenant_of(request: Request) -> UUID:
 def current_account(request: Request) -> dict[str, str] | None:
     sess = request.session if "session" in request.scope else {}
     if sess.get("tenant_id"):
-        return {"name": sess.get("name", ""), "email": sess.get("email", ""),
-                "role": sess.get("role", "user")}
+        return {
+            "name": sess.get("name", ""),
+            "email": sess.get("email", ""),
+            "role": sess.get("role", "user"),
+        }
     return None
 
 
@@ -184,6 +211,8 @@ def render(request: Request, template: str, **context: object) -> HTMLResponse:
         name=template,
         context={
             "branding": branding,
+            "tema": theme_of(request),
+            "tema_color": THEMES[theme_of(request)],
             "iniciales": presenter.initials(branding.tenant_name),
             "cuenta": current_account(request),
             "role": role_of(request),

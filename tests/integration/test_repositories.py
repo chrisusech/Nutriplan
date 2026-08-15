@@ -1,6 +1,6 @@
 """Integración de repositorios: CRUD, seed idempotente y aislamiento de tenant."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -61,8 +61,11 @@ async def seed_account(session, client: Client, name: str = "Cliente Uno") -> No
     """Un perfil sin su cuenta no es un perfil: el nombre vive en `users`."""
     session.add(
         UserRow(
-            id=client.user_id, tenant_id=client.tenant_id, name=name,
-            email=f"{client.user_id}@test.local", created_at=datetime.now(UTC),
+            id=client.user_id,
+            tenant_id=client.tenant_id,
+            name=name,
+            email=f"{client.user_id}@test.local",
+            created_at=datetime.now(UTC),
         )
     )
     await session.flush()
@@ -136,10 +139,37 @@ async def test_el_sexo_y_la_altura_no_cambian_pero_el_peso_si(session) -> None:
     await repo.update(tampered)
 
     saved = await repo.get(client.id)
-    assert saved.name == "Ana Original"      # lo manda la cuenta, no el perfil
-    assert saved.sex == Sex.FEMALE           # inamovible
-    assert saved.height_cm == 165.0          # inamovible
-    assert saved.weight_kg == 58.0           # el peso sí se actualiza
+    assert saved.name == "Ana Original"  # lo manda la cuenta, no el perfil
+    assert saved.sex == Sex.FEMALE  # inamovible
+    assert saved.height_cm == 165.0  # inamovible
+    assert saved.weight_kg == 58.0  # el peso sí se actualiza
+
+
+async def test_lo_que_tenia_en_casa_la_semana_pasada_no_cuenta_en_la_nueva(session) -> None:
+    """La despensa caduca sola. Nadie va a entrar a desmarcar el arroz del lunes
+    pasado, así que la nevera se pregunta por semana y la semana nueva nace
+    vacía."""
+    await seed_local(session, CSV_PATH)
+    foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
+    client = make_client()
+    await seed_account(session, client)
+    repo = SqlClientRepository(session, DEFAULT_TENANT_ID)
+    await repo.add(client)
+    pasada, actual = date(2026, 8, 3), date(2026, 8, 10)
+
+    await repo.set_pantry(client.id, pasada, [foods[0].id, foods[1].id])
+    assert sorted(await repo.list_pantry_food_ids(client.id, pasada)) == sorted(
+        [foods[0].id, foods[1].id]
+    )
+    assert await repo.list_pantry_food_ids(client.id, actual) == []
+
+    # Guardar REEMPLAZA: la pantalla manda todas las casillas, así que desmarcar
+    # una tiene que poder quitarla.
+    await repo.set_pantry(client.id, pasada, [foods[0].id])
+    assert await repo.list_pantry_food_ids(client.id, pasada) == [foods[0].id]
+
+    otro = SqlClientRepository(session, OTHER_TENANT)
+    assert await otro.list_pantry_food_ids(client.id, pasada) == []
 
 
 async def test_tenant_isolation_clients(session) -> None:
@@ -501,7 +531,7 @@ async def test_un_menu_va_y_vuelve_de_la_base_con_sus_siete_dias(session) -> Non
 
 
 async def test_only_one_plan_is_the_active_one_and_the_others_stay(session) -> None:
-    """"Uno solo activo" lo garantiza la cardinalidad de la columna, no el código.
+    """ "Uno solo activo" lo garantiza la cardinalidad de la columna, no el código.
 
     Archivar es repuntar. Los planes anteriores NO se borran ni se marcan: siguen
     ahí, con su versión y sus macros, y se puede volver a cualquiera.
@@ -561,3 +591,186 @@ async def test_only_one_plan_is_the_active_one_and_the_others_stay(session) -> N
     reloaded = await clients.get(client.id)
     assert reloaded.active_plan_id == made[1].id
     assert len(await plans.list_for_client(client.id)) == 3
+
+
+# --- Semana ISO, membresía y señales de gusto --------------------------------
+
+
+async def _plan_de_la_semana(
+    session, client: Client, week: date, *, generado: datetime | None = None
+) -> PlanCycle:
+    cycle = PlanCycle(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        client_id=client.id,
+        targets_id=uuid4(),
+        days=[],
+        week_start=week,
+        config_version="test",
+        prompt_version="v1",
+        model="test",
+        input_hash=f"hash-{week}-{uuid4().hex[:6]}",
+        created_at=generado or datetime.now(UTC),
+    )
+    await SqlPlanRepository(session, DEFAULT_TENANT_ID).add(cycle)
+    return cycle
+
+
+async def test_los_planes_se_cuentan_por_semanas_distintas_no_por_intentos(
+    session,
+) -> None:
+    """El saldo se gasta por semana vivida: rehacerla no cuenta como otra."""
+    client = make_client()
+    await seed_account(session, client)
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+    plans = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    lunes = date(2026, 8, 10)
+    desde = datetime.now(UTC) - timedelta(days=1)
+
+    await _plan_de_la_semana(session, client, lunes)
+    await _plan_de_la_semana(session, client, lunes)
+    await _plan_de_la_semana(session, client, lunes + timedelta(days=7))
+
+    assert await plans.count_weeks_since(client.id, desde) == 2
+    assert (await plans.for_week(client.id, lunes)) is not None
+    assert await plans.for_week(client.id, lunes - timedelta(days=7)) is None
+
+
+async def test_lo_generado_antes_de_la_concesion_no_le_gasta_semanas(session) -> None:
+    """Lo que gastó bajo un plan ya vencido no puede restar del que acaba de pagar."""
+    client = make_client()
+    await seed_account(session, client)
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+    plans = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    ahora = datetime.now(UTC)
+
+    await _plan_de_la_semana(session, client, date(2026, 7, 6), generado=ahora - timedelta(days=40))
+    await _plan_de_la_semana(session, client, date(2026, 8, 10), generado=ahora)
+
+    assert await plans.count_weeks_since(client.id, ahora - timedelta(days=7)) == 1
+    assert await plans.count_weeks_since(client.id, ahora - timedelta(days=60)) == 2
+
+
+async def test_generar_de_nuevo_no_borra_el_menu_de_la_semana_pasada(session) -> None:
+    """Sin esto no habría historial: cada generación se llevaba lo anterior."""
+    client = make_client()
+    await seed_account(session, client)
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+    plans = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    pasada, actual = date(2026, 8, 3), date(2026, 8, 10)
+
+    await _plan_de_la_semana(session, client, pasada)
+    await _plan_de_la_semana(session, client, actual)
+    await plans.delete_draft_for_client(client.id, week_start=actual)
+
+    quedan = await plans.list_for_client(client.id)
+    assert [p.week_start for p in quedan] == [pasada]
+
+
+async def test_la_semana_de_regalo_solo_se_regala_una_vez(session) -> None:
+    from nutriplan.adapters.db.repositories import SqlMembershipRepository
+    from nutriplan.domain.membership import GrantSource, MembershipGrant
+
+    repo = SqlMembershipRepository(session)
+    user_id = uuid4()
+    session.add(
+        UserRow(
+            id=user_id,
+            tenant_id=DEFAULT_TENANT_ID,
+            name="Ana",
+            email=f"{user_id}@test.local",
+            created_at=datetime.now(UTC),
+        )
+    )
+    await session.flush()
+
+    assert await repo.has_source(user_id, GrantSource.SIGNUP_FREE) is False
+    await repo.add(
+        MembershipGrant(
+            id=uuid4(),
+            tenant_id=DEFAULT_TENANT_ID,
+            user_id=user_id,
+            weeks=1,
+            granted_at=datetime.now(UTC),
+            source=GrantSource.SIGNUP_FREE,
+        )
+    )
+    assert await repo.has_source(user_id, GrantSource.SIGNUP_FREE) is True
+    assert await repo.has_source(user_id, GrantSource.MANUAL) is False
+
+    concesiones = await repo.list_for_user(user_id)
+    assert [g.weeks for g in concesiones] == [1]
+    assert concesiones[0].source is GrantSource.SIGNUP_FREE
+
+
+async def test_lo_que_pidio_hace_semanas_sigue_contando(session) -> None:
+    """El gusto se acumula: no hay que repetir cada lunes «menos arroz»."""
+    from nutriplan.adapters.db.repositories import SqlTasteSignalRepository
+
+    repo = SqlTasteSignalRepository(session, DEFAULT_TENANT_ID)
+    client_id, pescado, arroz = uuid4(), uuid4(), uuid4()
+
+    await repo.upsert(
+        client_id=client_id,
+        week_start=date(2026, 8, 3),
+        avoid_food_ids=[arroz],
+        prefer_food_ids=[],
+        adjustments=["menos arroz"],
+    )
+    await repo.upsert(
+        client_id=client_id,
+        week_start=date(2026, 8, 10),
+        avoid_food_ids=[pescado],
+        prefer_food_ids=[],
+        adjustments=["más verdura"],
+    )
+
+    acumulado = await repo.accumulated_for(client_id)
+    # Lo reciente primero: es lo que entra al prompt si hay que recortar.
+    assert acumulado.avoid_food_ids == [pescado, arroz]
+    assert acumulado.adjustments == ["más verdura", "menos arroz"]
+
+
+async def test_reenviar_el_cierre_corrige_las_senales_en_vez_de_duplicarlas(
+    session,
+) -> None:
+    from nutriplan.adapters.db.repositories import SqlTasteSignalRepository
+
+    repo = SqlTasteSignalRepository(session, DEFAULT_TENANT_ID)
+    client_id, pescado, pollo = uuid4(), uuid4(), uuid4()
+    semana = date(2026, 8, 10)
+
+    await repo.upsert(
+        client_id=client_id,
+        week_start=semana,
+        avoid_food_ids=[pescado],
+        prefer_food_ids=[],
+        adjustments=[],
+    )
+    await repo.upsert(
+        client_id=client_id,
+        week_start=semana,
+        avoid_food_ids=[pollo],
+        prefer_food_ids=[],
+        adjustments=[],
+    )
+
+    acumulado = await repo.accumulated_for(client_id)
+    assert acumulado.avoid_food_ids == [pollo]
+
+
+async def test_las_senales_de_gusto_no_cruzan_de_cuenta(session) -> None:
+    from nutriplan.adapters.db.repositories import SqlTasteSignalRepository
+
+    mio = SqlTasteSignalRepository(session, DEFAULT_TENANT_ID)
+    ajeno = SqlTasteSignalRepository(session, OTHER_TENANT)
+    client_id = uuid4()
+
+    await mio.upsert(
+        client_id=client_id,
+        week_start=date(2026, 8, 10),
+        avoid_food_ids=[uuid4()],
+        prefer_food_ids=[],
+        adjustments=["sin pescado"],
+    )
+    assert (await ajeno.accumulated_for(client_id)).adjustments == []

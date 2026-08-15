@@ -1,0 +1,41 @@
+<form class="rate" method="post" action="/calificar"
+      hx-post="/calificar" hx-target="closest form.rate" hx-swap="outerHTML"
+      hx-disabled-elt="find button">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="dia" value="{{ dia }}">
+  <input type="hidden" name="slot" value="{{ meal.slot }}">
+  <span class="rate-label">¿Qué tal estuvo?</span>
+  <span class="stars">
+    {% for n in [1, 2, 3, 4, 5] %}
+    <button class="star {% if meal.rating and n <= meal.rating %}on{% endif %}"
+            name="rating" value="{{ n }}" type="submit"
+            aria-label="{{ n }} de 5">
+      <span class="icon {% if meal.rating and n <= meal.rating %}fill{% endif %}">star</span>
+    </button>
+    {% endfor %}
+  </span>
+  {# La caja del «por qué» solo aparece cuando ya hay nota, y con la
+     nota puesta: cuando el botón mandaba un 5 por defecto, escribir
+     un comentario se guardaba como cinco estrellas. #}
+  {% if meal.rating %}
+  <div class="rate-note">
+    <label class="rate-why" for="comment-{{ meal.slot }}">
+      {% if meal.rating <= 3 %}
+      ¿Qué falló? Con eso lo cambiamos en tu próxima semana.
+      {% else %}
+      ¿Qué te gustó? Así sabemos qué repetirte.
+      {% endif %}
+    </label>
+    <textarea id="comment-{{ meal.slot }}" name="comment" rows="2" maxlength="400"
+              {% if meal.slot == abierta and not meal.comment %}autofocus{% endif %}
+              placeholder="Sabor, porción, lo que cambiarías…">{{ meal.comment or '' }}</textarea>
+    <button class="btn btn-ghost" type="submit" name="rating"
+            value="{{ meal.rating }}">
+      <span class="icon">send</span>Enviar
+    </button>
+    {% if meal.comment and meal.slot == abierta %}
+    <p class="rate-saved"><span class="icon">check</span>Guardado. Gracias.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</form>

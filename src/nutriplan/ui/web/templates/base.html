@@ -1,32 +1,47 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="{{ tema }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="{{ brand }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="{{ tema_color }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Mi semana{% endblock %} · NutriPlan</title>
   <link rel="manifest" href="/static/manifest.webmanifest">
+  {# `apple-touch-icon` solo lo mira iOS al guardar en pantalla de inicio; el
+     logo de la pestaña sale de aquí, y sin esto el navegador pinta un mundo. #}
+  <link rel="icon" href="/static/icon-32.png" sizes="32x32">
+  <link rel="icon" href="/static/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="/static/icon-180.png">
   <link rel="preload" href="/static/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/poppins-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
-  {# El color de marca es lo único dinámico del estilo. Va en un atributo y no
-     en un <style>, para que la CSP pueda prohibir el CSS inline entero. #}
+  {# El tema viaja en `data-theme` del <html> y el resto del estilo en la hoja:
+     la CSP prohíbe el CSS inline, así que aquí no hay ni un <style>. htmx se
+     inyecta uno para sus indicadores si no se le dice que no, y la consola se
+     llena de avisos de la CSP en cada carga. #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
   <script src="/static/htmx.min.js" defer></script>
-  <script src="/static/app.js?v={{ asset_v }}" defer></script>
+  <script type="module" src="/static/js/app.js?v={{ asset_v }}"></script>
 </head>
 <body class="{% block page_class %}{% endblock %}"
       {% if cuenta %}data-logged-in="1"{% endif %}
+      {% if plan %}data-habit-remind="1"{% endif %}
       hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
-  <div class="app">
+  <div class="app{% block app_class %}{% endblock %}">
     <header class="app-head">
-      <a class="logo" href="/">
-        <span class="logo-badge"><span class="icon">restaurant</span></span>
-        <span>Nutri<span class="brand-word">Plan</span></span>
-      </a>
-      {% block head_action %}{% endblock %}
+      <div class="app-head-lead">
+        {% block head_lead %}
+        <a class="logo" href="/">
+          <span class="logo-badge"><span class="icon">restaurant</span></span>
+          <span>Nutri<span class="brand-word">Plan</span></span>
+        </a>
+        {% endblock %}
+      </div>
+      <div class="app-head-actions">{% block head_action %}{% endblock %}</div>
     </header>
 
     <main>
@@ -34,30 +49,58 @@
     </main>
   </div>
 
-  {% if cuenta and active_tab != 'onboarding' %}
+  {% if cuenta and active_tab not in ['onboarding', 'inactivo'] %}
   <nav class="nav" aria-label="Navegación principal">
     <a href="/" class="{% if active_tab == 'semana' %}on{% endif %}"
        {% if active_tab == 'semana' %}aria-current="page"{% endif %}>
-      <span class="icon {% if active_tab == 'semana' %}fill{% endif %}">restaurant_menu</span>
-      Mi semana
+      <span class="nav-icon">
+        <span class="icon {% if active_tab == 'semana' %}fill{% endif %}">restaurant_menu</span>
+      </span>Semana
     </a>
-    <a href="/feedback" class="{% if active_tab == 'feedback' %}on{% endif %}"
-       {% if active_tab == 'feedback' %}aria-current="page"{% endif %}>
-      <span class="icon {% if active_tab == 'feedback' %}fill{% endif %}">forum</span>
-      Opinar
+    <a href="/compra" class="{% if active_tab == 'compra' %}on{% endif %}"
+       {% if active_tab == 'compra' %}aria-current="page"{% endif %}>
+      <span class="nav-icon">
+        <span class="icon {% if active_tab == 'compra' %}fill{% endif %}">shopping_cart</span>
+      </span>Compra
+    </a>
+    <a href="/progreso" class="{% if active_tab == 'progreso' %}on{% endif %}"
+       {% if active_tab == 'progreso' %}aria-current="page"{% endif %}>
+      <span class="nav-icon">
+        <span class="icon {% if active_tab == 'progreso' %}fill{% endif %}">insights</span>
+      </span>Progreso
     </a>
     <a href="/perfil" class="{% if active_tab == 'perfil' %}on{% endif %}"
        {% if active_tab == 'perfil' %}aria-current="page"{% endif %}>
-      <span class="icon {% if active_tab == 'perfil' %}fill{% endif %}">person</span>
-      Perfil
+      <span class="nav-icon">
+        <span class="icon {% if active_tab == 'perfil' %}fill{% endif %}">person</span>
+      </span>Perfil
     </a>
     {% if role == 'super_user' %}
-    <a href="/admin/metricas" class="{% if active_tab == 'metricas' %}on{% endif %}">
-      <span class="icon">insights</span>
-      Métricas
+    <a href="/admin/usuarios"
+       class="{% if active_tab in ['usuarios', 'metricas', 'recetas', 'laboratorio'] %}on{% endif %}">
+      <span class="nav-icon">
+        <span class="icon">shield_person</span>
+      </span>Consola
     </a>
     {% endif %}
   </nav>
   {% endif %}
+
+  <div id="wait-plate" class="wait-overlay" hidden>
+    <div class="gen-plate" aria-hidden="true">
+      <img class="plate-img" src="/static/img/plato-hero.jpg" alt="" width="640" height="640">
+    </div>
+    <h2 class="gen-title" data-wait-title>Un momento…</h2>
+    <p class="gen-msg" data-wait-msg></p>
+  </div>
+
+  <div id="day-done" class="wait-overlay day-done" hidden>
+    <div class="gen-plate" aria-hidden="true">
+      <img class="plate-img" src="/static/img/plato-hero.jpg" alt="" width="640" height="640">
+    </div>
+    <h2 class="gen-title">Día completo</h2>
+    <p class="gen-msg">Racha: <span data-racha-n>1</span> día<span data-racha-s>s</span></p>
+    <p class="muted">Toca para seguir</p>
+  </div>
 </body>
 </html>

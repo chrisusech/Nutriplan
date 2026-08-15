@@ -44,6 +44,9 @@ from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.validation import MIN_RELEVANT_G
 
 MAX_PORTION_G = 600.0
+# Techo creíble para carbos pesados (arroz, papa): evita platos de 600 g;
+# 500 g aún cubre almuerzos de ~2900 kcal con un solo carbo denso.
+COOKED_CARB_PORTION_CAP_G = 500.0
 FIXED_POINT_ITERATIONS = 10
 
 
@@ -70,6 +73,16 @@ def fits_protein(food: FoodItem, target_g: float) -> bool:
     return abs(count * unit_protein - target_g) <= tol
 
 
+def max_carb_g(food: FoodItem) -> float:
+    """El carbohidrato máximo que este alimento puede poner en un plato.
+
+    Su tope de porción convertido a carbohidrato: 500 g de papa cocida son 100 g,
+    y ahí se acaba: no hay gramaje que estire un plátano hasta los 128 g de carbo
+    que pide un almuerzo grande.
+    """
+    return food.carb_100g * _cap_g(food) / 100.0
+
+
 def can_cover_carb(food: FoodItem, carb_target_g: float) -> bool:
     """¿Este carbohidrato puede cubrir el objetivo del slot sin un plato absurdo?
 
@@ -79,10 +92,10 @@ def can_cover_carb(food: FoodItem, carb_target_g: float) -> bool:
     """
     if carb_target_g <= 0 or food.carb_100g <= 0:
         return True
-    grams_needed = carb_target_g / (food.carb_100g / 100.0)
+    tope = max_carb_g(food)
     if food.unit_granularity is UnitGranularity.GRAMS:
-        return grams_needed <= _cap_g(food)
-    return grams_needed <= _cap_g(food) * 1.05
+        return carb_target_g <= tope
+    return carb_target_g <= tope * 1.05
 
 
 def usable_in_slot(
@@ -111,9 +124,12 @@ def usable_in_slot(
 
 def _cap_g(food: FoodItem) -> float:
     """Tope de porción de un alimento (p. ej. tortilla ≤ 90 g ≈ 3 unidades)."""
+    hard = MAX_PORTION_G
+    if food.category is FoodCategory.CARB and food.unit_granularity is UnitGranularity.GRAMS:
+        hard = COOKED_CARB_PORTION_CAP_G
     if food.portion_max_g is not None:
-        return min(food.portion_max_g, MAX_PORTION_G)
-    return MAX_PORTION_G
+        return min(food.portion_max_g, hard)
+    return hard
 
 
 @dataclass
@@ -154,6 +170,7 @@ def _round_portion(grams: float, cfg: NutritionConfig, food: FoodItem) -> float:
 def macros_of(portions: list[tuple[FoodItem, float]]) -> MacroTargets:
     """Macros de una comida a partir de (alimento, gramos). El código es dueño
     de los números: la UI la reusa al editar porciones en línea."""
+
     def total(attr: str) -> float:
         return round(sum(float(getattr(f, attr)) * g / 100.0 for f, g in portions), 1)
 
@@ -195,16 +212,10 @@ def solve_day_portions(
         rule = SLOT_STRUCTURE[slot]
         if rule.requires_protein and not slot_sources(slot, PROTEIN_GROUP):
             raise GenerationError(f"Slot {slot.value}: sin fuente de proteína")
-        if (
-            rule.requires_carb
-            and not rule.carb_optional
-            and not slot_sources(slot, CARB_GROUP)
-        ):
+        if rule.requires_carb and not rule.carb_optional and not slot_sources(slot, CARB_GROUP):
             raise GenerationError(f"Slot {slot.value}: sin fuente de carbohidrato")
 
-    fat_items = [
-        (slot, f) for slot, foods in meals for f in foods if f.category in FAT_GROUP
-    ]
+    fat_items = [(slot, f) for slot, foods in meals for f in foods if f.category in FAT_GROUP]
 
     for _ in range(FIXED_POINT_ITERATIONS):
         for slot, foods in meals:
@@ -221,9 +232,7 @@ def solve_day_portions(
                 if f not in p_sources
             )
             c_cross = sum(
-                f.carb_100g * grams[(slot, str(f.id))] / 100.0
-                for f in foods
-                if f not in c_sources
+                f.carb_100g * grams[(slot, str(f.id))] / 100.0 for f in foods if f not in c_sources
             )
 
             p_needed = max(p_target - p_cross, 0.0)
@@ -239,9 +248,7 @@ def solve_day_portions(
                 for f in sources:
                     density = getattr(f, attr) / 100.0
                     if density <= 0:
-                        raise GenerationError(
-                            f"{f.name_es} no aporta {attr}; selección inválida"
-                        )
+                        raise GenerationError(f"{f.name_es} no aporta {attr}; selección inválida")
                     grams[(slot, str(f.id))] = min(share / density, _cap_g(f))
 
         # --- Paso 2 (dentro del punto fijo): la grasa cierra a nivel de día.
@@ -281,9 +288,7 @@ def solve_day_portions(
                 # si era opcional (el carbo de la cena), se descarta — que es
                 # justo la "cena sin carbohidrato" de los planes reales.
                 required = (rule.requires_protein and f.category in PROTEIN_GROUP) or (
-                    rule.requires_carb
-                    and not rule.carb_optional
-                    and f.category in CARB_GROUP
+                    rule.requires_carb and not rule.carb_optional and f.category in CARB_GROUP
                 )
                 if required:
                     g = _grid(f, config)[1]
@@ -298,8 +303,7 @@ def solve_day_portions(
     # --- Paso 5: recálculo (el código es dueño de los números)
     solved: list[SolvedMeal] = []
     for slot, foods in meals:
-        final = [(f, grams[(slot, str(f.id))]) for f in foods
-                 if grams[(slot, str(f.id))] > 0]
+        final = [(f, grams[(slot, str(f.id))]) for f in foods if grams[(slot, str(f.id))] > 0]
         if not final:
             raise GenerationError(f"Slot {slot.value}: ninguna porción resuelta")
         solved.append(
@@ -380,9 +384,7 @@ def _repair_residual(
         target = getattr(daily, macro)
         if target > 0:
             allowance = target * tolerances[macro]
-            terms.append(
-                _Term(target, allowance, {k: getattr(f, attr) / 100.0 for k, f in items})
-            )
+            terms.append(_Term(target, allowance, {k: getattr(f, attr) / 100.0 for k, f in items}))
     # Por slot solo proteína y carbo, igual que validate_day — con el MISMO
     # reparto (el de `macro_shares`) y su mismo piso absoluto: un objetivo de
     # 9.9 g admite ±10 g. Antes estos términos se SALTABAN por pequeños, así que
@@ -445,17 +447,3 @@ def _repair_residual(
         grams[key] = new
         for term, actual in updates:
             term.actual = actual
-
-
-def rebalance_day_after_edit(
-    meals: list[tuple[MealSlot, list[FoodItem]]],
-    grams: dict[Key, float],
-    daily: MacroTargets,
-    config: NutritionConfig,
-    *,
-    locked: frozenset[Key],
-) -> dict[Key, float]:
-    """Tras editar un slot, compensa el día: lo editado queda fijo, el resto ajusta."""
-    working = dict(grams)
-    _repair_residual(working, meals, daily, config, locked=locked)
-    return working

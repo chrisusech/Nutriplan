@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Recetas{% endblock %}
+{% block page_class %}page-admin{% endblock %}
+
+{% block content %}
+{% include "partials/admin_nav.html" %}
+<h1>Biblioteca de recetas</h1>
+<p class="muted">Lo que la app ha aprendido a cocinar: {{ recetas|length }} platos
+   en caché, {{ curadas }} ya curados a mano.</p>
+
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok" role="status">{{ ok }}</div>{% endif %}
+
+<div class="chips">
+  <a class="chip {{ 'on' if not origen }}" href="/admin/recetas">Todas</a>
+  {% for o in origenes %}
+  <a class="chip {{ 'on' if origen == o }}" href="/admin/recetas?origen={{ o }}">{{ o }}</a>
+  {% endfor %}
+</div>
+
+<form method="post" action="/admin/recetas/recalcular" class="admin-refresh">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <button class="btn btn-ghost" type="submit">
+    <span class="icon">refresh</span>Recalcular notas
+  </button>
+  <span class="muted">Vuelve a contar, desde las calificaciones y los menús
+    servidos, la nota y las veces que ha salido cada receta.</span>
+</form>
+
+<ul class="admin-list">
+  {% for receta, promocionable in recetas %}
+  <li class="card admin-row">
+    <div class="admin-who">
+      <b>{{ receta.name_es or 'Sin nombre' }}</b>
+      <span class="pill">{{ receta.source }}</span>
+      {% if receta.rating_count %}
+      <span class="pill {{ 'pill-off' if receta.rating_avg < 3 }}">
+        {{ receta.rating_avg }} ★ ({{ receta.rating_count }})
+      </span>
+      {% else %}
+      <span class="muted">sin calificar</span>
+      {% endif %}
+    </div>
+    <div class="admin-meta">
+      <span class="muted">servida {{ receta.times_served }} veces</span>
+      {% if receta.macros %}
+      <span class="muted">{{ receta.macros.kcal|round|int }} kcal ·
+        P {{ receta.macros.protein_g|round|int }} ·
+        C {{ receta.macros.carb_g|round|int }} ·
+        G {{ receta.macros.fat_g|round|int }}</span>
+      {% else %}
+      <span class="muted">sin macros todavía</span>
+      {% endif %}
+      {% if receta.prep_minutes %}<span class="muted">{{ receta.prep_minutes }} min</span>{% endif %}
+    </div>
+    {% if receta.ingredients %}
+    <p class="muted small">{{ receta.ingredients|join(' · ') }}</p>
+    {% endif %}
+    <div class="admin-acts">
+      {% if promocionable %}
+      <form method="post" action="/admin/recetas/{{ receta.dish_key }}/promover">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <button class="btn btn-primary" type="submit">
+          <span class="icon">bookmark_add</span>Promover al catálogo
+        </button>
+      </form>
+      {% elif receta.source == 'ai' %}
+      <span class="muted small">Para promoverla: {{ min_nota }}★ con
+        {{ min_notas }} calificaciones.</span>
+      {% endif %}
+      <form method="post" action="/admin/recetas/{{ receta.dish_key }}/retirar">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <button class="btn btn-outline" type="submit">Retirar</button>
+      </form>
+    </div>
+  </li>
+  {% else %}
+  <li class="empty"><p>Todavía no se ha escrito ninguna receta.</p></li>
+  {% endfor %}
+</ul>
+{% endblock %}

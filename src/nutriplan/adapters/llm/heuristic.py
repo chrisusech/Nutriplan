@@ -27,7 +27,7 @@ from nutriplan.domain.models import (
     MealSlot,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
-from nutriplan.domain.portioning import fits_protein
+from nutriplan.domain.portioning import can_cover_carb, fits_protein
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -42,6 +42,8 @@ _FALLBACK_PROTEIN_SHARE = {
     MealSlot.SNACK_PM: 0.05,
     MealSlot.DINNER: 0.32,
 }
+
+
 def _unit_protein(food: FoodItem) -> float:
     """Proteína por unidad servible (huevo, loncha, lata). En gramos si no hay unidad."""
     return food.protein_100g * (food.default_unit_g or 100.0) / 100.0
@@ -61,6 +63,7 @@ class HeuristicSelector:
         daily_protein_g: float = 120.0,
         seed: int = 0,
         config: NutritionConfig | None = None,
+        daily_carb_g: float = 200.0,
     ) -> None:
         # `seed` desplaza la rotación: dos versiones del plan del mismo cliente
         # (mes 1 vs mes 2) arrancan en combinaciones distintas → menús diferentes.
@@ -70,14 +73,26 @@ class HeuristicSelector:
             if config
             else _FALLBACK_PROTEIN_SHARE
         )
+        carb_share = (
+            {s: sh.carb_g for s, sh in config.meal_distribution.items()}
+            if config
+            else {
+                MealSlot.BREAKFAST: 0.30,
+                MealSlot.SNACK_AM: 0.10,
+                MealSlot.LUNCH: 0.30,
+                MealSlot.SNACK_PM: 0.10,
+                MealSlot.DINNER: 0.20,
+            }
+        )
         # Las comidas de este cliente, en el orden del día.
         self.slots = [s for s in MealSlot if s in share]
 
         def by_cat(c: FoodCategory) -> list[FoodItem]:
             return sorted((f for f in allowed if f.category == c), key=lambda f: f.name_es)
 
-        def dense(items: list[FoodItem], attr: str, minimum: float,
-                  min_count: int = 1) -> list[FoodItem]:
+        def dense(
+            items: list[FoodItem], attr: str, minimum: float, min_count: int = 1
+        ) -> list[FoodItem]:
             """El motor solo usa fuentes densas: una legumbre como 'proteína' o
             un carbo flojo no cuadran objetivos altos (tope de 600 g/porción).
             Se relaja si dejaría menos de min_count opciones."""
@@ -105,10 +120,8 @@ class HeuristicSelector:
         # lata entera de atún —que no se porciona: su rejilla es de 100 g— cabe en
         # el almuerzo pero se pasa 10 g en la cena, y el solver no puede bajarla.
         self.main_proteins_by_slot = {
-            slot: [
-                f for f in lean
-                if _fits_protein(f, daily_protein_g * share.get(slot, 0.0))
-            ] or lean
+            slot: [f for f in lean if _fits_protein(f, daily_protein_g * share.get(slot, 0.0))]
+            or lean
             for slot in (MealSlot.LUNCH, MealSlot.DINNER)
         }
         self.main_proteins = self.main_proteins_by_slot[MealSlot.LUNCH]  # alias legado
@@ -119,8 +132,7 @@ class HeuristicSelector:
         # los slots de snack (`meal_affinity.allows`).
         snack_pt = daily_protein_g * share.get(MealSlot.SNACK_AM, 0.05)
         snack_eligible = [
-            f for f in allowed
-            if meal_affinity.snack_protein(f) and _fits_protein(f, snack_pt)
+            f for f in allowed if meal_affinity.snack_protein(f) and _fits_protein(f, snack_pt)
         ]
         # El lácteo del snack va MAGRO, igual que el del desayuno. Un cheddar
         # (34 g de grasa/100 g) mete 10 g de grasa escondida en un snack que apenas
@@ -184,25 +196,40 @@ class HeuristicSelector:
             belongs = [f for f in foods if f.weight_in(slot) >= DEFAULT_SLOT_WEIGHT]
             return sorted(belongs or foods, key=lambda f: -f.weight_in(slot))
 
-        self.breakfast_carbs = base_for(
-            [f for f in all_carbs if meal_affinity.is_breakfast_carb(f)] or all_carbs,
+        # Sin `can_cover_carb`, el pan blanco (tope 90 g) entra al pool del
+        # desayuno y el solver se queda corto de carbo (~49 g vs ~64). Sin comida
+        # libre a veces cae dentro de la tolerancia; con ella, el cierre de grasa
+        # del día de 4 comidas lo empuja fuera y tumba la semana entera.
+        def coverable(foods: list[FoodItem], slot: MealSlot) -> list[FoodItem]:
+            target = daily_carb_g * carb_share.get(slot, 0.0)
+            ok = [f for f in foods if can_cover_carb(f, target)]
+            return ok or foods
+
+        self.breakfast_carbs = coverable(
+            base_for(
+                [f for f in all_carbs if meal_affinity.is_breakfast_carb(f)] or all_carbs,
+                MealSlot.BREAKFAST,
+            ),
             MealSlot.BREAKFAST,
         )
-        self.main_carbs = base_for(
-            [f for f in carb_led if meal_affinity.is_main_carb(f)]
-            or [f for f in all_carbs if meal_affinity.is_main_carb(f)]
-            or all_carbs,
+        self.main_carbs = coverable(
+            base_for(
+                [f for f in carb_led if meal_affinity.is_main_carb(f)]
+                or [f for f in all_carbs if meal_affinity.is_main_carb(f)]
+                or all_carbs,
+                MealSlot.LUNCH,
+            ),
             MealSlot.LUNCH,
         )
         self.fruits = by_cat(FoodCategory.FRUIT)
         # Grasas muy proteicas (maní, almendras) desbalancean el desayuno.
-        fats = [f for f in by_cat(FoodCategory.FAT) if f.protein_100g <= 10.0] \
-            or by_cat(FoodCategory.FAT)
+        fats = [f for f in by_cat(FoodCategory.FAT) if f.protein_100g <= 10.0] or by_cat(
+            FoodCategory.FAT
+        )
         # Por slot: nadie se toma dos cucharadas de aceite de oliva en el desayuno.
         # La afinidad la declara el alimento (`meal_slots`), no una lista aquí.
         self.fats_by_slot = {
-            slot: [f for f in fats if meal_affinity.allows(f, slot)] or fats
-            for slot in MealSlot
+            slot: [f for f in fats if meal_affinity.allows(f, slot)] or fats for slot in MealSlot
         }
         self.calls = 0
 
@@ -297,25 +324,29 @@ class HeuristicSelector:
         def meal_for(slot: MealSlot, i: int) -> dict[str, object]:
             """Cada comida del día. Solo se arman las que el cliente come."""
             if slot is MealSlot.BREAKFAST:
-                return {"slot": slot.value,
-                        "food_ids": [str(breakfast_protein(i).id), str(pick(Cb, i).id)]
-                        + fat_for(slot, i)}
+                return {
+                    "slot": slot.value,
+                    "food_ids": [str(breakfast_protein(i).id), str(pick(Cb, i).id)]
+                    + fat_for(slot, i),
+                }
             if slot is MealSlot.LUNCH:
-                return {"slot": slot.value,
-                        "food_ids": [str(pick(Pl, i).id), str(pick(Cm, i, shift=1).id)]
-                        + fat_for(slot, i),
-                        "free_salad": True}
+                return {
+                    "slot": slot.value,
+                    "food_ids": [str(pick(Pl, i).id), str(pick(Cm, i, shift=1).id)]
+                    + fat_for(slot, i),
+                    "free_salad": True,
+                }
             if slot is MealSlot.DINNER:
-                return {"slot": slot.value,
-                        "food_ids": [str(pick(Pd, i, shift=1).id),
-                                     str(pick(Cm, i, shift=2).id)]
-                        + fat_for(slot, i, shift=1),
-                        "free_salad": True}
+                return {
+                    "slot": slot.value,
+                    "food_ids": [str(pick(Pd, i, shift=1).id), str(pick(Cm, i, shift=2).id)]
+                    + fat_for(slot, i, shift=1),
+                    "free_salad": True,
+                }
             shift = 1 if slot is MealSlot.SNACK_PM else 0
             return {"slot": slot.value, "food_ids": snack_for(i, slot, shift=shift)}
 
         days = [
-            {"day_index": i, "meals": [meal_for(slot, i) for slot in self.slots]}
-            for i in range(7)
+            {"day_index": i, "meals": [meal_for(slot, i) for slot in self.slots]} for i in range(7)
         ]
         return schema.model_validate({"days": days})

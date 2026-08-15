@@ -103,6 +103,26 @@ def test_despues_de_cambiarla_la_vieja_ya_no_sirve(app, mailer) -> None:
     assert _entrar(app, NUEVA).status_code == 303
 
 
+def test_el_enlace_ya_usado_no_vuelve_a_abrir_la_cuenta(app, mailer) -> None:
+    """El correo se reenvía, se comparte y se queda en el historial. Una vez
+    gastado, ese enlace no puede volver a cambiar la contraseña de nadie."""
+    ruta = _pedir_enlace(app, mailer)
+    app.post(ruta, data={"password": NUEVA, "password_confirm": NUEVA}, follow_redirects=False)
+    app.post("/logout", follow_redirects=False)
+
+    assert "expiró o no es válido" in app.get(ruta).text
+    otra = "clave-del-ladron-4"
+    app.post(ruta, data={"password": otra, "password_confirm": otra}, follow_redirects=False)
+    assert _entrar(app, otra).status_code == 200  # se queda en el formulario
+    assert _entrar(app, NUEVA).status_code == 303
+
+
+def test_pedir_un_enlace_nuevo_retira_el_que_ya_estaba_en_el_buzon(app, mailer) -> None:
+    viejo = _pedir_enlace(app, mailer)
+    _pedir_enlace(app, mailer)
+    assert "expiró o no es válido" in app.get(viejo).text
+
+
 # --- Equivocarse ------------------------------------------------------------
 
 
@@ -124,9 +144,12 @@ def test_si_las_dos_claves_no_coinciden_se_avisa_sin_perder_el_enlace(app, maile
     assert resp.status_code == 200
     assert "no coinciden" in resp.text
     # El formulario sigue usable: el enlace no se gastó.
-    assert app.post(
-        ruta, data={"password": NUEVA, "password_confirm": NUEVA}, follow_redirects=False
-    ).status_code == 303
+    assert (
+        app.post(
+            ruta, data={"password": NUEVA, "password_confirm": NUEVA}, follow_redirects=False
+        ).status_code
+        == 303
+    )
 
 
 def test_un_enlace_inventado_no_cambia_ninguna_clave(app) -> None:
@@ -169,26 +192,26 @@ def test_todos_los_fallos_de_login_dicen_lo_mismo(app) -> None:
     assert "Correo o contraseña incorrectos." in inexistente.text
 
 
-def test_una_cuenta_bloqueada_no_entra_y_tampoco_se_delata(app, container) -> None:
+def test_una_cuenta_desactivada_entra_pero_solo_ve_que_su_plan_no_esta_activo(
+    app, container
+) -> None:
+    """Su contraseña sigue siendo buena: el problema es el plan, y hay que decirlo."""
     import asyncio
 
     from sqlalchemy import update
 
     from nutriplan.adapters.db.models import UserRow
 
-    async def _bloquear() -> None:
+    async def _desactivar() -> None:
         async with container.session_factory() as session:
             await session.execute(
-                update(UserRow)
-                .where(UserRow.email == "ana@correo.com")
-                .values(is_active=False)
+                update(UserRow).where(UserRow.email == "ana@correo.com").values(is_active=False)
             )
             await session.commit()
 
-    asyncio.run(_bloquear())
-    resp = _entrar(app, VIEJA)
-    assert resp.status_code == 200
-    assert "Correo o contraseña incorrectos." in resp.text
+    asyncio.run(_desactivar())
+    assert _entrar(app, VIEJA).status_code == 303
+    assert app.get("/", follow_redirects=False).headers["location"] == "/plan-inactivo"
 
 
 def test_salir_cierra_la_sesion_de_verdad(app, mailer) -> None:

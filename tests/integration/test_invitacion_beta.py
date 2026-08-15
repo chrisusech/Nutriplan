@@ -11,9 +11,7 @@ from nutriplan.ui.web.app import create_app
 
 @pytest.fixture
 def container(tmp_path, monkeypatch) -> Container:
-    monkeypatch.setattr(
-        Settings, "branding_dir", property(lambda _self: tmp_path / "branding")
-    )
+    monkeypatch.setattr(Settings, "branding_dir", property(lambda _self: tmp_path / "branding"))
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path}/invite.db",
         anthropic_api_key="",

@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from nutriplan.domain.errors import GenerationError
 from nutriplan.domain.macro_split import daily_minus_free_meal, free_meal_slot_of
 from nutriplan.domain.models import (
     DayPlan,
@@ -31,6 +32,17 @@ from nutriplan.domain.validation import day_totals, validate_day
 # Un nombre de plato largo no cabe en una tarjeta de móvil.
 MAX_DISH_NAME = 60
 
+# Códigos que el crítico puede marcar. El esquema los fija como enum corto.
+CRITIQUE_ISSUE_CODES = (
+    "weird_combo",
+    "slot_mismatch",
+    "prep_heavy",
+    "habit_misfit",
+    "repetitive",
+    "regional",
+)
+CritiqueVerdict = Literal["ok", "rename_only", "needs_swap"]
+
 
 def food_aliases(allowed: Sequence[FoodItem]) -> dict[str, UUID]:
     """Alias cortos ("f7") para los alimentos, estables por orden de id.
@@ -40,10 +52,7 @@ def food_aliases(allowed: Sequence[FoodItem]) -> dict[str, UUID]:
     identificadores, y el nivel gratis de Groq da 8.000 POR MINUTO. Con alias
     baja a menos de 200.
     """
-    return {
-        f"f{i}": food.id
-        for i, food in enumerate(sorted(allowed, key=lambda f: str(f.id)))
-    }
+    return {f"f{i}": food.id for i, food in enumerate(sorted(allowed, key=lambda f: str(f.id)))}
 
 
 def build_critique_schema(allowed: Sequence[FoodItem]) -> type[BaseModel]:
@@ -57,6 +66,7 @@ def build_critique_schema(allowed: Sequence[FoodItem]) -> type[BaseModel]:
         raise ValueError("El conjunto permitido está vacío")
     ids = tuple(food_aliases(allowed))
     food_id_literal = Literal[ids]  # type: ignore[valid-type]
+    issue_literal = Literal[CRITIQUE_ISSUE_CODES]  # type: ignore[valid-type]
 
     note_model = create_model(
         "MealCritique",
@@ -64,6 +74,11 @@ def build_critique_schema(allowed: Sequence[FoodItem]) -> type[BaseModel]:
         day_index=(int, Field(ge=0, le=6)),
         slot=(MealSlot, ...),
         dish_name=(str, Field(max_length=MAX_DISH_NAME)),
+        verdict=(CritiqueVerdict, Field(default="ok")),
+        issue_codes=(
+            list[issue_literal],
+            Field(default_factory=list, max_length=4),
+        ),
         swap_out_food_id=(food_id_literal | None, None),
         swap_in_food_id=(food_id_literal | None, None),
         reason=(str, Field(max_length=200)),
@@ -90,6 +105,9 @@ class CritiqueOutcome:
     renamed: int
     applied: int
     rejected: list[RejectedSwap]
+    # Platos donde el crítico pidió swap o marcó issue (aunque el código
+    # haya rechazado el cambio). Sirve para telemetría, no tumba el menú.
+    flagged: int = 0
 
 
 def _foods_of(meal: MealEntry, catalog: dict[UUID, FoodItem]) -> list[FoodItem]:
@@ -106,7 +124,10 @@ def _rebuild_day(
     solvable = [(slot, foods) for slot, foods in foods_by_slot.items() if foods]
     try:
         solved = solve_day_portions(solvable, daily, config)
-    except Exception:
+    except GenerationError:
+        # El swap que propuso la IA no se puede porcionar (un slot sin proteína,
+        # sin carbo, o ninguna porción que cuadre). Se descarta el cambio y el
+        # día original sigue en pie; cualquier OTRO error es un bug y sube.
         return None
 
     by_slot = {s.slot: s for s in solved}
@@ -156,7 +177,7 @@ def apply_critique(
 
     notes = {(n.day_index, n.slot): n for n in critique.meals}  # type: ignore[attr-defined]
     result: list[DayPlan] = []
-    renamed = applied = 0
+    renamed = applied = flagged = 0
     rejected: list[RejectedSwap] = []
 
     for day in sorted(days, key=lambda d: d.day_index):
@@ -168,6 +189,11 @@ def apply_critique(
             if note is None or meal.is_free_meal:
                 continue
 
+            verdict = getattr(note, "verdict", "ok") or "ok"
+            codes = list(getattr(note, "issue_codes", None) or [])
+            if verdict == "needs_swap" or codes:
+                flagged += 1
+
             out_id = resolve(note.swap_out_food_id)
             in_id = resolve(note.swap_in_food_id)
             if out_id and in_id:
@@ -178,9 +204,7 @@ def apply_critique(
                     else None
                 )
                 if rebuilt is None:
-                    rejected.append(
-                        RejectedSwap(day.day_index, meal.slot, note.reason or "")
-                    )
+                    rejected.append(RejectedSwap(day.day_index, meal.slot, note.reason or ""))
                 else:
                     current = rebuilt
                     applied += 1
@@ -203,7 +227,13 @@ def apply_critique(
             renamed += 1
         result.append(current.model_copy(update={"meals": named}))
 
-    return CritiqueOutcome(days=result, renamed=renamed, applied=applied, rejected=rejected)
+    return CritiqueOutcome(
+        days=result,
+        renamed=renamed,
+        applied=applied,
+        rejected=rejected,
+        flagged=flagged,
+    )
 
 
 def _with_swap(
@@ -232,9 +262,7 @@ def _with_swap(
     return foods_by_slot if swapped else None
 
 
-def _names_a_missing_food(
-    name: str, meal: MealEntry, catalog: dict[UUID, FoodItem]
-) -> bool:
+def _names_a_missing_food(name: str, meal: MealEntry, catalog: dict[UUID, FoodItem]) -> bool:
     """¿El nombre menciona un alimento que la comida ya no lleva?
 
     Se compara por la palabra más significativa de cada nombre de alimento; es

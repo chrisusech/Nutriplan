@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}{{ cuenta.name }}{% endblock %}
+{% block page_class %}page-admin{% endblock %}
+
+{% block content %}
+{% include "partials/admin_nav.html" %}
+<p class="muted"><a href="/admin/metricas">← Volver a métricas</a></p>
+<h1>{{ cuenta.name }}</h1>
+<p class="muted">{{ cuenta.email }}
+  {% if not cuenta.is_active %}<span class="pill pill-off">Desactivada</span>{% endif %}
+</p>
+
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+
+<section class="card">
+  <h3>Membresía</h3>
+  <p>
+    {% if membresia.unlimited %}
+      Sin límite (super_user).
+    {% else %}
+      Le quedan <strong>{{ membresia.weeks_left }}</strong>
+      de <strong>{{ membresia.weeks_granted }}</strong> semanas concedidas.
+      {% if membresia.expires_at %}
+      Vence el {{ membresia.expires_at.strftime('%d/%m/%Y') }}.
+      {% endif %}
+    {% endif %}
+  </p>
+  <form method="post" action="/admin/usuarios/{{ cuenta.id }}/semanas" class="admin-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label class="field"><span>Semanas</span>
+      <input name="semanas" type="number" min="1" max="52" value="{{ semanas_por_defecto }}"></label>
+    <label class="field"><span>Días de validez</span>
+      <input name="dias" type="number" min="1" max="365" value="{{ dias_por_defecto }}"></label>
+    <label class="field"><span>Nota (opcional)</span>
+      <input name="nota" maxlength="300" placeholder="Pago de agosto"></label>
+    <button class="btn btn-primary" type="submit">
+      <span class="icon">confirmation_number</span>Conceder
+    </button>
+  </form>
+
+  <ul class="admin-history">
+    {% for g in concesiones %}
+    <li>
+      <b>{{ g.weeks }} semana{{ '' if g.weeks == 1 else 's' }}</b>
+      <span class="muted">{{ g.source.value }} · {{ g.granted_at.strftime('%d/%m/%Y') }}
+        {% if g.expires_at %}→ {{ g.expires_at.strftime('%d/%m/%Y') }}{% endif %}
+        {% if g.note %}· {{ g.note }}{% endif %}
+      </span>
+    </li>
+    {% else %}
+    <li class="muted">Sin concesiones todavía.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% if perfil %}
+<section class="card">
+  <h3>Macros</h3>
+  {% if targets %}
+  <p>
+    <strong>{{ targets.daily.kcal|round|int }} kcal</strong> ·
+    {{ targets.daily.protein_g|round|int }} g proteína ·
+    {{ targets.daily.carb_g|round|int }} g carbos ·
+    {{ targets.daily.fat_g|round|int }} g grasa
+    {% if bloqueo %}<span class="pill">Bloqueado a mano</span>{% endif %}
+    {% if es_estimacion %}<span class="pill">Estimado</span>{% endif %}
+  </p>
+  {% if es_estimacion %}
+  <p class="muted">Todavía no ha generado ninguna semana: esto es lo que el motor
+    calcularía hoy con su peso y su objetivo. Guardar lo fija.</p>
+  {% endif %}
+  <form method="post" action="/admin/usuarios/{{ cuenta.id }}/macros" class="admin-form"
+        data-macros data-peso="{{ perfil.weight_kg }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    {# Las kcal no se envían: el servidor las calcula desde los tres macros, que
+       es de donde salen. Aquí solo sirven para escribir por ese lado y ver el
+       carbohidrato moverse. #}
+    <label class="field"><span>kcal</span>
+      <input data-kcal type="number" inputmode="numeric" min="1000" max="6000" step="1"
+             value="{{ targets.daily.kcal|round|int }}"></label>
+    <div class="macro-row">
+      <label class="field"><span>Proteína g</span>
+        <input name="proteina_g" data-macro="protein" type="number" inputmode="decimal"
+               min="1" step="1" required
+               value="{{ targets.daily.protein_g|round|int }}"></label>
+      <label class="field"><span>Carbos g</span>
+        <input name="carbo_g" data-macro="carb" type="number" inputmode="decimal"
+               min="0" step="1" required
+               value="{{ targets.daily.carb_g|round|int }}"></label>
+      <label class="field"><span>Grasa g</span>
+        <input name="grasa_g" data-macro="fat" type="number" inputmode="decimal"
+               min="1" step="1" required
+               value="{{ targets.daily.fat_g|round|int }}"></label>
+    </div>
+    <p class="muted" data-gkg>Sobre {{ perfil.weight_kg }} kg de peso.</p>
+    <label class="check">
+      <input name="bloquear" type="checkbox" value="1" {{ 'checked' if bloqueo else '' }}>
+      Que el check-in semanal no lo cambie
+    </label>
+    <button class="btn btn-primary" type="submit">
+      <span class="icon">tune</span>Guardar macros
+    </button>
+  </form>
+  {% else %}
+  <p class="muted">No se le pueden calcular macros con los datos de su perfil.</p>
+  {% endif %}
+</section>
+
+{% if recap %}
+<section class="card">
+  <h3>Kcal de esta semana</h3>
+  <p><strong>{{ recap.kcal_eaten }}</strong> de {{ recap.kcal_target }} kcal</p>
+  <p class="muted">{{ recap.meals_line }} · {{ recap.out_line }}</p>
+  <p class="muted">{{ recap.verdict_line }}</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h3>Peso semana a semana</h3>
+  <ul class="admin-history">
+    {% for p in pesajes %}
+    <li>
+      <b>{{ p.weight_kg }} kg</b>
+      <span class="muted">semana del {{ p.week_start.strftime('%d/%m/%Y') }}</span>
+      {% if p.client_comment %}<p class="muted">“{{ p.client_comment }}”</p>{% endif %}
+    </li>
+    {% else %}
+    <li class="muted">Sin pesajes.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Semanas generadas</h3>
+  <ul class="admin-history">
+    {% for p in planes %}
+    <li>
+      <b>Semana del {{ p.week_start.strftime('%d/%m/%Y') }}</b>
+      <span class="muted">v{{ p.version }} · {{ p.model }} · {{ p.status.value }}</span>
+    </li>
+    {% else %}
+    <li class="muted">Todavía no ha generado ninguna.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<p class="muted">Esta cuenta aún no completó su perfil.</p>
+{% endif %}
+
+<section class="card">
+  <h3>Estado de la cuenta</h3>
+  <div class="admin-state">
+    <p class="muted">
+      {% if cuenta.is_active %}
+        Activa: entra y usa la app con normalidad.
+      {% else %}
+        Desactivada: puede entrar, pero solo ve que su plan ya no está activo.
+      {% endif %}
+    </p>
+    <form method="post" action="/admin/usuarios/{{ cuenta.id }}/estado">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="activo" value="{{ '0' if cuenta.is_active else '1' }}">
+      <button class="btn btn-ghost" type="submit">
+        {{ 'Desactivar' if cuenta.is_active else 'Activar' }}
+      </button>
+    </form>
+  </div>
+</section>
+{% endblock %}

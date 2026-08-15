@@ -134,7 +134,3 @@ def fiber_shortfall(solved: Sequence[MealLike], daily: MacroTargets) -> float:
         return 0.0
     actual = sum(m.computed.fiber_g for m in solved)
     return round(max(0.0, daily.fiber_g - actual), 1)
-
-
-def slot_kcal_targets(daily: MacroTargets, config: NutritionConfig) -> dict[MealSlot, float]:
-    return {slot: daily.kcal * pct for slot, pct in config.kcal_shares().items()}

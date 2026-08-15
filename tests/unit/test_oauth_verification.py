@@ -26,9 +26,7 @@ def _google_responds(payload: dict, status: int = 200, monkeypatch=None) -> None
         async def get(self, url, params=None):
             return httpx.Response(status, json=payload)
 
-    monkeypatch.setattr(
-        "nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _FakeClient()
-    )
+    monkeypatch.setattr("nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _FakeClient())
 
 
 async def test_un_token_bueno_devuelve_la_identidad_de_quien_entra(monkeypatch) -> None:
@@ -97,9 +95,7 @@ async def test_si_google_no_responde_no_se_deja_entrar_por_las_dudas(monkeypatch
         async def get(self, url, params=None):
             raise httpx.ConnectError("sin red")
 
-    monkeypatch.setattr(
-        "nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _BrokenClient()
-    )
+    monkeypatch.setattr("nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _BrokenClient())
     with pytest.raises(OAuthError, match="No se pudo verificar"):
         await verify_google_id_token("t", client_id=CLIENT_ID)
 
@@ -124,9 +120,7 @@ async def test_un_token_de_apple_invalido_no_pasa(monkeypatch) -> None:
         def get_signing_key_from_jwt(self, _token: str) -> object:
             raise ValueError("firma rota")
 
-    monkeypatch.setattr(
-        "jwt.PyJWKClient", lambda *_a, **_k: _BrokenKeys()
-    )
+    monkeypatch.setattr("jwt.PyJWKClient", lambda *_a, **_k: _BrokenKeys())
     with pytest.raises(OAuthError, match="no es válido"):
         await verify_apple_id_token("basura", client_id=APPLE_CLIENT)
 

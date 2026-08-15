@@ -23,8 +23,9 @@ SCHEMA_RETRIES = 2  # reintentos si la respuesta no valida contra el esquema
 
 
 class AnthropicClient:
-    def __init__(self, api_key: str, *, max_tokens_extract: int = 2048,
-                 max_tokens_select: int = 8192) -> None:
+    def __init__(
+        self, api_key: str, *, max_tokens_extract: int = 2048, max_tokens_select: int = 8192
+    ) -> None:
         try:
             import anthropic
         except ImportError as exc:
@@ -40,13 +41,19 @@ class AnthropicClient:
 
     async def extract(self, *, system: str, text: str, schema: type[T], model: str) -> T:
         return await self._call(
-            system=system, user=text, schema=schema, model=model,
+            system=system,
+            user=text,
+            schema=schema,
+            model=model,
             max_tokens=self._max_tokens_extract,
         )
 
     async def select_plan(self, *, system: str, prompt: str, schema: type[T], model: str) -> T:
         return await self._call(
-            system=system, user=prompt, schema=schema, model=model,
+            system=system,
+            user=prompt,
+            schema=schema,
+            model=model,
             max_tokens=self._max_tokens_select,
         )
 

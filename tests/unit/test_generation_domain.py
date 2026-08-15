@@ -74,9 +74,9 @@ def test_a_snack_of_only_fruit_squares_the_day(foods, nutrition_config) -> None:
     """
     meals = [
         (MealSlot.BREAKFAST, [foods["huevo entero"], foods["arepa de maíz"], foods["aguacate"]]),
-        (MealSlot.SNACK_AM, [foods["manzana"]]),                      # solo fruta
+        (MealSlot.SNACK_AM, [foods["manzana"]]),  # solo fruta
         (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
-        (MealSlot.SNACK_PM, [foods["banano"], foods["almendras"]]),   # fruta + grasa
+        (MealSlot.SNACK_PM, [foods["banano"], foods["almendras"]]),  # fruta + grasa
         (MealSlot.DINNER, [foods["tilapia"], foods["batata cocida"]]),
     ]
     solved = solve_day_portions(meals, DAILY, nutrition_config)
@@ -149,12 +149,13 @@ def test_unit_foods_quantize_to_whole_or_half(foods, nutrition_config) -> None:
 def test_tuna_portions_are_whole_cans(foods, nutrition_config) -> None:
     meals = [
         (MealSlot.LUNCH, [foods["atún en agua"], foods["arroz blanco cocido"]]),
-    ] + [
-        (slot, items) for slot, items in day_meals(foods) if slot is not MealSlot.LUNCH
-    ]
+    ] + [(slot, items) for slot, items in day_meals(foods) if slot is not MealSlot.LUNCH]
     solved = solve_day_portions(meals, DAILY, nutrition_config)
     tuna = next(
-        p for m in solved if m.slot is MealSlot.LUNCH for p in m.portions
+        p
+        for m in solved
+        if m.slot is MealSlot.LUNCH
+        for p in m.portions
         if foods["atún en agua"].id == p.food_id
     )
     assert tuna.grams % 100 == 0
@@ -169,7 +170,8 @@ def test_olives_never_exceed_snack_portion_cap(foods, nutrition_config) -> None:
         (MealSlot.LUNCH, lunch),
         (MealSlot.DINNER, dinner),
     ] + [
-        (slot, items) for slot, items in day_meals(foods)
+        (slot, items)
+        for slot, items in day_meals(foods)
         if slot not in (MealSlot.LUNCH, MealSlot.DINNER)
     ]
     solved = solve_day_portions(meals, DAILY, nutrition_config)
@@ -257,8 +259,7 @@ def _full_day(foods, i: int) -> dict:
     return {
         "day_index": i,
         "meals": [
-            {"slot": slot, "food_ids": [str(x) for x in food_ids]}
-            for slot, food_ids in ids.items()
+            {"slot": slot, "food_ids": [str(x) for x in food_ids]} for slot, food_ids in ids.items()
         ],
     }
 
@@ -378,7 +379,8 @@ def test_variety_relaxes_when_only_one_option(foods) -> None:
     # pollo en los 7 almuerzos, y es la única proteína de almuerzo que existe
     selection = _selection([_full_day(foods, i) for i in range(7)])
     only_chicken = [
-        f for f in foods.values()
+        f
+        for f in foods.values()
         if f.name_es == "pechuga de pollo" or f.category is not FoodCategory.PROTEIN
     ]
     violations = check_variety(
@@ -428,19 +430,22 @@ async def test_heuristic_meals_are_appetizing(foods) -> None:
         bfast = meals[MealSlot.BREAKFAST]
         prot = [f for f in bfast if f.category in (FoodCategory.PROTEIN, FoodCategory.DAIRY)]
         assert prot, "desayuno sin proteína"
-        assert all(meal_affinity.breakfast_protein(f) for f in prot), \
+        assert all(meal_affinity.breakfast_protein(f) for f in prot), (
             f"desayuno con proteína inapropiada: {[f.name_es for f in prot]}"
+        )
         if any(meal_affinity.is_egg(f) for f in bfast):
             egg_breakfasts += 1
 
         for slot in (MealSlot.SNACK_AM, MealSlot.SNACK_PM):
             for f in meals[slot]:
-                assert not meal_affinity.main_protein(f), \
+                assert not meal_affinity.main_protein(f), (
                     f"{f.name_es} (carne/pescado) no va en un snack"
+                )
 
         for slot in (MealSlot.LUNCH, MealSlot.DINNER):
-            assert any(meal_affinity.main_protein(f) for f in meals[slot]), \
+            assert any(meal_affinity.main_protein(f) for f in meals[slot]), (
                 f"{slot.value} sin proteína de plato principal"
+            )
 
     assert egg_breakfasts >= 3, f"los huevos deben ser mayoritarios (fueron {egg_breakfasts}/7)"
 
@@ -548,7 +553,8 @@ def test_variety_rotated_week_is_clean(foods) -> None:
         carbs = ["arroz blanco cocido", "papa cocida", "quinoa cocida", "batata cocida"]
         d["meals"][2]["food_ids"] = [str(foods[proteins[i % 3]].id), str(foods[carbs[i % 4]].id)]
         d["meals"][4]["food_ids"] = [
-            str(foods[proteins[(i + 1) % 3]].id), str(foods[carbs[(i + 1) % 4]].id)
+            str(foods[proteins[(i + 1) % 3]].id),
+            str(foods[carbs[(i + 1) % 4]].id),
         ]
         days.append(d)
     assert check_variety(_selection(days), lookup, max_protein_repeats=3, max_carb_repeats=4) == []
@@ -587,8 +593,12 @@ def test_the_free_meal_is_the_only_slot_allowed_to_be_missing() -> None:
     foods = catalog_by_name()
     ids = {str(f.id): f for f in foods.values()}
     pollo, arroz, huevo, avena, banano, aguacate = (
-        foods["pechuga de pollo"], foods["arroz blanco cocido"], foods["huevo entero"],
-        foods["avena en hojuelas"], foods["banano"], foods["aguacate"],
+        foods["pechuga de pollo"],
+        foods["arroz blanco cocido"],
+        foods["huevo entero"],
+        foods["avena en hojuelas"],
+        foods["banano"],
+        foods["aguacate"],
     )
     day_meals = [
         MealSelection(slot=MealSlot.BREAKFAST, food_ids=[str(huevo.id), str(avena.id)]),

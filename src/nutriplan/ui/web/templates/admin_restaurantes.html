@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Restaurantes{% endblock %}
+{% block page_class %}page-admin{% endblock %}
+
+{% block content %}
+{% include "partials/admin_nav.html" %}
+<h1>Restaurantes</h1>
+<p class="muted">Platos de calle: los gramos P/C/G son la verdad; las kcal las
+  calcula el código (4P+4C+9G). {{ catalogo.restaurants|length }} marcas,
+  versión {{ catalogo.version }}.</p>
+
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok" role="status">{{ ok }}</div>{% endif %}
+
+<details class="card admin-new">
+  <summary>Añadir restaurante</summary>
+  <form method="post" action="/admin/restaurantes">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label class="field"><span>Id</span>
+      <input name="id" required maxlength="24" placeholder="crepes"></label>
+    <label class="field"><span>Nombre</span>
+      <input name="name" required maxlength="80" placeholder="Crepes & Waffles"></label>
+    <button class="btn btn-primary" type="submit">
+      <span class="icon">add</span>Crear marca
+    </button>
+  </form>
+</details>
+
+<ul class="admin-list">
+  {% for resto in catalogo.restaurants %}
+  <li class="card admin-row">
+    <div class="admin-who">
+      <b>{{ resto.name }}</b>
+      <span class="muted">{{ resto.id }}</span>
+      <span class="pill">{{ resto.dishes|length }} plato{{ '' if resto.dishes|length == 1 else 's' }}</span>
+    </div>
+    <ul class="admin-history">
+      {% for plato in resto.dishes %}
+      <li>
+        <b>{{ plato.name }}</b>
+        <span class="muted">{{ plato.portion }} ·
+          {{ plato.kcal|round|int }} kcal ·
+          P {{ plato.protein_g|round|int }} ·
+          C {{ plato.carb_g|round|int }} ·
+          G {{ plato.fat_g|round|int }}</span>
+      </li>
+      {% else %}
+      <li class="muted">Todavía no tiene platos.</li>
+      {% endfor %}
+    </ul>
+    <details class="admin-new">
+      <summary>Añadir plato</summary>
+      <form method="post" action="/admin/restaurantes/{{ resto.id }}/platos" class="admin-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <label class="field"><span>Id</span>
+          <input name="id" required maxlength="40" placeholder="lomito-arabe"></label>
+        <label class="field"><span>Nombre</span>
+          <input name="name" required maxlength="120" placeholder="Lomito árabe"></label>
+        <label class="field"><span>Porción</span>
+          <input name="portion" maxlength="80" value="1 porción"></label>
+        <div class="macro-row">
+          <label class="field"><span>Proteína (g)</span>
+            <input name="protein_g" type="number" min="0" max="200" step="0.1" value="0" required></label>
+          <label class="field"><span>Carbo (g)</span>
+            <input name="carb_g" type="number" min="0" max="300" step="0.1" value="0" required></label>
+          <label class="field"><span>Grasa (g)</span>
+            <input name="fat_g" type="number" min="0" max="150" step="0.1" value="0" required></label>
+        </div>
+        <button class="btn btn-primary" type="submit">
+          <span class="icon">add</span>Añadir plato
+        </button>
+      </form>
+    </details>
+  </li>
+  {% else %}
+  <li class="empty"><p>Todavía no hay restaurantes en el catálogo.</p></li>
+  {% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,20 @@
+{# El saldo de semanas. Se pinta igual en Mi semana y en Perfil. #}
+{% if membership and not membership.unlimited %}
+<div class="card membership {{ 'membership-out' if not membership.can_generate else '' }}">
+  <span class="membership-icon"><span class="icon">confirmation_number</span></span>
+  <div class="membership-text">
+    {% if membership.can_generate %}
+    <span class="membership-title">
+      Te quedan <strong>{{ membership.weeks_left }}</strong>
+      semana{{ '' if membership.weeks_left == 1 else 's' }} de plan
+    </span>
+    {% if membership.expires_at %}
+    <span class="muted">Vence el {{ membership.expires_at.strftime('%d/%m/%Y') }}.</span>
+    {% endif %}
+    {% else %}
+    <span class="membership-title">{{ membership.hint }}</span>
+    <a class="membership-cta" href="/plan">Activar mi plan</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

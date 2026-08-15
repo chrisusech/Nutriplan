@@ -1,0 +1,20 @@
+{# La entrada a la despensa. Va SIEMPRE antes de un botón de generar: marcarla
+   después no cambiaría el menú que ya salió, y la frase cuenta lo que se va a
+   tener en cuenta antes de gastar una generación.
+
+   Es una tarjeta y no una línea de texto porque va entre el menú y el botón de
+   generar, y ahí una línea suelta no se ve: quien no sabe que esto existe no lo
+   va a buscar. #}
+<a class="pantry-cta" href="/tengo-en-casa{% if volver %}?volver={{ volver }}{% endif %}">
+  <span class="pantry-cta-badge"><span class="icon">grocery</span></span>
+  <span class="pantry-cta-copy">
+    {% if n %}
+    <b>Ya tienes {{ n }} cosa{{ 's' if n != 1 else '' }} en casa</b>
+    <small>Tu menú las va a usar primero. Toca para cambiarlas.</small>
+    {% else %}
+    <b>¿Ya tienes comida en casa?</b>
+    <small>Márcala y tu semana la aprovecha, en vez de mandarte a comprarla otra vez.</small>
+    {% endif %}
+  </span>
+  <span class="pantry-cta-go"><span class="icon">chevron_right</span></span>
+</a>

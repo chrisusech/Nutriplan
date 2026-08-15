@@ -4,7 +4,6 @@ El camino feliz ya está probado en el viaje del usuario. Aquí está lo otro: q
 nadie se quede mirando una rueda para siempre ni vea una traza de Python.
 """
 
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -37,8 +36,13 @@ def app(container):
 
 def _onboarding(app: TestClient, **extra) -> None:
     data = {
-        "name": "Ana", "sex": "female", "age_years": 28, "height_cm": 165,
-        "weight_kg": 62, "goal": "lose_fat", "activity_level": "moderate",
+        "name": "Ana",
+        "sex": "female",
+        "age_years": 28,
+        "height_cm": 165,
+        "weight_kg": 62,
+        "goal": "lose_fat",
+        "activity_level": "moderate",
         "meal_slots": [s.value for s in MealSlot],
     }
     data.update(extra)
@@ -117,9 +121,7 @@ def test_el_mensaje_de_espera_va_cambiando(app) -> None:
     """Un texto fijo durante veinte segundos parece que se colgó."""
     _onboarding(app)
     job = "00000000-0000-4000-8000-000000000000"
-    textos = {
-        app.get("/menu/estado", params={"job": job, "n": n}).text for n in (0, 1)
-    }
+    textos = {app.get("/menu/estado", params={"job": job, "n": n}).text for n in (0, 1)}
     assert len(textos) >= 1  # el job no existe; lo que importa es que responde
 
 

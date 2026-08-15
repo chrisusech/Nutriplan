@@ -1,0 +1,112 @@
+{# El día que se vive: anillo, comidas y el check de lo ya comido.
+
+   El wrapper #dia-track vive en week.html. Marcar comido no lo reemplaza:
+   solo el anillo (OOB) y el botón. #}
+{% include "partials/day_hero.html" %}
+
+  {% if aviso %}<p class="alert">{{ aviso }}</p>{% endif %}
+  {% if error %}<p class="alert">{{ error }}</p>{% endif %}
+
+  {# El cliente pide /menu/receta por cada plato del día (no un batch largo:
+     Gemini + HTMX cortaban la petición única y solo quedaban 1–2 recetas). #}
+  <div id="day-recipes-boot" class="sr-only" data-hydrate-day-recipes hidden></div>
+
+  <ul class="meals stagger">
+    {% for meal in day.meals %}
+    <li>
+      <details class="meal{% if meal.eaten %} eaten{% endif %}" id="nota-{{ meal.slot }}"
+               {% if meal.slot == abierta or (loop.first and not abierta) %}open{% endif %}>
+        <summary>
+          <span class="meal-icon" aria-hidden="true"><span class="icon">{{ meal.icon }}</span></span>
+          <span class="meal-text">
+            <span class="meal-slot">{{ meal.slot_label }} · {{ meal.time }}</span>
+            <span class="meal-name">{{ meal.title }}</span>
+            {% if not meal.is_free %}
+            <span class="meal-macros">
+              <b>{{ meal.kcal }}</b> kcal · P {{ meal.protein_g }} ·
+              C {{ meal.carb_g }} · G {{ meal.fat_g }}
+            </span>
+            {% endif %}
+          </span>
+          <span class="meal-chevron"><span class="icon">expand_more</span></span>
+        </summary>
+
+        {% if meal.needs_out %}
+          <div class="recipe">
+            <p class="muted">Elige el restaurante y el plato: sus macros entran
+              al día y recuadramos el resto.</p>
+            <a class="btn btn-primary btn-block" href="/menu/fuera?dia={{ dia }}&slot={{ meal.slot }}">
+              <span class="icon">restaurant</span>Voy a comer fuera
+            </a>
+            {% include "partials/meal_eaten.html" %}
+          </div>
+        {% elif meal.is_out %}
+          <div class="recipe">
+            <div class="recipe-block">
+              <h4>En la calle</h4>
+              <ul class="ingredients">
+                {% for item in meal['items'] %}
+                <li>
+                  <span class="ing-name">{{ item.name }}</span>
+                  <span class="ing-qty">{{ item.qty }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            <div class="meal-actions">
+              <a class="btn btn-ghost" href="/menu/fuera?dia={{ dia }}&slot={{ meal.slot }}">
+                Cambiar de restaurante
+              </a>
+              {% include "partials/meal_eaten.html" %}
+            </div>
+          </div>
+        {% else %}
+          <div class="recipe">
+            <div class="recipe-block">
+              <h4>Ingredientes</h4>
+              <ul class="ingredients">
+                {% for item in meal['items'] %}
+                <li>
+                  <span class="ing-name">{{ item.name }}</span>
+                  <span class="ing-qty">{{ item.qty }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            <div class="recipe-prep"
+                 data-recipe-url="/menu/receta?dia={{ dia }}&slot={{ meal.slot }}">
+              {% if meal.steps %}
+              {# La misma pieza que devuelve /menu/receta: una sola forma de
+                 pintar una preparación, venga del servidor o del swap. #}
+              {% with steps=meal.steps, prep_minutes=meal.prep_minutes,
+                      difficulty=meal.difficulty, tips=meal.tips %}
+              {% include "partials/meal_prep.html" %}
+              {% endwith %}
+              {% else %}
+              <div class="recipe-loading is-queued recipe-prep-pending" role="status">
+                <span class="icon" aria-hidden="true">schedule</span>
+                <div class="recipe-loading-copy">
+                  <span class="recipe-loading-title">En cola</span>
+                  <span class="recipe-loading-sub">Generaremos tu receta en un momento…</span>
+                </div>
+              </div>
+              {% endif %}
+            </div>
+
+            <div class="meal-actions">
+              <a class="btn btn-ghost" href="/menu/fuera?dia={{ dia }}&slot={{ meal.slot }}">
+                <span class="icon">restaurant</span>Voy a comer fuera
+              </a>
+              <a class="btn btn-ghost" href="/menu/cambiar?dia={{ dia }}&slot={{ meal.slot }}">
+                Cambiar este plato
+              </a>
+              {% include "partials/meal_eaten.html" %}
+            </div>
+
+            {% include "partials/rate_form.html" %}
+          </div>
+        {% endif %}
+      </details>
+    </li>
+    {% endfor %}
+  </ul>

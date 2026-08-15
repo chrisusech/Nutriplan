@@ -62,7 +62,20 @@ class GenerationConfig(BaseModel):
 
 class FiberConfig(BaseModel):
     g_per_1000_kcal: float = Field(default=14.0, gt=0)
-    min_fruit_servings: int = Field(default=2, ge=0)
+
+
+class AdaptationConfig(BaseModel):
+    """Cómo reacciona el plan al peso semanal. Datos, no ifs en la UI."""
+
+    step_kcal: float = Field(default=150.0, gt=0)
+    # Cuánto se puede subir en un solo check-in respecto a las kcal previas.
+    max_raise_kcal: float = Field(default=400.0, gt=0)
+    # Si |Δpeso| ≤ tolerancia → “vas bien” (hold), no micro-ajustes.
+    tolerance_kg: float = Field(default=0.2, ge=0)
+    # Por debajo de esto (más negativo) en lose_fat → subir kcal.
+    lose_fat_too_fast_kg: float = Field(default=-1.0, lt=0)
+    # Por encima en gain_muscle → bajar o frenar el superávit.
+    gain_muscle_too_fast_kg: float = Field(default=0.75, gt=0)
 
 
 # Los rangos de la estrategia: fuera de aquí, la config no carga. Es lo que
@@ -85,6 +98,7 @@ class NutritionConfig(BaseModel):
     tolerances: Tolerances
     portioning: PortioningConfig
     generation: GenerationConfig = GenerationConfig()
+    adaptation: AdaptationConfig = AdaptationConfig()
 
     @model_validator(mode="after")
     def _validate_completeness(self) -> Self:
@@ -102,9 +116,7 @@ class NutritionConfig(BaseModel):
         ):
             for goal, value in values.items():
                 if not lo <= value <= hi:
-                    raise ValueError(
-                        f"{name}[{goal.value}] = {value} fuera del rango [{lo}, {hi}]"
-                    )
+                    raise ValueError(f"{name}[{goal.value}] = {value} fuera del rango [{lo}, {hi}]")
         # El reparto puede tener MENOS de cinco comidas (un cliente come cuatro),
         # pero nunca puede quedarse sin desayuno, almuerzo o cena: los snacks son
         # lo único opcional.
@@ -114,9 +126,7 @@ class NutritionConfig(BaseModel):
         for macro in MACRO_COLUMNS:
             total = sum(getattr(s, macro) for s in self.meal_distribution.values())
             if abs(total - 1.0) > 1e-6:
-                raise ValueError(
-                    f"meal_distribution[{macro}] debe sumar 1.0 (suma {total})"
-                )
+                raise ValueError(f"meal_distribution[{macro}] debe sumar 1.0 (suma {total})")
         return self
 
     def kcal_shares(self) -> dict[MealSlot, float]:

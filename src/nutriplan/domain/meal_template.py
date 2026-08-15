@@ -102,6 +102,11 @@ class MealTemplate:
     free_salad: bool = False
     # Cómo se prepara, escrita a mano. Sin esto el modo offline no tiene receta.
     recipe: tuple[str, ...] = ()
+    # Cómo se llama el plato ya resuelto: "Salteado de {protein} con {carb}". El
+    # `name` de arriba describe el FORMATO y sirve para hablar de la plantilla en
+    # la consola; lo que la persona lee en su semana sale de aquí, con sus
+    # alimentos dentro. Sin patrón, el nombre se arma con la lista de alimentos.
+    naming: str = ""
 
 
 @dataclass(frozen=True)
@@ -136,6 +141,46 @@ class Dish:
         return (self.template_id, *sorted(str(f.id) for f in self.foods))
 
 
+def _name_from_foods(foods: tuple[FoodItem, ...]) -> str:
+    """El nombre de reserva: lo que hay en el plato, tal cual."""
+    if not foods:
+        return "Plato"
+    names = [f.name_es for f in foods]
+    head, *rest = names
+    if not rest:
+        return head.capitalize()
+    if len(rest) == 1:
+        return f"{head.capitalize()} con {rest[0]}"
+    return f"{head.capitalize()} con " + ", ".join(rest[:-1]) + f" y {rest[-1]}"
+
+
+def dish_name(template: MealTemplate, chosen: Sequence[FoodItem | None]) -> str:
+    """Cómo se llama este plato concreto.
+
+    El nombre de la plantilla describe el formato ("Proteína con carbohidrato y
+    ensalada") y era el que acababa en la pantalla: cinco almuerzos distintos se
+    leían iguales y la semana parecía repetida aunque debajo cambiaran la carne y
+    el carbohidrato. Ahora el título lleva dentro lo que se va a comer.
+
+    Si el patrón nombra un componente que hoy no está —la grasa opcional que el
+    solver dejó fuera—, se cae al nombre por alimentos antes que prometer algo
+    que no viene en el plato.
+    """
+    por_rol = {
+        c.role.value: f.name_es
+        for c, f in zip(template.components, chosen, strict=True)
+        if f is not None
+    }
+    foods = tuple(f for f in chosen if f is not None)
+    if not template.naming:
+        return _name_from_foods(foods)
+    try:
+        nombre = template.naming.format(**por_rol)
+    except (KeyError, IndexError):
+        return _name_from_foods(foods)
+    return nombre[:1].upper() + nombre[1:]
+
+
 @dataclass(frozen=True)
 class MealCatalog:
     version: str  # entra en compute_input_hash: si cambia, se regenera el plan
@@ -162,6 +207,8 @@ def candidates_for(
     component: Component,
     allowed: Sequence[FoodItem],
     slot: MealSlot,
+    *,
+    on_hand: frozenset[UUID] = frozenset(),
 ) -> list[FoodItem]:
     """Los alimentos permitidos que satisfacen un componente en un slot.
 
@@ -170,6 +217,12 @@ def candidates_for(
     orden alfabético, "arepa de maíz" entraba en el almuerzo por la A y echaba del
     corte a un carbo que sí es de almuerzo. Si solo caben seis, que sean los seis
     que mejor encajan en esa comida — no los seis primeros del diccionario.
+
+    `on_hand` —lo que la persona dice tener en casa— va DELANTE de la afinidad por
+    ese mismo truncado: preferirlo solo en la función de coste no basta si el
+    alimento no llega a estar en ningún plato del pool. Aquí solo decide quién
+    entra; que ganar o no lo sigue decidiendo el coste, con la variedad y el
+    sentido común de cocina por encima.
     """
     selector = component.selector
     if selector.startswith("#"):
@@ -181,7 +234,7 @@ def candidates_for(
     valid = ROLE_CATEGORIES[component.role]
     return sorted(
         (f for f in found if f.category in valid),
-        key=lambda f: (-f.weight_in(slot), f.name_es, str(f.id)),
+        key=lambda f: (f.id not in on_hand, -f.weight_in(slot), f.name_es, str(f.id)),
     )
 
 
@@ -199,6 +252,7 @@ def expand(
     admissible: object = None,
     dish_admissible: object = None,
     per_component: int = 6,
+    on_hand: frozenset[UUID] = frozenset(),
 ) -> dict[MealSlot, list[Dish]]:
     """Todas las versiones concretas de cada plato que el cliente puede comer.
 
@@ -221,6 +275,9 @@ def expand(
     ya generado: un plato de 3 componentes con clases de 20 alimentos son 8.000
     combinaciones, y recortar al final por orden alfabético haría que "aguacate"
     saliera siempre y "tahini" nunca.
+
+    `on_hand` entra en ese corte: lo que la persona ya tiene en casa se asegura un
+    sitio en el pool (ver `candidates_for`).
     """
     pools: dict[MealSlot, list[Dish]] = {slot: [] for slot in MealSlot}
     rejected: dict[MealSlot, list[Dish]] = {slot: [] for slot in MealSlot}
@@ -230,7 +287,7 @@ def expand(
             choices: list[list[FoodItem | None]] = []
             satisfiable = True
             for component in template.components:
-                found = candidates_for(catalog, component, allowed, slot)
+                found = candidates_for(catalog, component, allowed, slot, on_hand=on_hand)
                 if component.role is FoodCategory.PROTEIN and callable(admissible):
                     kept = [f for f in found if admissible(f, slot)]
                     found = kept or found
@@ -263,7 +320,7 @@ def expand(
                     continue
                 dish = Dish(
                     template_id=template.id,
-                    name=template.name,
+                    name=dish_name(template, combo),
                     slot=slot,
                     foods=foods,
                     free_salad=template.free_salad,
@@ -284,9 +341,7 @@ def expand(
     return pools
 
 
-def pool_health(
-    pools: Mapping[MealSlot, Iterable[Dish]], *, minimum: int = 4
-) -> list[PoolWarning]:
+def pool_health(pools: Mapping[MealSlot, Iterable[Dish]], *, minimum: int = 4) -> list[PoolWarning]:
     """Los slots con tan pocos platos que van a repetirse sí o sí.
 
     Como el universo del plan sigue siendo lo que el cliente marcó que le gusta,
@@ -341,9 +396,7 @@ def validate_catalog(catalog: MealCatalog, universe: Sequence[FoodItem]) -> None
             if selector.startswith("@"):
                 key = selector[1:]
                 if key not in catalog.classes:
-                    raise MealCatalogError(
-                        f"Plato '{template.id}': la clase '@{key}' no existe."
-                    )
+                    raise MealCatalogError(f"Plato '{template.id}': la clase '@{key}' no existe.")
             elif selector.startswith("#"):
                 name = selector[1:]
                 if not any(f.name_es == name for f in universe):

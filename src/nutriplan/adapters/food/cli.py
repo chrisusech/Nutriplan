@@ -27,8 +27,15 @@ DEFAULT_CSV = Path("data/foods/curated_foods.csv")
 # Las columnas que el humano decide; `scaffold` las deja vacías para que las
 # rellene a mano. El resto sale de USDA.
 _JUDGEMENT_COLUMNS = (
-    "category", "tags", "default_unit_g", "unit_granularity", "unit_name",
-    "portion_step_g", "portion_min_g", "portion_max_g", "meal_slots",
+    "category",
+    "tags",
+    "default_unit_g",
+    "unit_granularity",
+    "unit_name",
+    "portion_step_g",
+    "portion_min_g",
+    "portion_max_g",
+    "meal_slots",
 )
 _MACRO_FIELDS = ("kcal_100g", "protein_100g", "carb_100g", "fat_100g", "fiber_100g")
 
@@ -136,8 +143,10 @@ def cmd_audit(args: argparse.Namespace) -> int:
                 deltas.append((row["name_es"], field, ours, theirs))
 
     if unlinked:
-        print(f"{len(unlinked)} alimentos SIN fdc_id (no auditables): "
-              f"{', '.join(unlinked[:8])}{' …' if len(unlinked) > 8 else ''}\n")
+        print(
+            f"{len(unlinked)} alimentos SIN fdc_id (no auditables): "
+            f"{', '.join(unlinked[:8])}{' …' if len(unlinked) > 8 else ''}\n"
+        )
 
     if not deltas:
         print(f"Sin desviaciones por encima del {args.tolerance:.0%}.")

@@ -11,6 +11,7 @@ correr este script:
     uv run python scripts/fetch_fonts.py
 """
 
+import hashlib
 import re
 import sys
 import urllib.request
@@ -42,21 +43,41 @@ def _download(url: str, dest: Path) -> None:
     print(f"  {dest.name}  {dest.stat().st_size // 1024} KB")
 
 
+SPAN = re.compile(r'class="icon[^"]*"[^>]*>(.*?)</span>', re.S)
+LITERAL = re.compile(r"'([a-z_]+)'")
+
+
 def icon_names() -> list[str]:
-    """Los iconos que aparecen en plantillas y presenter, por nombre de ligadura."""
+    """Los iconos que aparecen en plantillas, presenter y JS, por nombre de ligadura."""
     found: set[str] = set()
-    for path in [*WEB.joinpath("templates").rglob("*.html"), WEB / "presenter.py"]:
+    paths = [
+        *WEB.joinpath("templates").rglob("*.html"),
+        # El JS también pinta iconos (el spinner de la receta): si se olvida,
+        # sale la palabra "autorenew" girando en la tarjeta.
+        *WEB.joinpath("static", "js").glob("*.js"),
+        WEB / "presenter.py",
+        WEB / "week_view.py",  # SLOT_META: wb_sunny, dinner_dining, …
+    ]
+    for path in paths:
+        if not path.exists():
+            continue
         text = path.read_text(encoding="utf-8")
-        found |= set(re.findall(r'class="icon[^"]*"[^>]*>\s*([a-z_]+)\s*<', text))
-        found |= set(re.findall(r'"icon":\s*"([a-z_]+)"', text))
+        for inner in SPAN.findall(text):
+            raw = inner.strip()
+            # Un icono elegido en la plantilla (`{{ 'check' if … else 'close' }}`)
+            # cuenta igual que uno escrito a pelo.
+            if "{" in raw:
+                found |= set(LITERAL.findall(raw))
+            elif re.fullmatch(r"[a-z_]+", raw):
+                found.add(raw)
+        found |= set(re.findall(r'["\']icon["\']:\s*["\']([a-z_]+)["\']', text))
     return sorted(found)
 
 
 def fetch_poppins() -> None:
     print("Poppins:")
     css = _get(
-        "https://fonts.googleapis.com/css2"
-        f"?family=Poppins:wght@{POPPINS_WEIGHTS}&display=swap"
+        f"https://fonts.googleapis.com/css2?family=Poppins:wght@{POPPINS_WEIGHTS}&display=swap"
     )
     for block in re.findall(r"@font-face\s*\{(.*?)\}", css, re.S):
         if LATIN_RANGE not in (re.search(r"unicode-range:\s*([^;]+)", block) or [""])[0]:
@@ -78,7 +99,28 @@ def fetch_material_symbols() -> None:
     url = re.search(r"url\((https://[^)]+)\)", css)
     if url is None:
         sys.exit("No se pudo leer la URL de la fuente en el CSS de Google")
-    _download(url.group(1), FONTS_DIR / "material-symbols-rounded.woff2")
+    destino = FONTS_DIR / "material-symbols-rounded.woff2"
+    _download(url.group(1), destino)
+    _bump_cache_buster(destino)
+
+
+def _bump_cache_buster(fuente: Path) -> None:
+    """Cambia el `?v=` del @font-face al contenido real de la fuente.
+
+    Quien ya tuvo la app abierta guarda la fuente vieja: sin esto vería el
+    nombre del icono escrito en la pantalla aunque el repo esté correcto.
+    """
+    css = WEB / "static" / "styles" / "base.css"
+    huella = hashlib.sha256(fuente.read_bytes()).hexdigest()[:8]
+    texto, cambios = re.subn(
+        r"(material-symbols-rounded\.woff2\?v=)[^']*",
+        rf"\g<1>{huella}",
+        css.read_text(encoding="utf-8"),
+    )
+    if cambios != 1:
+        sys.exit(f"No se encontró el @font-face de los iconos en {css.name}")
+    css.write_text(texto, encoding="utf-8")
+    print(f"  base.css → ?v={huella}")
 
 
 if __name__ == "__main__":

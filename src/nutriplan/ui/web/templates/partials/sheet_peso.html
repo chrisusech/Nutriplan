@@ -1,0 +1,33 @@
+{# La rueda del peso. Los valores los pinta js/wheel.js desde estos topes: así
+   cambiar de kg a lbs no recarga nada y la plantilla no lleva 500 <li> dentro.
+   El formulario recibe siempre kg. #}
+<dialog class="sheet" id="sheet-peso" data-wheel-sheet
+        data-field="weight_kg" data-min="35" data-max="200" data-unit="kg">
+  <div class="sheet-panel">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <span class="sheet-title">Peso</span>
+      <div class="seg" data-unit-seg>
+        <label><input type="radio" name="u-peso" value="kg" checked>kg</label>
+        <label><input type="radio" name="u-peso" value="lbs">lbs</label>
+      </div>
+    </div>
+    <div class="wheels">
+      <div class="wheel-frame">
+        <div class="wheel-band"></div>
+        <div class="wheel" data-wheel data-min="35" data-max="200"
+             data-value="{{ peso_entero or 70 }}"></div>
+      </div>
+      <span class="wheel-sep">,</span>
+      <div class="wheel-frame">
+        <div class="wheel-band"></div>
+        <div class="wheel" data-wheel data-min="0" data-max="9"
+             data-value="{{ peso_decimal or 0 }}"></div>
+      </div>
+      <span class="wheel-unit" data-unit-label>kg</span>
+    </div>
+    <button type="button" class="btn btn-primary btn-big btn-block" data-sheet-accept>
+      Aceptar
+    </button>
+  </div>
+</dialog>

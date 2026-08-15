@@ -1,4 +1,4 @@
-/* Fuentes, reset y el armazón de la página. */
+/* Fuentes, reset y tipografía. Lo que vale para cada píxel de la app. */
 
 @font-face {
   font-family: 'Poppins'; font-style: normal; font-weight: 400; font-display: swap;
@@ -23,12 +23,16 @@
 @font-face {
   font-family: 'Material Symbols Rounded'; font-style: normal;
   font-weight: 300 700; font-display: block;
-  src: url('/static/fonts/material-symbols-rounded.woff2') format('woff2');
+  src: url('/static/fonts/material-symbols-rounded.woff2?v=3645d888') format('woff2');
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
+  touch-action: manipulation;
+}
 
 body {
   margin: 0;
@@ -40,15 +44,20 @@ body {
   -webkit-font-smoothing: antialiased;
   /* El rebote de iOS deja ver el fondo del navegador debajo de la barra. */
   overscroll-behavior-y: none;
+  /* El resaltado azul del toque delata que esto es una web dentro de la app. */
+  -webkit-tap-highlight-color: transparent;
 }
 
-h1, h2, h3 { margin: 0; line-height: 1.25; letter-spacing: -0.01em; }
+h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; }
 h1 { font-size: var(--t-2xl); font-weight: 800; }
 h2 { font-size: var(--t-xl); font-weight: 700; }
 h3 { font-size: var(--t-lg); font-weight: 700; }
 p { margin: 0; }
 
 a { color: inherit; text-decoration: none; }
+/* Un enlace suelto dentro de un párrafo tiene que verse: los de la barra, las
+   filas y los botones heredan su propio color y no pasan por aquí. */
+p > a:not(.btn) { color: var(--brand); font-weight: 600; }
 
 .icon {
   font-family: 'Material Symbols Rounded';
@@ -65,124 +74,17 @@ a { color: inherit; text-decoration: none; }
 .icon.fill { font-variation-settings: 'FILL' 1; }
 
 .muted { color: var(--muted); }
+.small { font-size: var(--t-xs); }
+.brand-word { color: var(--brand); }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* --- El armazón ---------------------------------------------------------- */
-
-.app {
-  max-width: 34rem;         /* más ancho que esto ya no se lee de un vistazo */
-  margin: 0 auto;
-  padding: var(--s-4) var(--s-4) calc(var(--nav-h) + var(--safe-b) + var(--s-6));
-}
-
-.app-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
-  padding: var(--s-2) 0 var(--s-4);
-}
-
-.logo { display: flex; align-items: center; gap: var(--s-2); font-weight: 800; }
-.logo-badge {
-  width: 2.25rem; height: 2.25rem;
-  border-radius: var(--r-sm);
-  background: var(--brand);
-  color: #fff;
-  display: flex; align-items: center; justify-content: center;
-}
-
-/* --- Piezas compartidas -------------------------------------------------- */
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  box-shadow: var(--sh-1);
-}
-
-.btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: var(--s-2);
-  min-height: var(--tap);
-  padding: var(--s-3) var(--s-5);
-  border-radius: var(--r-md);
-  border: 1px solid transparent;
-  font: 700 var(--t-md) Poppins, sans-serif;
-  cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-.btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--brand); color: #fff; box-shadow: var(--sh-2); }
-.btn-outline { background: transparent; border-color: var(--line-strong); color: var(--ink-3); }
-.btn-ghost { background: transparent; color: var(--muted); }
-.btn-block { width: 100%; }
-.btn-big { min-height: 3.25rem; font-size: var(--t-lg); border-radius: var(--r-lg); }
-
-.chip {
-  display: inline-flex; align-items: center; gap: var(--s-2);
-  min-height: var(--tap);
-  padding: var(--s-2) var(--s-4);
-  border-radius: var(--r-pill);
-  border: 1.5px solid var(--line);
-  background: var(--card);
-  font: 600 var(--t-sm) Poppins, sans-serif;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.chip input { accent-color: var(--brand); width: 1.05rem; height: 1.05rem; }
-.chip:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
-.chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
-
-.pill {
-  display: inline-flex; align-items: center; gap: var(--s-1);
-  padding: var(--s-1) var(--s-3);
-  border-radius: var(--r-pill);
-  background: var(--chip);
-  font: 600 var(--t-xs) Poppins, sans-serif;
-  color: var(--muted-3);
-}
-
-.field { display: flex; flex-direction: column; gap: var(--s-2); font: 600 var(--t-sm) Poppins; }
-.field > span, label > span { color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
-input, select, textarea {
-  width: 100%;
-  min-height: var(--tap);
-  padding: var(--s-3);
-  border: 1.5px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--card);
-  color: var(--ink);
-  font: 500 var(--t-md) Poppins, sans-serif;
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible,
-.btn:focus-visible, .chip:focus-visible, a:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-textarea { resize: vertical; min-height: 8rem; line-height: 1.55; }
-
-.alert {
-  display: flex; align-items: flex-start; gap: var(--s-2);
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-md);
-  background: var(--warn-soft);
-  color: var(--ink-2);
-  font: 600 var(--t-sm) Poppins, sans-serif;
-}
-.alert-ok { background: var(--ok-soft); }
-
-@keyframes slide-down { from { opacity: 0; transform: translateY(-0.25rem); } to { opacity: 1; transform: none; } }
-@keyframes pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 0.35; } }
-
-/* Quien pidió menos movimiento lo pidió en serio. */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* Un título de sección: pequeño, en mayúsculas, sin gritar. */
+.eyebrow {
+  font: 700 var(--t-xs) Poppins, sans-serif;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }

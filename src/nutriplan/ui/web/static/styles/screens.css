@@ -1,211 +1,395 @@
-/* Onboarding, perfil y opinar. */
+/* Las pantallas de la persona: compra, progreso, cierre, alimentos, perfil,
+   opinar y las legales. Cada bloque corto, en el orden en que se visitan. */
 
-.brand-word { color: var(--brand); }
+/* --- Lista de compra ------------------------------------------------------- */
 
-/* --- Onboarding ----------------------------------------------------------- */
-
-/* Un paso ocupa la pantalla y la navegación va fija abajo, al alcance del
-   pulgar. La barra de progreso responde a la única pregunta que importa
-   mientras rellenas un formulario: cuánto falta. */
-
-.onb-head { margin-bottom: var(--s-5); }
-
-.onb-progress {
-  display: block;
-  height: 0.375rem;
-  border-radius: var(--r-pill);
-  background: var(--line);
-  overflow: hidden;
+.shop-intro {
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  margin-bottom: var(--s-4);
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--brand-soft);
 }
-/* El ancho va en clases y no en `style`: la CSP bloquea los estilos inline
-   TAMBIÉN cuando los pone el JavaScript, no solo el atributo del HTML. */
-.onb-progress-fill {
-  display: block;
-  height: 100%;
-  width: 100%;
-  border-radius: var(--r-pill);
-  background: var(--brand);
-  transition: width 0.3s ease;
-}
-.onb-progress-fill[data-of="6"][data-at="1"] { width: 16.6%; }
-.onb-progress-fill[data-of="6"][data-at="2"] { width: 33.3%; }
-.onb-progress-fill[data-of="6"][data-at="3"] { width: 50%; }
-.onb-progress-fill[data-of="6"][data-at="4"] { width: 66.6%; }
-.onb-progress-fill[data-of="6"][data-at="5"] { width: 83.3%; }
-.onb-progress-fill[data-of="6"][data-at="6"] { width: 100%; }
-.onb-count {
-  margin-top: var(--s-2);
-  font: 600 var(--t-xs) Poppins, sans-serif;
+.shop-intro .icon { color: var(--brand); font-size: 1.5rem; }
+.shop-intro b { font: 700 var(--t-md) Poppins, sans-serif; }
+.shop-intro p { margin-top: var(--s-1); color: var(--ink-2); font-size: var(--t-sm); line-height: 1.5; }
+.shop-ready { margin-bottom: var(--s-5); }
+.shop-group { padding: var(--s-4); margin-bottom: var(--s-4); }
+.shop-group h2 {
+  display: flex; align-items: center; gap: var(--s-2);
+  font: 700 var(--t-sm) Poppins, sans-serif;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--s-2);
 }
+.shop-list { list-style: none; margin: 0; padding: 0; }
+.shop-list li + li { border-top: 1px solid var(--line); }
 
-.onb-form { display: flex; flex-direction: column; gap: var(--s-4); }
-
-.onb-step {
-  display: flex; flex-direction: column; gap: var(--s-4);
-  animation: onb-in 0.25s ease;
-}
-/* `display` de la hoja gana al atributo `hidden` del navegador: sin esto los
-   seis pasos se ven a la vez y el contador miente. */
-.onb-step[hidden], .onb-nav [hidden] { display: none; }
-.onb-step > h2 {
-  font-size: var(--t-xl);
-  line-height: 1.25;
-  outline: none;  /* recibe el foco al cambiar de paso, pero no es un control */
-}
-.onb-hint { color: var(--muted); font-size: var(--t-sm); margin-top: calc(var(--s-3) * -1); }
-
-@keyframes onb-in {
-  from { opacity: 0; transform: translateY(0.5rem); }
-  to   { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .onb-step { animation: none; }
-  .onb-progress-fill { transition: none; }
-}
-
-/* La navegación no se persigue con el scroll: vive abajo. */
-.onb-nav {
-  position: sticky;
-  bottom: 0;
-  display: flex; gap: var(--s-2); align-items: center;
-  padding: var(--s-3) 0 calc(var(--s-3) + var(--safe-b));
-  margin-top: var(--s-4);
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
-}
-.onb-nav .btn { min-height: var(--tap); }
-
-/* Tres campos numéricos caben en fila incluso en el móvil más estrecho. */
-.onb-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
-
-/* Plegados a propósito: 172 casillas de golpe eran justo el agobio que este
-   paso venía a quitar. Quien quiera afinar, abre su grupo. */
-.food-group + .food-group { margin-top: var(--s-2); }
-.food-group > summary {
-  display: flex; align-items: center; justify-content: space-between;
+/* Tachar lo que ya está en el carrito: puro CSS sobre una casilla oculta, sin
+   pedirle nada al servidor. */
+.shop-line {
+  display: flex;
+  align-items: center;
   gap: var(--s-3);
-  min-height: var(--tap);
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
+  min-height: 3rem;
+  cursor: pointer;
+}
+.shop-line input { position: absolute; opacity: 0; width: 0; height: 0; }
+.shop-check {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--line-strong);
+  color: transparent;
+  transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.shop-check .icon { font-size: 1rem; }
+.shop-name { flex: 1 1 auto; font: 500 var(--t-md) Poppins, sans-serif; color: var(--ink); }
+.shop-qty { flex: 0 0 auto; color: var(--muted); font-size: var(--t-sm); white-space: nowrap; }
+.shop-line:has(input:checked) .shop-check {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+}
+.shop-line:has(input:checked) .shop-name { text-decoration: line-through; color: var(--faint); }
+.shop-line:has(input:checked) .shop-qty { color: var(--faint-2); }
+
+/* Lo que ya tiene en casa: sin casilla que tachar (no hay nada que echar al
+   carrito) y atenuado, pero visible. */
+.shop-line.is-mine { cursor: default; }
+.shop-line.is-mine .shop-check {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.shop-line.is-mine .shop-name { color: var(--faint); }
+.shop-line.is-mine .shop-qty { color: var(--ok); font-weight: 600; }
+
+/* --- Progreso -------------------------------------------------------------- */
+
+.prog-hero { padding: var(--s-5) var(--s-4); }
+.prog-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); }
+.prog-now {
+  font: 800 var(--t-3xl) Poppins, sans-serif;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.prog-now span { font-size: var(--t-lg); color: var(--muted); font-weight: 600; }
+/* Sin `preserveAspectRatio="none"`: estirar el viewBox convertiría el redondeo
+   de cada barra en un óvalo distinto según cuántas semanas haya. */
+.prog-chart { width: 100%; height: auto; margin-top: var(--s-4); }
+.prog-bar { fill: var(--brand-soft); }
+.prog-bar.is-now { fill: var(--brand); }
+.prog-chart-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s-2);
+  font-size: var(--t-xs);
+}
+
+.prog-list { list-style: none; margin: var(--s-5) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.prog-week { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
+.prog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.prog-weight { display: inline-flex; align-items: center; gap: var(--s-2); font: 700 var(--t-lg) Poppins, sans-serif; }
+.prog-meta { display: flex; flex-wrap: wrap; gap: var(--s-3); font-size: var(--t-xs); }
+.prog-note { font-style: italic; color: var(--ink-2); font-size: var(--t-sm); }
+.pill-down { background: var(--ok-soft); color: var(--ok); }
+.pill-up { background: var(--warn-soft); color: var(--warn); }
+
+/* --- Cierre de semana ------------------------------------------------------ */
+
+.checkin { display: flex; flex-direction: column; gap: var(--s-4); padding-top: var(--s-4); }
+.checkin > h2 { font-size: var(--t-3xl); }
+.checkin-form { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.recap { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-4); }
+.recap-kcal { font: 700 var(--t-lg) Poppins, sans-serif; margin: 0; letter-spacing: -0.02em; }
+.recap-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  color: var(--muted);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+}
+.recap-verdict { margin: 0; font: 600 var(--t-sm) Poppins, sans-serif; color: var(--brand); }
+
+/* El peso se gira, no se teclea: el número es lo más grande de la pantalla. */
+.weigh {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-6) var(--s-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-xl);
   background: var(--card);
   cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+.weigh:active { transform: scale(0.99); border-color: var(--brand); }
+.weigh-value {
+  font: 800 var(--t-hero) Poppins, sans-serif;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--brand);
+}
+.weigh-hint { font: 500 var(--t-xs) Poppins, sans-serif; color: var(--muted); }
+
+.checkin-note { font-style: italic; }
+
+/* La barra se pinta por decenas porque la CSP prohíbe `style=` y el ancho
+   exacto no aporta nada que la persona pueda notar. */
+.closure { padding: var(--s-4); }
+.closure-bar { height: 0.5rem; border-radius: var(--r-pill); background: var(--chip); overflow: hidden; }
+.closure-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  transition: width var(--dur-3) var(--ease-out);
+}
+.closure-fill[data-fill="1"] { width: 10%; }
+.closure-fill[data-fill="2"] { width: 20%; }
+.closure-fill[data-fill="3"] { width: 30%; }
+.closure-fill[data-fill="4"] { width: 40%; }
+.closure-fill[data-fill="5"] { width: 50%; }
+.closure-fill[data-fill="6"] { width: 60%; }
+.closure-fill[data-fill="7"] { width: 70%; }
+.closure-fill[data-fill="8"] { width: 80%; }
+.closure-fill[data-fill="9"] { width: 90%; }
+.closure-fill[data-fill="10"] { width: 100%; }
+.closure-steps {
   list-style: none;
-  font: 600 var(--t-md) Poppins, sans-serif;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: flex; flex-direction: column; gap: var(--s-2);
+}
+.closure-steps li {
+  display: flex; align-items: flex-start; gap: var(--s-2);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--muted);
+}
+.closure-steps li > span:not(.icon) { min-width: 0; }
+.closure-steps li.done { color: var(--ink); }
+.closure-steps .icon { font-size: 1.25rem; color: var(--faint); }
+.closure-steps li.done .icon { color: var(--ok); }
+.closure a { color: var(--brand); font-weight: 600; }
+
+/* --- Mis alimentos --------------------------------------------------------- */
+
+.food-section { margin-top: var(--s-6); }
+.food-section > .eyebrow { display: block; margin-bottom: var(--s-3); }
+.food-lines { list-style: none; margin: 0; padding: var(--s-2) var(--s-1); }
+.food-lines li {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 3rem;
+  padding-left: var(--s-3);
+  border-bottom: 1px solid var(--line);
+  font: 500 var(--t-sm) Poppins, sans-serif;
   color: var(--ink);
 }
-.food-group > summary::-webkit-details-marker { display: none; }
-.food-group[open] > summary { border-color: var(--brand); }
-.food-count {
-  font: 600 var(--t-xs) Poppins, sans-serif;
-  color: var(--muted);
-  padding: 0.125rem var(--s-2);
-  border-radius: var(--r-pill);
-  background: var(--chip);
-}
-.food-group .chips { padding: var(--s-3) var(--s-1); }
+.food-lines li:last-child { border-bottom: none; }
+.food-lines form { margin: 0; }
 
-/* --- Perfil --------------------------------------------------------------- */
+/* --- Lo que tengo en casa -------------------------------------------------- */
+
+/* Misma casilla que la lista de compra (`.shop-check`), aquí en positivo: lo
+   marcado es lo que sí tienes, así que se enciende en vez de tacharse. */
+.pantry-line {
+  display: flex; align-items: center; gap: var(--s-3);
+  flex: 1 1 auto;
+  min-height: 3rem;
+  cursor: pointer;
+}
+.pantry-line input { position: absolute; opacity: 0; width: 0; height: 0; }
+.pantry-line:has(input:checked) .shop-check {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+}
+.pantry-line:has(input:checked) > span:not(.shop-check) { color: var(--ink); font-weight: 600; }
+.pantry-form { margin-top: var(--s-4); }
+.pantry-form .food-group + .food-group { margin-top: var(--s-2); }
+/* Guardar no puede depender de llegar al final de una lista larga. Se apoya por
+   encima de la barra inferior (fija, z-index 20) o quedaría escondido detrás. */
+.pantry-save {
+  position: sticky;
+  bottom: calc(var(--nav-h) + var(--safe-b) + var(--s-3));
+  z-index: 10;
+  margin-top: var(--s-5);
+}
+
+/* La entrada a la despensa, encima del botón de generar. Tarjeta y no línea de
+   texto: aquí se ofrece algo que la persona no sabe que existe, y una línea
+   centrada entre el menú y el botón se lee como un pie de página. */
+.pantry-cta {
+  display: flex; align-items: center; gap: var(--s-3);
+  margin: var(--s-4) 0 var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  color: var(--ink);
+  text-align: left;
+}
+.pantry-cta:active { background: var(--card-2); }
+.pantry-cta-badge {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 2.5rem; height: 2.5rem;
+  border-radius: var(--r-md);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.pantry-cta-copy { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.15rem; }
+.pantry-cta-copy b { font: 600 var(--t-sm) Poppins, sans-serif; }
+.pantry-cta-copy small { color: var(--muted); font-size: var(--t-xs); line-height: 1.35; }
+.pantry-cta-go { flex: 0 0 auto; color: var(--muted); }
+
+/* --- Perfil ---------------------------------------------------------------- */
+
+.profile-head { display: flex; align-items: center; gap: var(--s-4); margin: var(--s-2) 0 var(--s-5); }
+.profile-head h2 { font-size: var(--t-xl); }
+.avatar-lg { width: 3.5rem; height: 3.5rem; font-size: var(--t-lg); }
 
 .profile-card, .form-card, .danger-zone {
   padding: var(--s-5) var(--s-4);
   margin-top: var(--s-4);
   display: flex; flex-direction: column; gap: var(--s-4);
 }
-
 .facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-4); margin: 0; }
-.facts dt { font: 600 var(--t-xs) Poppins, sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.facts dt {
+  font: 700 var(--t-xs) Poppins, sans-serif;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .facts dd { margin: var(--s-1) 0 0; font: 700 var(--t-lg) Poppins, sans-serif; color: var(--ink); }
 
 .habits { padding-top: var(--s-4); border-top: 1px solid var(--line); }
 .habits h3 { font-size: var(--t-sm); margin-bottom: var(--s-2); }
 
+.macro-modo { display: flex; justify-content: center; }
+.macro-modo .seg { width: 100%; }
+.macro-modo .seg label { flex: 1; }
+.gkg-row {
+  display: grid;
+  grid-template-columns: var(--tap) minmax(4.5rem, 1fr) auto var(--tap);
+  align-items: center;
+  gap: var(--s-2);
+}
+.gkg-row input {
+  min-height: var(--tap);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.gkg-unit {
+  font: 600 var(--t-sm) Poppins, sans-serif;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.error { color: var(--danger); font-weight: 600; }
+
 .btn-danger { background: var(--danger); color: #fff; }
+.delete { display: flex; flex-direction: column; gap: var(--s-3); }
 .delete > summary {
   cursor: pointer; min-height: var(--tap);
   display: flex; align-items: center;
   font: 600 var(--t-sm) Poppins, sans-serif; color: var(--danger);
 }
-.delete { display: flex; flex-direction: column; gap: var(--s-3); }
 
-/* --- Opinar --------------------------------------------------------------- */
+/* --- Opinar ---------------------------------------------------------------- */
 
 fieldset.field { border: none; padding: 0; margin: 0; }
-fieldset.field legend { padding: 0; font: 600 var(--t-sm) Poppins, sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
-
-.regen { margin-top: var(--s-5); }
-
-/* --- Entrada (login, registro, recuperación) ------------------------------ */
-
-/* Sin clases, estas pantallas iban con `style=` inline — que la CSP bloquea.
-   El resultado era una tarjeta sin ancho ni padding, desbordada. */
-.auth-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--s-6) var(--s-4);
+fieldset.field legend {
+  padding: 0 0 var(--s-2);
+  font: 700 var(--t-xs) Poppins, sans-serif;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.auth-card {
-  width: 100%;
-  /* Un flex item no baja de su contenido salvo que se le diga: sin esto, en un
-     móvil de 390 px la tarjeta se quedaba en 400 y desbordaba. */
-  min-width: 0;
-  max-width: min(25rem, 100%);
-  padding: var(--s-8) var(--s-6);
+
+/* --- Generando ------------------------------------------------------------- */
+
+.wait-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
-}
-.auth-brand { display: flex; align-items: center; gap: var(--s-2); font: 800 1.25rem Poppins; }
-.auth-card h1 { margin-top: var(--s-3); }
-.auth-card form { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-2); }
-.auth-alt { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-4) 0 var(--s-2); }
-.auth-alt::before, .auth-alt::after {
-  content: ''; flex: 1; height: 1px; background: var(--line);
-}
-.auth-alt span { font: 500 var(--t-sm) Poppins; color: var(--muted); }
-.auth-foot { text-align: center; font: 500 var(--t-sm) Poppins; color: var(--muted); margin-top: var(--s-3); }
-.auth-foot a { color: var(--brand); font-weight: 600; }
-.auth-social + .auth-social { margin-top: var(--s-2); }
-
-/* --- Generando ------------------------------------------------------------ */
-
-.gen-state {
-  display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
-  padding: var(--s-8) var(--s-4);
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  padding: var(--s-6);
+  background: var(--bg);
   text-align: center;
 }
-.gen-state .icon { font-size: 2.5rem; color: var(--brand); }
-.gen-state-error .icon { color: var(--danger); }
-.gen-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-3);
-  justify-content: center;
-  margin-top: var(--s-4);
+.wait-overlay[hidden] { display: none; }
+.day-done { cursor: pointer; }
+
+.gen-state {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s-4);
+  padding: var(--s-6) var(--s-2);
+  text-align: center;
+  animation: rise var(--dur-3) var(--ease-out);
 }
-.share-day { margin-top: var(--s-3); }
-.gen-spin { animation: spin 1.2s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.gen-plate {
+  width: min(48vw, 11rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.45);
+}
+.gen-plate .plate-img {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  animation: plate-spin 12s linear infinite;
+}
+.gen-title { font-size: var(--t-2xl); }
+.gen-msg { color: var(--muted); font-size: var(--t-sm); }
 
-/* --- Admin ---------------------------------------------------------------- */
+.gen-steps {
+  list-style: none;
+  display: flex; flex-direction: column; gap: var(--s-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+.gen-step {
+  display: flex; align-items: center; gap: var(--s-2);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--faint);
+}
+.gen-step .icon { font-size: 1.25rem; }
+.gen-step.on { color: var(--ink); font-weight: 700; }
+.gen-step.on .icon { color: var(--brand); animation: pulse 1.4s ease-in-out infinite; }
+.gen-step.is-done { color: var(--muted); }
+.gen-step.is-done .icon { color: var(--ok); }
 
-.admin-new { padding: var(--s-4); margin: var(--s-4) 0; }
-.admin-new > summary { cursor: pointer; font: 700 var(--t-md) Poppins; }
-.admin-new form { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-4); }
+/* Lo que está por llegar, dibujado a medias: la espera enseña la forma del
+   resultado en vez de un reloj girando en el vacío. */
+.gen-skeletons { display: flex; flex-direction: column; gap: var(--s-3); width: 100%; }
 
-.admin-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
-.admin-row { padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
-.admin-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
-.admin-acts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
-.admin-acts form { display: flex; gap: var(--s-2); align-items: center; }
-.admin-acts input { width: 6rem; }
-.pill-off { background: var(--warn-soft); color: var(--warn); }
+.gen-state-error { padding-top: var(--s-8); }
+.gen-error-badge {
+  display: flex; align-items: center; justify-content: center;
+  width: 4rem; height: 4rem;
+  border-radius: var(--r-pill);
+  background: var(--warn-soft);
+  color: var(--danger);
+}
+.gen-error-badge .icon { font-size: 2rem; }
+.gen-actions { display: flex; flex-direction: column; gap: var(--s-2); width: 100%; margin-top: var(--s-2); }
 
-/* --- Legal ---------------------------------------------------------------- */
+/* --- Legales y consentimiento ---------------------------------------------- */
 
 .legal { padding: var(--s-5) var(--s-4); margin-top: var(--s-4); }
 .legal h2 { font-size: var(--t-lg); margin-top: var(--s-5); }
@@ -215,50 +399,20 @@ fieldset.field legend { padding: 0; font: 600 var(--t-sm) Poppins, sans-serif; c
 .legal a { color: var(--brand); font-weight: 600; }
 
 .consent-form { display: flex; flex-direction: column; gap: var(--s-4); margin-top: var(--s-5); }
-.consent-check { align-items: flex-start; text-align: left; padding: var(--s-4); border-radius: var(--r-md); }
-
-/* --- Métricas ------------------------------------------------------------- */
-
-.metric-card { padding: var(--s-5) var(--s-4); margin-top: var(--s-4); }
-.metric-card h2 { font-size: var(--t-lg); margin-bottom: var(--s-3); }
-.metric-pair { display: grid; gap: var(--s-4); }
-@media (min-width: 40rem) { .metric-pair { grid-template-columns: 1fr 1fr; } }
-
-.funnel { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
-.funnel-row { display: flex; justify-content: space-between; font: 600 var(--t-sm) Poppins; }
-.funnel-bar { height: 0.5rem; border-radius: var(--r-pill); background: var(--chip); margin-top: var(--s-1); }
-.funnel-fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--brand); }
-/* El ancho en clases y no en `style=`: la CSP bloquea el atributo. */
-.funnel-w0 { width: 0 } .funnel-w1 { width: 10% } .funnel-w2 { width: 20% }
-.funnel-w3 { width: 30% } .funnel-w4 { width: 40% } .funnel-w5 { width: 50% }
-.funnel-w6 { width: 60% } .funnel-w7 { width: 70% } .funnel-w8 { width: 80% }
-.funnel-w9 { width: 90% } .funnel-w10 { width: 100% }
-
-.rank, .tally { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
-.rank li, .tally li {
-  display: flex; align-items: baseline; gap: var(--s-2);
-  font: 500 var(--t-sm) Poppins; color: var(--ink-2);
+.consent-check {
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  text-align: left;
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--card-2);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--ink-2);
+  text-transform: none;
+  letter-spacing: normal;
 }
-.rank li span, .tally li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.rank li b { color: var(--ok); font-size: var(--t-md); }
-.rank-bad li b { color: var(--warn); }
-.rank li i { color: var(--muted); font-style: normal; font-size: var(--t-xs); }
-
-.quotes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
-.quotes li {
-  padding: var(--s-3); border-radius: var(--r-md); background: var(--wash-2);
-  font: 500 var(--t-sm) Poppins; color: var(--ink-2); line-height: 1.55;
+.check {
+  display: flex; align-items: center; gap: var(--s-3);
+  font: 500 var(--t-sm) Poppins, sans-serif;
+  color: var(--ink-2);
+  text-transform: none; letter-spacing: normal;
 }
-
-.funnel-aside {
-  display: flex; flex-wrap: wrap; gap: var(--s-3);
-  margin: var(--s-4) 0 0; padding: var(--s-3) 0 0;
-  list-style: none;
-  border-top: 1px solid var(--line);
-}
-.funnel-aside li {
-  display: flex; align-items: baseline; gap: var(--s-2);
-  font: 500 var(--t-sm) Poppins, sans-serif; color: var(--muted);
-}
-.funnel-aside b { font-weight: 700; color: var(--ink); }
-.funnel-note { margin-top: var(--s-2); font-size: var(--t-xs); }

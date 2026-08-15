@@ -38,9 +38,13 @@ class Perfil:
 
     def como_formulario(self) -> dict[str, object]:
         return {
-            "name": "Prueba", "sex": self.sex, "age_years": self.age_years,
-            "height_cm": self.height_cm, "weight_kg": self.weight_kg,
-            "goal": self.goal, "activity_level": "moderate",
+            "name": "Prueba",
+            "sex": self.sex,
+            "age_years": self.age_years,
+            "height_cm": self.height_cm,
+            "weight_kg": self.weight_kg,
+            "goal": self.goal,
+            "activity_level": "moderate",
             "meal_slots": self.meal_slots,
         }
 
@@ -49,12 +53,33 @@ PERFILES = [
     Perfil("mujer 62 kg, déficit, 5 comidas", "female", 28, 165, 62, "lose_fat"),
     Perfil("mujer 55 kg, déficit, 5 comidas", "female", 35, 158, 55, "lose_fat"),
     Perfil("hombre 90 kg, volumen, 5 comidas", "male", 30, 180, 90, "gain_muscle"),
-    Perfil("hombre 70 kg, mantener, 4 comidas", "male", 45, 175, 70, "maintain",
-           ["desayuno", "almuerzo", "snack_pm", "cena"]),
-    Perfil("mujer 62 kg, déficit, 3 comidas", "female", 28, 165, 62, "lose_fat",
-           ["desayuno", "almuerzo", "cena"]),
-    Perfil("hombre 60 kg, volumen, 3 comidas", "male", 22, 170, 60, "gain_muscle",
-           ["desayuno", "almuerzo", "cena"]),
+    Perfil(
+        "hombre 70 kg, mantener, 4 comidas",
+        "male",
+        45,
+        175,
+        70,
+        "maintain",
+        ["desayuno", "almuerzo", "snack_pm", "cena"],
+    ),
+    Perfil(
+        "mujer 62 kg, déficit, 3 comidas",
+        "female",
+        28,
+        165,
+        62,
+        "lose_fat",
+        ["desayuno", "almuerzo", "cena"],
+    ),
+    Perfil(
+        "hombre 60 kg, volumen, 3 comidas",
+        "male",
+        22,
+        170,
+        60,
+        "gain_muscle",
+        ["desayuno", "almuerzo", "cena"],
+    ),
 ]
 
 
@@ -78,15 +103,18 @@ def _alta(cliente: httpx.Client, perfil: Perfil) -> None:
     """Registro, consentimiento y onboarding: el camino de cualquiera."""
     email = f"smoke{time.time_ns()}@correo.com"
     cliente.post(
-        "/registro", headers={"X-CSRF-Token": _csrf(cliente, "/registro")},
+        "/registro",
+        headers={"X-CSRF-Token": _csrf(cliente, "/registro")},
         data={"name": "Prueba", "email": email, "password": "clave-segura-1"},
     )
     cliente.post(
-        "/consentimiento", headers={"X-CSRF-Token": _csrf(cliente, "/consentimiento")},
+        "/consentimiento",
+        headers={"X-CSRF-Token": _csrf(cliente, "/consentimiento")},
         data={"acepta": "1"},
     )
     cliente.post(
-        "/onboarding", headers={"X-CSRF-Token": _csrf(cliente, "/onboarding")},
+        "/onboarding",
+        headers={"X-CSRF-Token": _csrf(cliente, "/onboarding")},
         data=perfil.como_formulario(),
     )
 
@@ -100,9 +128,10 @@ def _generar(cliente: httpx.Client) -> tuple[bool, str, float]:
         return False, "no arrancó: " + _texto(respuesta.text)[:160], 0.0
 
     while time.monotonic() - inicio < TIMEOUT_S:
-        html = cliente.get("/menu/estado", params={"job": job.group(1), "n": 0}).text
-        if "Todo listo" in html:
+        resp = cliente.get("/menu/estado", params={"job": job.group(1), "n": 0})
+        if resp.headers.get("HX-Redirect") == "/":
             return True, "", time.monotonic() - inicio
+        html = resp.text
         if "No se pudo" in html or "interrump" in html:
             return False, _texto(html)[:200], time.monotonic() - inicio
         time.sleep(1)

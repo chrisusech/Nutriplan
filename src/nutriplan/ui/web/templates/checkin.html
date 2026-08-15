@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Cierra tu semana{% endblock %}
+{% block page_class %}page-checkin{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="/" aria-label="Volver"><span class="icon">arrow_back</span></a>
+<h1 class="app-title">{% if already %}Actualiza tu cierre{% else %}Cierra tu semana{% endif %}</h1>
+{% endblock %}
+
+{% block content %}
+{% set peso_actual = (last_weight or 70) | float %}
+{% set peso_entero = peso_actual | int %}
+{% set peso_decimal = ((peso_actual - peso_entero) * 10) | round | int %}
+
+<section class="checkin">
+  <span class="onb-badge"><span class="icon">flag_circle</span></span>
+  {% if recap %}
+  <div class="card recap">
+    <p class="eyebrow">Tu semana</p>
+    <p class="recap-kcal">{{ recap.kcal_line }}</p>
+    <ul class="recap-facts">
+      <li>{{ recap.meals_line }}</li>
+      <li>{{ recap.out_line }}</li>
+    </ul>
+    <p class="recap-verdict">{{ recap.verdict_line }}</p>
+  </div>
+  {% endif %}
+  <h2>¿Cuánto pesas hoy?</h2>
+  <p class="onb-hint">Con tu peso adaptamos las kcal, y con lo que nos cuentes
+     armamos la semana siguiente a tu medida.</p>
+
+  {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/check-in" class="checkin-form"
+        data-wait-plate
+        data-wait-title="Adaptando tu semana…"
+        data-wait-msg="Leemos tus comentarios y ajustamos las kcal.">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+
+    <button type="button" class="weigh" data-sheet-open="sheet-peso">
+      <span class="weigh-value" data-display="weight_kg">{{ peso_actual }} kg</span>
+      <span class="weigh-hint">Toca para girar la rueda</span>
+    </button>
+    <input type="hidden" name="weight_kg" value="{{ peso_actual }}">
+
+    {% if not closure or not closure.is_first_week %}
+    <label class="field" for="comentario"><span>¿Cómo te fue esta semana?</span>
+      <textarea id="comentario" name="comentario" rows="4" maxlength="1200"
+                placeholder="Qué te gustó, qué no volverías a comer, si te faltó tiempo para cocinar…"
+                required>{{ last_comment or '' }}</textarea>
+    </label>
+    <p class="muted">Esto es lo que leemos para ajustar tu semana siguiente.</p>
+    {% endif %}
+
+    <button class="btn btn-primary btn-big btn-block" type="submit">
+      <span class="icon">check</span>Guardar y adaptar
+    </button>
+  </form>
+
+  {% if closure and not closure.is_first_week %}
+  <div class="card closure">
+    <div class="closure-bar" role="progressbar"
+         aria-valuenow="{{ closure.progress }}" aria-valuemin="0" aria-valuemax="100">
+      <span class="closure-fill" data-fill="{{ closure.progress_bucket }}"></span>
+    </div>
+    <ul class="closure-steps">
+      <li class="{{ 'done' if closure.has_weight else '' }}">
+        <span class="icon">{{ 'check_circle' if closure.has_weight else 'radio_button_unchecked' }}</span>
+        <span>Tu peso de esta semana</span>
+      </li>
+      <li class="{{ 'done' if closure.has_comment else '' }}">
+        <span class="icon">{{ 'check_circle' if closure.has_comment else 'radio_button_unchecked' }}</span>
+        <span>Contarnos cómo te fue</span>
+      </li>
+    </ul>
+    {% if closure.ratings %}
+    <p class="muted">Has calificado {{ closure.ratings }} plato{{ 's' if closure.ratings != 1 else '' }} — ayuda, no es obligatorio.</p>
+    {% endif %}
+    <p class="muted">¿Algo que no quieres volver a ver?
+       <a href="/mis-alimentos">Revisa tus alimentos</a>.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% include "partials/sheet_peso.html" %}
+{% endblock %}

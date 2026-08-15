@@ -1,22 +1,30 @@
 """Schema dinámico de selección por cliente (ADR-04).
 
 El JSON Schema se construye en tiempo de ejecución inyectando el enum de
-food_ids permitidos: el modelo NO PUEDE elegir un alimento fuera de la lista
+ids permitidos: el modelo NO PUEDE elegir un alimento fuera de la lista
 ni inventar uno — Structured Outputs lo rechaza en el borde.
+
+Con la IA usamos alias cortos (`f0`, `f1`…): los UUID hinchan el schema y
+Gemini truncaba/rompía el JSON de la semana. El motor offline sigue con UUID.
 """
 
 from collections.abc import Sequence
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from nutriplan.domain.critique import food_aliases
 from nutriplan.domain.models import FoodItem, MealSlot
 
 
 def build_selection_schema(
-    allowed: list[FoodItem], slots: Sequence[MealSlot] | None = None
+    allowed: list[FoodItem],
+    slots: Sequence[MealSlot] | None = None,
+    *,
+    use_aliases: bool = False,
 ) -> type[BaseModel]:
-    """PlanSelection cuyo food_ids es Literal[<ids permitidos>].
+    """PlanSelection cuyo food_ids es Literal[<ids o alias permitidos>].
 
     `slots` son las comidas que come ESTE cliente: el día tiene tantas comidas como
     él coma, no siempre cinco.
@@ -25,7 +33,10 @@ def build_selection_schema(
         raise ValueError("El conjunto permitido está vacío; no se puede generar")
 
     n_meals = len(slots) if slots else len(MealSlot)
-    ids = tuple(sorted(str(f.id) for f in allowed))
+    if use_aliases:
+        ids = tuple(food_aliases(allowed))
+    else:
+        ids = tuple(sorted(str(f.id) for f in allowed))
     food_id_literal = Literal[ids]  # type: ignore[valid-type]
 
     meal_model = create_model(
@@ -34,6 +45,7 @@ def build_selection_schema(
         slot=(MealSlot, ...),
         food_ids=(list[food_id_literal], Field(min_length=1, max_length=4)),
         free_salad=(bool, False),
+        dish_name=(str | None, Field(default=None, max_length=80)),
     )
     day_model = create_model(
         "DaySelectionStrict",
@@ -46,3 +58,12 @@ def build_selection_schema(
         __config__=ConfigDict(extra="forbid"),
         days=(list[day_model], Field(min_length=7, max_length=7)),  # type: ignore[valid-type]
     )
+
+
+def resolve_selection_aliases(raw: BaseModel, aliases: dict[str, UUID]) -> dict[str, object]:
+    """Traduce f0… → UUID string para `PlanSelection`."""
+    data = raw.model_dump()
+    for day in data["days"]:
+        for meal in day["meals"]:
+            meal["food_ids"] = [str(aliases[a]) for a in meal["food_ids"]]
+    return data

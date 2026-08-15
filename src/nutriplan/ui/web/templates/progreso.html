@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Mi progreso{% endblock %}
+{% block page_class %}page-progress{% endblock %}
+
+{% block head_lead %}
+<div>
+  <p class="app-kicker">Tu historia</p>
+  <h1 class="app-title">Mi progreso</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if not semanas %}
+<div class="empty">
+  <span class="icon">insights</span>
+  <h2>Todavía no hay historia</h2>
+  <p>Cada cierre de semana deja aquí tu peso, tus kcal y cómo te fue.</p>
+  <a class="btn btn-primary btn-big" href="/check-in">Empezar por mi peso</a>
+</div>
+{% else %}
+
+<section class="card prog-hero">
+  <div class="prog-hero-top">
+    <div>
+      <p class="eyebrow">Peso de hoy</p>
+      <p class="prog-now">{{ semanas[0].weight_kg }} <span>kg</span></p>
+    </div>
+    {% if total_delta is not none and semanas|length > 1 %}
+    <span class="pill {{ 'pill-up' if total_delta > 0 else 'pill-down' }}">
+      {{ '%+.1f'|format(total_delta) }} kg
+    </span>
+    {% endif %}
+  </div>
+
+  {% if grafica %}
+  <svg class="prog-chart" viewBox="0 0 320 120"
+       role="img" aria-label="Tu peso semana a semana">
+    {% for b in grafica %}
+    <rect class="prog-bar {{ 'is-now' if b.destacada }}" rx="4"
+          x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"></rect>
+    {% endfor %}
+  </svg>
+  <p class="muted prog-chart-foot">
+    <span>{{ semanas[-1].week_start.strftime('%d/%m') }}</span>
+    <span>{{ semanas|length }} semana{{ 's' if semanas|length != 1 else '' }}</span>
+    <span>{{ semanas[0].week_start.strftime('%d/%m') }}</span>
+  </p>
+  {% endif %}
+</section>
+
+{% if grafica_kcal %}
+<section class="card prog-hero">
+  <p class="eyebrow">Kcal semanales</p>
+  <p class="prog-now">{{ semanas[0].kcal_eaten or 0 }} <span>kcal</span></p>
+  <svg class="prog-chart" viewBox="0 0 320 120"
+       role="img" aria-label="Kcal que comiste cada semana">
+    {% for b in grafica_kcal %}
+    <rect class="prog-bar {{ 'is-now' if b.destacada }}" rx="4"
+          x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"></rect>
+    {% endfor %}
+  </svg>
+  <p class="muted prog-chart-foot">
+    <span>Lo que marcaste como comido</span>
+    {% if semanas[0].kcal_target %}
+    <span>objetivo {{ semanas[0].kcal_target }}</span>
+    {% endif %}
+  </p>
+</section>
+{% endif %}
+
+{% if grafica_dias and recap %}
+<section class="card prog-hero">
+  <p class="eyebrow">Esta semana</p>
+  <p class="prog-now">{{ recap.kcal_eaten }} <span>de {{ recap.kcal_target }} kcal</span></p>
+  <p class="muted">{{ recap.verdict_line }}</p>
+  <svg class="prog-chart" viewBox="0 0 320 120"
+       role="img" aria-label="Kcal de cada día de esta semana">
+    {% for b in grafica_dias %}
+    <rect class="prog-bar {{ 'is-now' if b.destacada }}" rx="4"
+          x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"></rect>
+    {% endfor %}
+  </svg>
+  <p class="muted prog-chart-foot">
+    {% for d in dias %}<span>{{ d.label }}</span>{% endfor %}
+  </p>
+</section>
+{% endif %}
+
+<ol class="prog-list">
+  {% for semana in semanas %}
+  <li class="card prog-week">
+    <div class="prog-head">
+      <b>Semana del {{ semana.week_start.strftime('%d/%m') }}</b>
+      <span class="prog-weight">
+        {{ semana.weight_kg }} kg
+        {% if semana.delta_kg is not none %}
+        <span class="pill {{ 'pill-up' if semana.is_gain else 'pill-down' }}">
+          {{ '%+.1f'|format(semana.delta_kg) }}
+        </span>
+        {% endif %}
+      </span>
+    </div>
+    <div class="prog-meta">
+      {% if semana.kcal %}<span class="muted">{{ semana.kcal }} kcal/día</span>{% endif %}
+      {% if semana.kcal_eaten is not none and semana.kcal_target %}
+      <span class="muted">{{ semana.kcal_eaten }} / {{ semana.kcal_target }} kcal</span>
+      {% endif %}
+      {% if semana.dishes %}<span class="muted">{{ semana.dishes }} platos</span>{% endif %}
+      {% if semana.rating_count %}
+      <span class="muted">{{ semana.rating_avg }} ★ ({{ semana.rating_count }})</span>
+      {% endif %}
+    </div>
+    {% if semana.note %}<p class="prog-note">{{ semana.note }}</p>{% endif %}
+    {% if semana.comment %}<p class="muted">«{{ semana.comment }}»</p>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% endif %}
+{% endblock %}

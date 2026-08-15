@@ -68,8 +68,10 @@ def test_el_formulario_trae_el_token_para_poder_enviarlo(app) -> None:
 def test_el_login_social_no_exige_csrf(app) -> None:
     """El ID token llega del plugin nativo, que no tiene cookie ni token."""
     resp = app.post(
-        "/auth/oauth/google", data={"id_token": "x"},
-        headers={"X-CSRF-Token": ""}, follow_redirects=False,
+        "/auth/oauth/google",
+        data={"id_token": "x"},
+        headers={"X-CSRF-Token": ""},
+        follow_redirects=False,
     )
     assert resp.status_code != 403
 
@@ -181,10 +183,12 @@ def test_un_formulario_normal_funciona_con_el_campo_oculto(app) -> None:
     resp = app.post(
         "/registro",
         data={
-            "name": "Ana", "email": "form@correo.com",
-            "password": "clave-segura-1", "_csrf": token,
+            "name": "Ana",
+            "email": "form@correo.com",
+            "password": "clave-segura-1",
+            "_csrf": token,
         },
-        headers={"X-CSRF-Token": ""},   # el helper de tests no interviene
+        headers={"X-CSRF-Token": ""},  # el helper de tests no interviene
         follow_redirects=False,
     )
     assert resp.status_code == 303, resp.text
@@ -198,13 +202,16 @@ def test_las_pantallas_del_usuario_no_usan_estilos_inline(app) -> None:
 
     templates = Path(__file__).resolve().parents[2] / "src/nutriplan/ui/web/templates"
     publicas = [
-        "base.html", "auth.html", "week.html", "onboarding.html",
-        "profile.html", "feedback.html",
-        "password_reset_request.html", "password_reset_confirm.html",
+        "base.html",
+        "auth.html",
+        "week.html",
+        "onboarding.html",
+        "profile.html",
+        "feedback.html",
+        "password_reset_request.html",
+        "password_reset_confirm.html",
     ]
-    con_estilos = [
-        n for n in publicas if 'style="' in (templates / n).read_text(encoding="utf-8")
-    ]
+    con_estilos = [n for n in publicas if 'style="' in (templates / n).read_text(encoding="utf-8")]
     assert not con_estilos, f"la CSP romperá estas pantallas: {con_estilos}"
 
 

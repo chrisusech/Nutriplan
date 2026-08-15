@@ -167,9 +167,7 @@ def test_una_edad_imposible_no_llega_a_calcularse(nutrition_config) -> None:
 
 
 def test_overrides_replace_and_are_recorded(nutrition_config) -> None:
-    targets = compute_targets(
-        make_client(), nutrition_config, overrides={"protein_g": 130.0}
-    )
+    targets = compute_targets(make_client(), nutrition_config, overrides={"protein_g": 130.0})
     assert targets.daily.protein_g == 130.0
     assert targets.overrides == {"protein_g": 130.0}
     # el reparto por comida se recalcula sobre los macros finales
@@ -192,9 +190,7 @@ def test_the_kcal_are_the_result_of_the_macros_never_a_field_apart() -> None:
     # Y con las kcal viejas viajando de acompañantes: mandan los macros.
     con_kcal = apply_overrides(daily, {"protein_g": 120.0, "kcal": 2000.0})
     assert con_kcal.kcal == pytest.approx(120 * 4 + 200 * 4 + 60 * 9, abs=0.1)
-    assert con_kcal.kcal == energy_kcal(
-        con_kcal.protein_g, con_kcal.carb_g, con_kcal.fat_g
-    )
+    assert con_kcal.kcal == energy_kcal(con_kcal.protein_g, con_kcal.carb_g, con_kcal.fat_g)
 
 
 def test_editing_only_the_kcal_closes_with_the_carb() -> None:
@@ -257,9 +253,7 @@ def test_formula_g_per_kg_drives_macros(nutrition_config) -> None:
     assert targets.daily.fat_g == pytest.approx(49.6, abs=0.1)
     assert targets.formula.protein_g_per_kg == 1.6
     # el carbo cierra el invariante energético contra las kcal del objetivo
-    recomposed = (
-        targets.daily.protein_g * 4 + targets.daily.carb_g * 4 + targets.daily.fat_g * 9
-    )
+    recomposed = targets.daily.protein_g * 4 + targets.daily.carb_g * 4 + targets.daily.fat_g * 9
     assert recomposed == pytest.approx(targets.daily.kcal, abs=1.0)
 
 

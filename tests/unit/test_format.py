@@ -6,7 +6,7 @@ porque es lo que la app muestra en pantalla.
 
 from tests.fixtures.plan_builder import catalog_by_name
 
-from nutriplan.ui.web.format import natural_units, portion_text
+from nutriplan.domain.portion_label import natural_units, portion_text
 
 
 def test_a_quien_le_toca_huevo_se_le_dice_cuantos_no_cuantos_gramos() -> None:

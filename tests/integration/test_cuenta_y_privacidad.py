@@ -20,9 +20,7 @@ from nutriplan.ui.web.app import create_app
 
 @pytest.fixture
 def container(tmp_path, monkeypatch) -> Container:
-    monkeypatch.setattr(
-        Settings, "branding_dir", property(lambda _self: tmp_path / "branding")
-    )
+    monkeypatch.setattr(Settings, "branding_dir", property(lambda _self: tmp_path / "branding"))
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path}/cuentas.db",
         anthropic_api_key="",
@@ -61,8 +59,12 @@ def _complete_onboarding(client: TestClient) -> None:
     resp = client.post(
         "/onboarding",
         data={
-            "name": "Ana Pérez", "sex": "female", "age_years": 28,
-            "height_cm": 165, "weight_kg": 62, "goal": "lose_fat",
+            "name": "Ana Pérez",
+            "sex": "female",
+            "age_years": 28,
+            "height_cm": 165,
+            "weight_kg": 62,
+            "goal": "lose_fat",
             "activity_level": "moderate",
             "meal_slots": [s.value for s in MealSlot],
         },
@@ -132,8 +134,11 @@ def test_entrar_con_google_crea_la_cuenta_la_primera_vez(app, monkeypatch) -> No
     async def fake_verify(id_token: str, *, client_id: str) -> VerifiedIdentity:
         assert id_token == "token-de-google"
         return VerifiedIdentity(
-            provider=AuthProvider.GOOGLE, subject="google-sub-1",
-            email="ana@gmail.com", name="Ana Pérez", email_verified=True,
+            provider=AuthProvider.GOOGLE,
+            subject="google-sub-1",
+            email="ana@gmail.com",
+            name="Ana Pérez",
+            email_verified=True,
         )
 
     monkeypatch.setattr("nutriplan.ui.web.routes.auth.verify_google_id_token", fake_verify)
@@ -148,8 +153,11 @@ def test_entrar_con_google_crea_la_cuenta_la_primera_vez(app, monkeypatch) -> No
 def test_quien_ya_entro_con_google_vuelve_a_su_menu_no_al_onboarding(app, monkeypatch) -> None:
     async def fake_verify(id_token: str, *, client_id: str) -> VerifiedIdentity:
         return VerifiedIdentity(
-            provider=AuthProvider.GOOGLE, subject="google-sub-1",
-            email="ana@gmail.com", name="Ana Pérez", email_verified=True,
+            provider=AuthProvider.GOOGLE,
+            subject="google-sub-1",
+            email="ana@gmail.com",
+            name="Ana Pérez",
+            email_verified=True,
         )
 
     monkeypatch.setattr("nutriplan.ui.web.routes.auth.verify_google_id_token", fake_verify)
@@ -169,9 +177,7 @@ def test_un_token_que_no_verifica_no_deja_entrar_a_nadie(app, monkeypatch) -> No
         raise OAuthError("El token de Google no es válido")
 
     monkeypatch.setattr("nutriplan.ui.web.routes.auth.verify_google_id_token", fake_verify)
-    resp = app.post(
-        "/auth/oauth/google", data={"id_token": "falso"}, follow_redirects=False
-    )
+    resp = app.post("/auth/oauth/google", data={"id_token": "falso"}, follow_redirects=False)
     assert resp.status_code == 200
     assert "no es válido" in resp.text
     assert app.get("/", follow_redirects=False).status_code == 303  # sigue fuera
@@ -184,20 +190,56 @@ def test_un_proveedor_desconocido_no_abre_sesion(app) -> None:
 
 
 def test_el_correo_de_una_cuenta_de_correo_no_lo_secuestra_google(app, monkeypatch) -> None:
-    """Enlazar por correo sin más sería un secuestro de cuenta."""
+    """Enlazar por correo sin verificar sería un secuestro de cuenta."""
     _signup(app, email="ana@gmail.com")
     app.post("/logout", follow_redirects=False)
 
     async def fake_verify(id_token: str, *, client_id: str) -> VerifiedIdentity:
         return VerifiedIdentity(
-            provider=AuthProvider.GOOGLE, subject="otro-sub",
-            email="ana@gmail.com", name="Impostor", email_verified=True,
+            provider=AuthProvider.GOOGLE,
+            subject="otro-sub",
+            email="ana@gmail.com",
+            name="Impostor",
+            email_verified=False,
         )
 
     monkeypatch.setattr("nutriplan.ui.web.routes.auth.verify_google_id_token", fake_verify)
     resp = app.post("/auth/oauth/google", data={"id_token": "t"}, follow_redirects=False)
     assert resp.status_code == 200
     assert "ya tiene una cuenta" in resp.text
+
+
+def test_google_verificado_con_el_mismo_correo_entra_a_la_cuenta(app, monkeypatch) -> None:
+    """El token de Google ya demostró que el buzón es suyo: no duplicamos."""
+    _signup(app, email="ana@gmail.com")
+    app.post("/logout", follow_redirects=False)
+
+    async def fake_verify(id_token: str, *, client_id: str) -> VerifiedIdentity:
+        return VerifiedIdentity(
+            provider=AuthProvider.GOOGLE,
+            subject="sub-de-ana",
+            email="ana@gmail.com",
+            name="Ana Pérez",
+            email_verified=True,
+        )
+
+    monkeypatch.setattr("nutriplan.ui.web.routes.auth.verify_google_id_token", fake_verify)
+    resp = app.post("/auth/oauth/google", data={"id_token": "t"}, follow_redirects=False)
+    assert resp.status_code == 303
+    home = app.get("/", follow_redirects=False)
+    assert home.headers.get("location", "/") != "/login"
+
+    # Y la contraseña deja de servir. El alta no exige confirmar el correo, así
+    # que esa cuenta pudo haberla creado cualquiera con el correo de Ana: quien
+    # llega con el token de Google es quien tiene el buzón, y el otro se queda
+    # fuera. A partir de aquí Ana entra con Google.
+    app.post("/logout", follow_redirects=False)
+    login = app.post(
+        "/login",
+        data={"email": "ana@gmail.com", "password": "clave-segura-1"},
+        follow_redirects=False,
+    )
+    assert login.status_code != 303
 
 
 # --- Baja de cuenta ---------------------------------------------------------
@@ -207,10 +249,13 @@ def test_quien_borra_su_cuenta_se_lleva_su_perfil_y_sus_menus(app, container) ->
     """Requisito de tienda (Apple 5.1.1(v)) y de decencia."""
     _signup(app)
     _complete_onboarding(app)
-    assert app.post(
-        "/device-tokens",
-        data={"platform": "ios", "token": "token-a-borrar"},
-    ).status_code == 204
+    assert (
+        app.post(
+            "/device-tokens",
+            data={"platform": "ios", "token": "token-a-borrar"},
+        ).status_code
+        == 204
+    )
 
     resp = app.post("/perfil/eliminar", follow_redirects=False)
     assert resp.status_code == 303
@@ -318,9 +363,7 @@ def test_aceptar_deja_constancia_con_fecha(app, container) -> None:
 
     async def leer() -> object:
         async with container.session_factory() as session:
-            cuenta = await container.auth_repo(session).get_by_email_any_provider(
-                "ana@correo.com"
-            )
+            cuenta = await container.auth_repo(session).get_by_email_any_provider("ana@correo.com")
             return cuenta.consent_analytics_at if cuenta else None
 
     assert asyncio.run(leer()) is not None

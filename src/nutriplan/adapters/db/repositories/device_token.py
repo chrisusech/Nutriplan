@@ -15,9 +15,7 @@ class SqlDeviceTokenRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def upsert(
-        self, *, tenant_id: UUID, user_id: UUID, platform: str, token: str
-    ) -> None:
+    async def upsert(self, *, tenant_id: UUID, user_id: UUID, platform: str, token: str) -> None:
         platform = platform.strip().lower()
         token = token.strip()
         if platform not in ALLOWED_PLATFORMS or not token or len(token) > 512:

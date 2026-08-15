@@ -1,19 +1,63 @@
 {% extends "base.html" %}
 {% block title %}Mi semana{% endblock %}
+{% block page_class %}page-week{% endblock %}
+
+{% block head_lead %}
+<div>
+  <p class="app-kicker">{{ 'Hoy es ' ~ day.label if day else 'Tu plan' }}</p>
+  <h1 class="app-title">Mi semana</h1>
+</div>
+{% endblock %}
+
+{% block head_action %}
+{% if plan %}
+<button type="button" class="btn-icon" data-share-day hidden
+        aria-label="Compartir menú" title="Compartir menú">
+  <span class="icon">send</span>
+</button>
+{% endif %}
+<a class="avatar" href="/perfil" aria-label="Mi perfil">{{ iniciales }}</a>
+{% endblock %}
 
 {% block content %}
 {% if not plan %}
-  <div class="empty">
-    <span class="icon">restaurant_menu</span>
-    <h2>Todavía no tienes menú</h2>
-    <p>Genera el tuyo: siete días de comidas pensadas para lo que te gusta y para
-       cómo es tu día de verdad.</p>
-    <form method="post" action="/menu/generar" hx-post="/menu/generar" hx-target="this" hx-swap="outerHTML">
+  {# El "¡Todo listo!" del final del cuestionario: aquí es donde se aterriza
+     después del alta, así que esta pantalla celebra en vez de disculparse. #}
+  <div class="ready" id="menu-flow">
+    <span class="ready-badge"><span class="icon">celebration</span></span>
+    <h2>¡Todo listo{{ ', ' ~ cuenta.name.split(' ')[0] if cuenta and cuenta.name else '' }}!</h2>
+    {% if needs_checkin %}
+    <p class="muted">Primero registra tu peso de esta semana. Con eso ajustamos las
+       kcal y luego generamos tus siete días.</p>
+    <a class="btn btn-primary btn-big btn-block" href="/check-in">
+      <span class="icon">monitor_weight</span>Registrar mi peso
+    </a>
+    {% elif membership and not membership.can_generate %}
+    <p class="muted">{{ membership.hint }}</p>
+    <a class="btn btn-primary btn-big btn-block" href="/soporte">
+      <span class="icon">confirmation_number</span>Activar mi plan
+    </a>
+    {% else %}
+    <p class="muted">Tenemos tu perfil. Calculamos tus siete días con macros y gramos
+       exactos, más la lista de compra de la semana.</p>
+    {% if perfil %}
+    <ul class="ready-facts">
+      <li><span class="icon">target</span>{{ GOAL_META[perfil.goal].title }}</li>
+      <li><span class="icon">restaurant</span>{{ perfil.meal_slots | length }} comidas al día</li>
+      <li><span class="icon">directions_run</span>{{ ACTIVITY_LABELS[perfil.activity_level] }}</li>
+    </ul>
+    {% endif %}
+    {% with n=en_casa_n %}{% include "partials/pantry_link.html" %}{% endwith %}
+    {# El target es todo #menu-flow: si solo se swappea el form, queda el
+       titular encima del loading y corta el relato. #}
+    <form method="post" action="/menu/generar"
+          hx-post="/menu/generar" hx-target="#menu-flow" hx-swap="outerHTML">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <button class="btn btn-primary btn-big" type="submit">
-        <span class="icon">auto_awesome</span>Generar mi menú
+      <button class="btn btn-primary btn-big btn-block" type="submit">
+        <span class="icon">auto_awesome</span>Generar mi plan
       </button>
     </form>
+    {% endif %}
   </div>
 {% else %}
 
@@ -22,100 +66,37 @@
     <a class="day {% if d.index == dia %}on{% endif %} {% if d.is_today %}today{% endif %}"
        href="/?dia={{ d.index }}"
        {% if d.index == dia %}aria-current="page"{% endif %}>
-      <span>{{ d.short }}</span>
+      <span class="day-short">{{ d.short }}</span>
       <span class="n">{{ d.index + 1 }}</span>
     </a>
     {% endfor %}
   </nav>
 
-  <section class="day-summary" aria-label="Resumen del día">
-    <div>
-      <div class="kcal">{{ day.kcal }} <span>kcal</span></div>
-      <div class="muted">{{ day.label }}</div>
-    </div>
-    <div class="macros">
-      <div class="macro p"><b>{{ day.protein_g }}</b>Proteína</div>
-      <div class="macro c"><b>{{ day.carb_g }}</b>Carbos</div>
-      <div class="macro f"><b>{{ day.fat_g }}</b>Grasas</div>
-    </div>
-    <button type="button" class="btn btn-outline share-day" data-share-day hidden>
-      <span class="icon">send</span>Compartir
-    </button>
-  </section>
+  <div id="dia-track">
+  {% include "partials/dia_track.html" %}
+  </div>
 
-  <ul class="meals">
-    {% for meal in day.meals %}
-    <li>
-      <details class="meal" {% if loop.first %}open{% endif %}>
-        <summary>
-          <span class="meal-icon"><span class="icon">{{ meal.icon }}</span></span>
-          <span class="meal-text">
-            <span class="meal-name">{{ meal.title }}</span>
-            <span class="meal-sub">{{ meal.slot_label }} · {{ meal.time }}</span>
-          </span>
-          {% if not meal.is_free %}<span class="meal-kcal">{{ meal.kcal }} kcal</span>{% endif %}
-          <span class="meal-chevron"><span class="icon">expand_more</span></span>
-        </summary>
+  {% include "partials/membership.html" %}
 
-        {% if meal.is_free %}
-          <div class="recipe free-meal">
-            <span class="icon">celebration</span>
-            <p>Tu comida libre de la semana. Come lo que quieras, sin pesar nada.</p>
-          </div>
-        {% else %}
-          <div class="recipe">
-            <div class="recipe-block">
-              <h4>Ingredientes</h4>
-              <ul class="ingredients">
-                {% for item in meal.ingredients %}<li>{{ item }}</li>{% endfor %}
-              </ul>
-            </div>
-
-            {% if meal.steps %}
-            <div class="recipe-block">
-              <h4>Preparación</h4>
-              <ol class="steps">
-                {% for step in meal.steps %}<li>{{ step }}</li>{% endfor %}
-              </ol>
-              <div class="recipe-meta">
-                {% if meal.prep_minutes %}
-                <span class="pill"><span class="icon">schedule</span>{{ meal.prep_minutes }} min</span>
-                {% endif %}
-                {% if meal.difficulty %}
-                <span class="pill"><span class="icon">signal_cellular_alt</span>{{ meal.difficulty }}</span>
-                {% endif %}
-              </div>
-              {% if meal.tips %}<p class="tip">💡 {{ meal.tips }}</p>{% endif %}
-            </div>
-            {% endif %}
-
-            <form class="rate" method="post" action="/calificar">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-              <input type="hidden" name="dia" value="{{ dia }}">
-              <input type="hidden" name="slot" value="{{ meal.slot }}">
-              <span class="rate-label">¿Qué tal estuvo?</span>
-              {% for n in [1, 2, 3, 4, 5] %}
-              <button class="star {% if meal.rating and n <= meal.rating %}on{% endif %}"
-                      name="rating" value="{{ n }}" type="submit"
-                      aria-label="{{ n }} de 5">
-                <span class="icon {% if meal.rating and n <= meal.rating %}fill{% endif %}">star</span>
-              </button>
-              {% endfor %}
-            </form>
-          </div>
-        {% endif %}
-      </details>
-    </li>
-    {% endfor %}
-  </ul>
-
-  {% if can_regenerate %}
-  <form method="post" action="/menu/generar" class="regen" hx-post="/menu/generar" hx-target="this" hx-swap="outerHTML">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  {% if needs_checkin %}
+  {# La frase la arma el dominio (`closure.hint`): rehacerla aquí es como se
+     acaba diciendo dos cosas distintas en dos pantallas. #}
+  <div class="alert checkin-banner">
+    <span>{{ closure.hint if closure and closure.hint else 'Es momento de cerrar tu semana.' }}</span>
+    <a class="btn btn-primary" href="/check-in">Cerrar mi semana</a>
+  </div>
+  {% elif can_regenerate %}
+  {% with n=en_casa_n %}{% include "partials/pantry_link.html" %}{% endwith %}
+  <form method="post" action="/menu/generar" class="regen"
+        hx-post="/menu/generar" hx-target="main" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline btn-block" type="submit">
       <span class="icon">refresh</span>Generar otra semana
     </button>
   </form>
+  {% elif waiting_sunday %}
+  {% with n=en_casa_n %}{% include "partials/pantry_link.html" %}{% endwith %}
+  <p class="alert">El domingo preparamos tu siguiente menú.</p>
   {% elif unlock_hint %}
   <p class="alert">{{ unlock_hint }}</p>
   {% endif %}

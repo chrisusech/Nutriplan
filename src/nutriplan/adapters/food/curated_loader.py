@@ -96,9 +96,7 @@ def load_curated_foods(csv_path: Path) -> list[FoodItem]:
                     tags=_semicolons(row, "tags"),
                     aliases=_semicolons(row, "aliases"),
                     default_unit_g=_number(row, "default_unit_g"),
-                    unit_granularity=UnitGranularity(
-                        _text(row, "unit_granularity") or "grams"
-                    ),
+                    unit_granularity=UnitGranularity(_text(row, "unit_granularity") or "grams"),
                     unit_name=_text(row, "unit_name") or None,
                     portion_min_g=_number(row, "portion_min_g"),
                     portion_max_g=_number(row, "portion_max_g"),

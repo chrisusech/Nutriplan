@@ -9,9 +9,9 @@ import pytest
 
 from nutriplan.adapters.llm.heuristic import HeuristicSelector
 from nutriplan.adapters.llm.mock_client import MockLLMClient
+from nutriplan.adapters.llm.offline_engine import build_offline_engine
 from nutriplan.adapters.llm.template_selector import InsufficientDishes
 from nutriplan.application.generate_plan import (
-    _selector_for,
     generate_cycle,
     generate_plan_for_client,
 )
@@ -81,6 +81,8 @@ def _food() -> FoodItem:
 def test_si_el_catalogo_no_alcanza_cae_al_heuristico(
     nutrition_config: NutritionConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Quedarse sin platos que ofrecer no puede dejar a nadie sin menú."""
+
     def _boom(*_a: object, **_k: object) -> None:
         raise InsufficientDishes("sin platos")
 
@@ -88,11 +90,14 @@ def test_si_el_catalogo_no_alcanza_cae_al_heuristico(
         "nutriplan.adapters.llm.template_selector.TemplateSelector.__init__",
         _boom,
     )
-    catalog = MealCatalog(version="t", classes={}, templates=())
-    selector = _selector_for(
-        None, [_food()], _targets(), nutrition_config, 0, catalog, select_foods=False
+    motor = build_offline_engine(
+        allowed=[_food()],
+        daily=_targets().daily,
+        config=nutrition_config,
+        seed=0,
+        catalog=MealCatalog(version="t", classes={}, templates=()),
     )
-    assert isinstance(selector, HeuristicSelector)
+    assert isinstance(motor, HeuristicSelector)
 
 
 @pytest.mark.asyncio
@@ -115,6 +120,7 @@ async def test_sin_alimentos_generate_plan_falla_claro(
             client_repo=client_repo,
             config=nutrition_config,
             llm=None,
+            offline_engine=build_offline_engine,
             prompts_dir=Path("prompts"),
             model="engine-v1",
         )
@@ -127,16 +133,13 @@ async def test_con_refine_names_el_plan_queda_marcado(
     slots = [MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER]
     macros = MacroTargets(kcal=400, protein_g=30, carb_g=40, fat_g=10)
     meals = [
-        MealEntry(slot=s, computed=macros, dish_name=f"Plato {s.value}", items=[])
-        for s in slots
+        MealEntry(slot=s, computed=macros, dish_name=f"Plato {s.value}", items=[]) for s in slots
     ]
     day_macros = MacroTargets(kcal=1200, protein_g=90, carb_g=120, fat_g=30)
-    week = [
-        DayPlan(day_index=i, meals=meals, totals=day_macros) for i in range(7)
-    ]
+    week = [DayPlan(day_index=i, meals=meals, totals=day_macros) for i in range(7)]
 
-    async def _ok_week(**_k: object) -> tuple[list[DayPlan], list[str]]:
-        return week, []
+    async def _ok_week(**_k: object) -> tuple[list[DayPlan], list[str], str]:
+        return week, [], "engine-v1"
 
     class _Refined:
         days = week
@@ -144,12 +147,8 @@ async def test_con_refine_names_el_plan_queda_marcado(
     async def _refine(**_k: object) -> _Refined:
         return _Refined()
 
-    monkeypatch.setattr(
-        "nutriplan.application.generate_plan._generate_week", _ok_week
-    )
-    monkeypatch.setattr(
-        "nutriplan.application.generate_plan.refine_week", _refine
-    )
+    monkeypatch.setattr("nutriplan.application.generate_plan._generate_week", _ok_week)
+    monkeypatch.setattr("nutriplan.application.generate_plan.refine_week", _refine)
 
     cycle = await generate_cycle(
         client=_client(meal_slots=slots),
@@ -157,8 +156,10 @@ async def test_con_refine_names_el_plan_queda_marcado(
         allowed=[_food()],
         config=nutrition_config.for_slots(slots),
         llm=MockLLMClient(),
+        offline_engine=build_offline_engine,
         prompts_dir=Path("prompts"),
         model="gpt-test",
+        input_hash="hash-de-prueba",
         select_foods=False,
         refine_names=True,
     )
@@ -195,11 +196,10 @@ async def test_si_el_llm_falla_seleccionando_entra_el_motor(
         def pop_usage(self) -> dict[str, int]:
             return {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
-    # HeuristicSelector se importa dentro de _selector_for / _generate_week.
-    monkeypatch.setattr(
-        "nutriplan.adapters.llm.heuristic.HeuristicSelector", _FakeOffline
-    )
     from nutriplan.application import generate_plan as gp
+
+    def _motor_de_la_casa(**_k: object) -> _FakeOffline:
+        return _FakeOffline()
 
     with pytest.raises(LLMError, match="offline"):
         await gp._generate_week(
@@ -210,6 +210,7 @@ async def test_si_el_llm_falla_seleccionando_entra_el_motor(
                 [MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER]
             ),
             llm=_Falla(),  # type: ignore[arg-type]
+            offline_engine=_motor_de_la_casa,  # type: ignore[arg-type]
             prompts_dir=Path("prompts"),
             model="test",
             variant=0,

@@ -56,7 +56,6 @@ def supports_strict_schema(model: str) -> bool:
     return any(marker in model for marker in STRICT_SCHEMA_MODELS)
 
 
-
 def _strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
     """El JSON Schema como lo quiere el modo estricto de OpenAI/Groq.
 
@@ -121,6 +120,7 @@ class OpenAICompatClient:
             schema=schema,
             model=model,
             max_tokens=self._max_tokens_select,
+            temperature=0.55,
         )
 
     def pop_usage(self) -> dict[str, int]:
@@ -128,7 +128,14 @@ class OpenAICompatClient:
         return usage
 
     async def _call(
-        self, *, system: str, user: str, schema: type[T], model: str, max_tokens: int
+        self,
+        *,
+        system: str,
+        user: str,
+        schema: type[T],
+        model: str,
+        max_tokens: int,
+        temperature: float = 0.2,
     ) -> T:
         strict = supports_strict_schema(model)
         if strict:
@@ -151,25 +158,29 @@ class OpenAICompatClient:
                     logger.warning("llm_budget_spent", attempt=attempt)
                     break
                 try:
+                    body: dict[str, Any] = {
+                        "model": model,
+                        "temperature": temperature,
+                        "response_format": response_format,
+                        "messages": [
+                            {"role": "system", "content": augmented_system},
+                            {"role": "user", "content": user},
+                        ],
+                    }
+                    # Gemini OpenAI-compat rechaza si van los dos a la vez.
+                    # Groq/OpenAI aceptan `max_completion_tokens`.
+                    if "generativelanguage.googleapis.com" in self._base_url:
+                        body["max_tokens"] = max_tokens
+                    else:
+                        body["max_completion_tokens"] = max_tokens
+                        body["max_tokens"] = max_tokens
                     response = await client.post(
                         f"{self._base_url}/chat/completions",
                         headers={
                             "Authorization": f"Bearer {self._api_key}",
                             "Content-Type": "application/json",
                         },
-                        json={
-                            "model": model,
-                            # Algunos proveedores ya solo aceptan el nombre nuevo;
-                            # los viejos ignoran el que no conocen.
-                            "max_tokens": max_tokens,
-                            "max_completion_tokens": max_tokens,
-                            "temperature": 0.2,
-                            "response_format": response_format,
-                            "messages": [
-                                {"role": "system", "content": augmented_system},
-                                {"role": "user", "content": user},
-                            ],
-                        },
+                        json=body,
                     )
                     response.raise_for_status()
                 except httpx.HTTPStatusError as exc:
@@ -180,7 +191,11 @@ class OpenAICompatClient:
                         and time.monotonic() + wait < deadline
                     ):
                         rate_waits += 1
-                        logger.info("llm_rate_limited", wait_s=round(wait, 1))
+                        logger.info(
+                            "llm_transient_retry",
+                            status=exc.response.status_code,
+                            wait_s=round(wait, 1),
+                        )
                         await asyncio.sleep(wait)
                         continue
                     # El cuerpo trae el motivo real ("schema too complex",
@@ -239,8 +254,8 @@ def _message_content(payload: dict[str, Any]) -> str:
 
 
 def _retry_after(response: httpx.Response) -> float | None:
-    """Segundos que el proveedor pide esperar, o None si no es cuota."""
-    if response.status_code != 429:
+    """Segundos a esperar ante 429/503, o None si no vale reintentar."""
+    if response.status_code not in (429, 503):
         return None
     header = response.headers.get("retry-after")
     if header:
@@ -248,8 +263,9 @@ def _retry_after(response: httpx.Response) -> float | None:
             return min(float(header), MAX_RATE_WAIT_S)
         except ValueError:
             pass
-    # Groq no manda cabecera: el tiempo va dentro del mensaje.
+    # Groq a veces mete el tiempo en el cuerpo.
     match = re.search(r"try again in ([\d.]+)s", response.text)
     if match:
         return min(float(match.group(1)) + 1.0, MAX_RATE_WAIT_S)
-    return None
+    # 503 de Gemini ("high demand") suele ser corto; 429 sin pista, un poco más.
+    return 3.0 if response.status_code == 503 else 8.0

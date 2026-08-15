@@ -1,0 +1,280 @@
+/* Las piezas que se repiten en toda la app: botones, tarjetas, filas, campos.
+
+   Regla de la casa: nada de estilos inline, ni siquiera desde JavaScript (la
+   CSP los bloquea). Lo que cambia en caliente cambia una clase o un `data-`. */
+
+/* --- Botones -------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--s-2);
+  min-height: var(--tap);
+  padding: var(--s-3) var(--s-5);
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  font: 700 var(--t-md) Poppins, sans-serif;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out),
+              background var(--dur-2) var(--ease-out),
+              opacity var(--dur-2) var(--ease-out);
+}
+.btn:active { transform: scale(0.97); }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+
+.btn-primary { background: var(--brand); color: var(--on-brand); box-shadow: var(--sh-2); }
+.btn-outline { background: transparent; border-color: var(--line-strong); color: var(--ink-2); }
+.btn-soft { background: var(--card-2); color: var(--ink); border-color: var(--line); }
+.btn-ghost { background: transparent; color: var(--muted); box-shadow: none; }
+.btn-block { width: 100%; }
+.btn-big { min-height: 3.5rem; font-size: var(--t-lg); padding-inline: var(--s-6); }
+
+.btn-icon {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--tap); height: var(--tap);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.btn-icon .icon { font-size: 1.25rem; }
+.btn-icon:active { transform: scale(0.92); }
+
+/* --- Tarjetas y filas ------------------------------------------------------ */
+
+.card {
+  /* Con padding por defecto: una tarjeta sin variante no deja el texto pegado
+     al borde ni el título asomando fuera de la caja. */
+  padding: var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sh-1);
+}
+
+/* Una lista de filas tocables: el patrón de los ajustes de cualquier app. */
+.rows {
+  display: flex; flex-direction: column;
+  list-style: none; margin: 0; padding: 0;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  border: 1px solid var(--line);
+  overflow: clip;
+}
+.row {
+  display: flex; align-items: center; gap: var(--s-3);
+  width: 100%;
+  min-height: 3.5rem;
+  padding: var(--s-3) var(--s-4);
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: 600 var(--t-md) Poppins, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-out);
+}
+.rows > *:last-child .row, .rows > .row:last-child { border-bottom: none; }
+
+.resto > summary { list-style: none; }
+.resto > summary::-webkit-details-marker { display: none; }
+.resto[open] > summary { border-bottom: 1px solid var(--line); }
+.rows > li:last-child > details[open] > summary.row {
+  border-bottom: 1px solid var(--line);
+}
+.resto[open] > summary .icon { transform: rotate(180deg); }
+.resto-menu { list-style: none; margin: 0; padding: 0; background: var(--wash); }
+.resto-menu .row { font-weight: 500; padding-left: var(--s-5); }
+.resto-menu > li:last-child .row { border-bottom: none; }
+.row:active { background: var(--wash); }
+.row-icon {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 2.25rem; height: 2.25rem;
+  border-radius: var(--r-sm);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.row-icon .icon { font-size: 1.25rem; }
+.row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.row-sub { font: 500 var(--t-xs) Poppins, sans-serif; color: var(--muted); }
+.row-value { flex: 0 0 auto; font: 600 var(--t-md) Poppins, sans-serif; color: var(--brand); }
+.row-value.is-empty { color: var(--muted); }
+.row-chevron { flex: 0 0 auto; color: var(--faint); }
+.row-chevron .icon { font-size: 1.25rem; }
+
+/* --- Tarjeta de opción (la que sustituye a los <select>) ------------------- */
+
+.opts { display: flex; flex-direction: column; gap: var(--s-3); }
+.opt {
+  position: relative;
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out),
+              background var(--dur-2) var(--ease-out),
+              transform var(--dur-1) var(--ease-out);
+}
+.opt:active { transform: scale(0.985); }
+/* El radio de verdad sigue ahí (el formulario lo necesita), solo que no se ve. */
+.opt input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.opt-icon {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 2.25rem; height: 2.25rem;
+  border-radius: var(--r-sm);
+  background: var(--chip);
+  color: var(--muted);
+  transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.opt-icon .icon { font-size: 1.35rem; }
+.opt-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.opt-title { font: 700 var(--t-md) Poppins, sans-serif; color: var(--ink); }
+.opt-sub { font: 500 var(--t-sm) Poppins, sans-serif; color: var(--muted); line-height: 1.4; }
+.opt:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.opt:has(input:checked) .opt-icon { background: var(--brand); color: var(--on-brand); }
+.opt:has(input:checked) .opt-title { color: var(--brand); }
+.opt:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* --- Chips ---------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  min-height: var(--tap);
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  font: 600 var(--t-sm) Poppins, sans-serif;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out),
+              background var(--dur-2) var(--ease-out),
+              transform var(--dur-1) var(--ease-out);
+}
+.chip:active { transform: scale(0.96); }
+.chip input { accent-color: var(--brand); width: 1.05rem; height: 1.05rem; }
+.chip .icon { font-size: 1.125rem; }
+.chip:has(input:checked), .chip.on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+/* Sub-navegación de la consola: en un móvil se desliza en vez de partirse en
+   dos filas, para que el contenido no empiece a media pantalla. */
+.subnav {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-1);
+}
+.subnav::-webkit-scrollbar { display: none; }
+.subnav .chip { flex: 0 0 auto; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s-1);
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--chip);
+  font: 600 var(--t-xs) Poppins, sans-serif;
+  color: var(--muted-3);
+}
+
+/* --- Segmentado (kg / lbs) ------------------------------------------------- */
+
+.seg {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: var(--r-pill);
+  background: var(--chip);
+}
+.seg label {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 4rem; min-height: 2.25rem;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  font: 600 var(--t-sm) Poppins, sans-serif;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.seg input { position: absolute; opacity: 0; width: 0; height: 0; }
+.seg label:has(input:checked) { background: var(--brand); color: var(--on-brand); }
+
+/* --- Campos ---------------------------------------------------------------- */
+
+.field { display: flex; flex-direction: column; gap: var(--s-2); font: 600 var(--t-sm) Poppins; }
+/* Solo la etiqueta de un campo va en versalitas; una tarjeta de opción también
+   es un <label> y no quiere heredar nada de esto. */
+.field > span { color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+input, select, textarea {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: var(--s-3) var(--s-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink);
+  font: 500 var(--t-md) Poppins, sans-serif;
+}
+input::placeholder, textarea::placeholder { color: var(--faint); }
+/* Una casilla no es un campo de texto: sin esto hereda el ancho completo y el
+   alto de un input y sale como un cuadro blanco enorme al lado de su etiqueta. */
+input[type="checkbox"], input[type="radio"] {
+  flex: 0 0 auto;
+  width: 1.15rem; height: 1.15rem;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--brand);
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+.btn:focus-visible, .chip:focus-visible, .row:focus-visible, a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--brand-line); }
+textarea { resize: vertical; min-height: 8rem; line-height: 1.55; }
+
+/* --- Avisos ---------------------------------------------------------------- */
+
+.alert {
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--warn-soft);
+  color: var(--ink-2);
+  font: 600 var(--t-sm) Poppins, sans-serif;
+  line-height: 1.45;
+}
+/* Solo los avisos con icono son una fila: si no, el texto corrido y sus enlaces
+   se romperían en columnas al convertirse cada palabra en un hijo flex. */
+.alert:has(> .icon) { display: flex; align-items: flex-start; gap: var(--s-2); }
+/* Un enlace suelto se tiñe de coral; uno que ya es botón trae su propio color y
+   teñirlo lo dejaba coral sobre coral, o sea invisible. */
+.alert a:not(.btn) { color: var(--brand); }
+.alert-ok { background: var(--ok-soft); }
+
+/* --- Avatar ---------------------------------------------------------------- */
+
+.avatar {
+  display: flex; align-items: center; justify-content: center;
+  width: 2.25rem; height: 2.25rem;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: var(--on-brand);
+  font: 700 var(--t-sm) Poppins, sans-serif;
+  letter-spacing: 0;
+}

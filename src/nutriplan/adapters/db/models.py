@@ -5,7 +5,7 @@ indexado. Los alimentos globales (USDA) viven en foods con tenant_id NULL;
 los custom llevan su tenant_id.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -68,14 +69,52 @@ class UserRow(Base):
     consent_analytics_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Override manual del super_user. NULL = se aplica la regla del BETA.
-    max_menus: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Borrado de cuenta (Apple 5.1.1(v)): se marca y se purga, no se deja huérfano.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PasswordResetTokenRow(Base):
+    """Un enlace de recuperación, y si ya se usó.
+
+    El enlace es un secreto que viaja por correo: se guarda solo su hash, igual
+    que una contraseña. Y se guarda porque un token firmado sin estado no se
+    puede invalidar — el que se filtró servía la hora entera aunque la persona
+    ya hubiera cambiado su clave.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class MembershipGrantRow(Base):
+    """Semanas concedidas a una cuenta. Se inserta, nunca se edita.
+
+    Es el libro mayor del negocio: el saldo de cualquier cuenta se reconstruye
+    sumando sus filas vivas. Cuando exista pasarela, su webhook escribirá aquí
+    con `source='payment'` y `external_ref` = id de la transacción.
+    """
+
+    __tablename__ = "membership_grants"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    weeks: Mapped[int] = mapped_column(SmallInteger)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), index=True)
+    granted_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    external_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 class ClientRow(Base):
@@ -140,6 +179,26 @@ class ClientFoodBanRow(Base):
     food_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("foods.id"))
 
 
+class ClientPantryItemRow(Base):
+    """Lo que la persona dice que YA tiene en casa esta semana.
+
+    Tabla propia y no un tercer estado de las preferencias porque contesta otra
+    pregunta y caduca: las preferencias dicen "esto lo como", esto dice "esto lo
+    tengo en la nevera AHORA". Va anclado al lunes de la semana para que se vacíe
+    solo — nadie quiere entrar a desmarcar el arroz de la semana pasada.
+    """
+
+    __tablename__ = "client_pantry_items"
+    __table_args__ = (UniqueConstraint("client_id", "food_id", "week_start"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
+    food_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("foods.id"))
+    week_start: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class FoodRow(Base):
     __tablename__ = "foods"
 
@@ -170,16 +229,65 @@ class FoodRow(Base):
     meal_slots: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     # Y CUÁNTO encaja en cada una ({"almuerzo": 3}). Vacío = todo al peso por
     # defecto, que es como se comportaba el catálogo entero antes de existir esto.
-    slot_weights: Mapped[dict[str, int]] = mapped_column(
-        JSON, default=dict, server_default="{}"
-    )
+    slot_weights: Mapped[dict[str, int]] = mapped_column(JSON, default=dict, server_default="{}")
     # Alimentos libres (ensalada, café, gelatina): el solver los ignora.
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     free_text: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
 
+class WeightEntryRow(Base):
+    """Pesaje semanal. Unique (client_id, week_start): un registro por semana."""
+
+    __tablename__ = "weight_entries"
+    __table_args__ = (
+        UniqueConstraint("client_id", "week_start", name="weight_entries_client_week"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
+    weight_kg: Mapped[float] = mapped_column(Float)
+    week_start: Mapped[date] = mapped_column(Date)
+    logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Dos textos distintos que no hay que confundir: `note` la escribe la IA para
+    # narrar el ajuste; `client_comment` lo escribe la persona y es la materia
+    # prima del ajuste de la semana siguiente.
+    note: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    client_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ClientTasteSignalRow(Base):
+    """Lo que aprendimos del gusto de alguien en una semana concreta.
+
+    Append-only y por semana: el plan de la semana 6 se apoya en todo lo dicho
+    hasta la 5, y siempre se puede auditar de qué comentario salió cada veto.
+    """
+
+    __tablename__ = "client_taste_signals"
+    __table_args__ = (
+        UniqueConstraint("client_id", "week_start", name="taste_signals_client_week"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
+    week_start: Mapped[date] = mapped_column(Date, index=True)
+    # Ids de alimentos del catálogo (la IA solo puede nombrar los permitidos).
+    avoid_food_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    prefer_food_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Peticiones en prosa que no son un alimento ("menos fritos", "más variedad").
+    adjustments: Mapped[list[str]] = mapped_column(JSON, default=list)
+    source: Mapped[str] = mapped_column(String(10), default="ai")  # ai | rules
+    model: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class NutritionTargetsRow(Base):
     __tablename__ = "nutrition_targets"
+    # La tabla es append-only y siempre se lee la última fila de alguien.
+    __table_args__ = (
+        Index("ix_nutrition_targets_client_at", "tenant_id", "client_id", "computed_at"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
@@ -199,12 +307,19 @@ class NutritionTargetsRow(Base):
 
 class PlanCycleRow(Base):
     __tablename__ = "plan_cycles"
-    __table_args__ = (UniqueConstraint("tenant_id", "input_hash", "variant"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "input_hash", "variant"),
+        # Casi todas las lecturas son "los planes de esta persona en esta semana".
+        Index("ix_plan_cycles_client_week", "tenant_id", "client_id", "week_start"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
     targets_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("nutrition_targets.id"))
+    # El lunes ISO al que pertenece este menú. Es la misma llave que usa
+    # weight_entries, así que el pesaje y el plan de una semana se encuentran.
+    week_start: Mapped[date] = mapped_column(Date, index=True)
     variant: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # El numero humano del plan: "Plan nutricional v3". `variant` es su gemelo tecnico
     # (entra en el input_hash para que dos versiones no colisionen); esto es lo que el
@@ -214,7 +329,9 @@ class PlanCycleRow(Base):
     config_version: Mapped[str] = mapped_column(String(40))
     prompt_version: Mapped[str] = mapped_column(String(60))
     model: Mapped[str] = mapped_column(String(60))
-    input_hash: Mapped[str] = mapped_column(String(64), index=True)
+    # Sin índice propio: el unique de (tenant_id, input_hash, variant) ya sirve
+    # para la única búsqueda que existe, que siempre lleva el tenant delante.
+    input_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -263,10 +380,9 @@ class MealEntryRow(Base):
     free_salad: Mapped[bool] = mapped_column(Boolean, default=False)
     # LA comida libre: sin alimentos y sin macros. Sus calorías no se cuentan, y el
     # día suma por debajo del objetivo a propósito.
-    is_free_meal: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=false()
-    )
+    is_free_meal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     free_protein: Mapped[bool] = mapped_column(Boolean, default=False)
+    eaten: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     items: Mapped[list["MealItemRow"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin", order_by="MealItemRow.position"
@@ -313,19 +429,6 @@ class GenerationJobRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class AuditLogRow(Base):
-    __tablename__ = "audit_log"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
-    actor_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
-    action: Mapped[str] = mapped_column(String(60))
-    entity_type: Mapped[str] = mapped_column(String(40))
-    entity_id: Mapped[UUID] = mapped_column(Uuid)
-    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
 class DishRecipeRow(Base):
     """Cómo se prepara un plato concreto. Caché GLOBAL, no por tenant.
 
@@ -350,15 +453,36 @@ class DishRecipeRow(Base):
     model: Mapped[str | None] = mapped_column(String(60), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # De qué está hecha y cuánto alimenta la porción con la que se estrenó. Lo
+    # calcula el código desde los `MealItem`; el modelo nunca escribe una cifra.
+    food_ids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    reference_grams: Mapped[dict[str, float]] = mapped_column(
+        JSON, default=dict, server_default="{}"
+    )
+    macros: Mapped[dict[str, float] | None] = mapped_column(JSON, nullable=True)
+
+    # Calidad agregada desde `dish_ratings` por `dish_key`.
+    rating_avg: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    rating_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    times_served: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class DishRatingRow(Base):
     """Qué le pareció el plato. El dato que justifica el BETA."""
 
     __tablename__ = "dish_ratings"
+    # Index unique (no UniqueConstraint): SQLite refleja el UNIQUE como índice
+    # anónimo; UniqueConstraint en el modelo hace que Alembic quiera recrearlo.
     __table_args__ = (
-        UniqueConstraint("plan_cycle_id", "day_index", "slot", name="dish_ratings_one_per_meal"),
+        Index(
+            "dish_ratings_one_per_meal",
+            "plan_cycle_id",
+            "day_index",
+            "slot",
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -375,7 +499,6 @@ class DishRatingRow(Base):
     template_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     dish_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     rating: Mapped[int] = mapped_column(SmallInteger)  # 1-5
-    would_repeat: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -421,9 +544,7 @@ class DeviceTokenRow(Base):
     """Token APNs/FCM de un dispositivo. Uno por (usuario, token)."""
 
     __tablename__ = "device_tokens"
-    __table_args__ = (
-        UniqueConstraint("user_id", "token", name="device_tokens_user_token"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "token", name="device_tokens_user_token"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)

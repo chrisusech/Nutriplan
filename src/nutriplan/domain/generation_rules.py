@@ -42,8 +42,8 @@ SLOT_STRUCTURE: dict[MealSlot, SlotStructure] = {
     MealSlot.BREAKFAST: SlotStructure(
         requires_protein=True,
         requires_carb=True,
-        max_items=3,
-        description="base de huevos/proteína + 1 carbohidrato + 1 grasa opcional",
+        max_items=4,
+        description="base de huevos/proteína + carbohidrato + fruta o grasa opcional",
     ),
     # Un snack no es una comida en pequeño: es saciedad. Puede ser una fruta sola,
     # una manzana con crema de almendras o un yogur griego con fruta. Exigirle
@@ -180,9 +180,7 @@ def validate_selection_structure(
             )
             if rule.requires_carb and not rule.carb_optional and not carb_ok:
                 needed = "fruta" if rule.fruit_as_carb else "carbohidrato"
-                violations.append(
-                    StructureViolation(day.day_index, meal.slot, f"falta {needed}")
-                )
+                violations.append(StructureViolation(day.day_index, meal.slot, f"falta {needed}"))
             if not rule.allows_fat_item and any(c in FAT_GROUP for c in categories):
                 violations.append(
                     StructureViolation(day.day_index, meal.slot, "grasa no permitida en snack")

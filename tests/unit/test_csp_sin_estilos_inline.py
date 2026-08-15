@@ -19,9 +19,7 @@ def test_ninguna_plantilla_usa_el_atributo_style() -> None:
         for i, linea in enumerate(ruta.read_text(encoding="utf-8").splitlines(), 1)
         if re.search(r"\sstyle\s*=\s*[\"']", linea)
     ]
-    assert not culpables, (
-        f"La CSP bloqueará estos estilos: {culpables}. Usa una clase."
-    )
+    assert not culpables, f"La CSP bloqueará estos estilos: {culpables}. Usa una clase."
 
 
 def test_el_javascript_no_pinta_estilos_a_mano() -> None:

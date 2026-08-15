@@ -1,0 +1,52 @@
+{# Las tres medidas que se giran en vez de teclearse: girar una rueda es un
+   gesto, teclear "72,4" en un móvil es apuntar y corregir. #}
+
+<dialog class="sheet" id="sheet-edad" data-wheel-sheet
+        data-field="age_years" data-min="13" data-max="100" data-unit="años">
+  <div class="sheet-panel">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <span class="sheet-title">Edad</span>
+      <button type="button" class="btn-icon" data-sheet-close aria-label="Cerrar">
+        <span class="icon">close</span>
+      </button>
+    </div>
+    <div class="wheels">
+      <div class="wheel-frame">
+        <div class="wheel-band"></div>
+        <div class="wheel" data-wheel data-min="13" data-max="100"
+             data-value="{{ edad_actual or 28 }}"></div>
+      </div>
+      <span class="wheel-unit" data-unit-label>años</span>
+    </div>
+    <button type="button" class="btn btn-primary btn-big btn-block" data-sheet-accept>
+      Aceptar
+    </button>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="sheet-altura" data-wheel-sheet
+        data-field="height_cm" data-min="120" data-max="230" data-unit="cm">
+  <div class="sheet-panel">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <span class="sheet-title">Altura</span>
+      <button type="button" class="btn-icon" data-sheet-close aria-label="Cerrar">
+        <span class="icon">close</span>
+      </button>
+    </div>
+    <div class="wheels">
+      <div class="wheel-frame">
+        <div class="wheel-band"></div>
+        <div class="wheel" data-wheel data-min="120" data-max="230"
+             data-value="{{ altura_actual or 170 }}"></div>
+      </div>
+      <span class="wheel-unit" data-unit-label>cm</span>
+    </div>
+    <button type="button" class="btn btn-primary btn-big btn-block" data-sheet-accept>
+      Aceptar
+    </button>
+  </div>
+</dialog>
+
+{% include "partials/sheet_peso.html" %}

@@ -1,4 +1,4 @@
-version: "2026.07.01"                  # se guarda en cada plan (procedencia)
+version: "2026.08.12"                  # se guarda en cada plan (procedencia)
 activity_factors:
   sedentary: 1.20
   light: 1.375
@@ -39,7 +39,6 @@ kcal_floor:
 carb_floor_g_per_kg: 0.5               # guarda de imposibilidad, no de opinión
 fiber:
   g_per_1000_kcal: 14                  # estándar DRI
-  min_fruit_servings: 2                # fruta al día (digestión)
 # Cuánto del día vale cada comida, MACRO A MACRO (cada columna suma 1.0).
 #
 # Un solo porcentaje por comida no describe ninguna comida real: el desayuno lleva
@@ -77,5 +76,12 @@ generation:
   # llevan huevo al desayuno 5 o 6 días de 7: era un tope que ningún plan de
   # verdad cumple. 4 es conservador y coincide con lo que el motor heurístico ya
   # hacía a mano (`egg_days = 4`).
-  max_protein_repeats_per_week: 5      # misma proteína, máx. N veces en un slot
-  max_carb_repeats_per_week: 5         # mismo carbohidrato, máx. N veces en un slot
+  max_protein_repeats_per_week: 7      # sin tope práctico: 7 días = puede repetir
+  max_carb_repeats_per_week: 7         # priorizar cuadrar macros sobre rotación forzada
+# Check-in semanal: el código mueve kcal; la IA solo explica el resultado.
+adaptation:
+  step_kcal: 150
+  max_raise_kcal: 400
+  tolerance_kg: 0.2
+  lose_fat_too_fast_kg: -1.0
+  gain_muscle_too_fast_kg: 0.75

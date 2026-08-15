@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
+from nutriplan.adapters.llm.offline_engine import build_offline_engine
 from nutriplan.application.compute_targets import compute_and_store_targets
 from nutriplan.application.generate_plan import generate_plan_for_client
 from nutriplan.application.jobs import new_job, run_generation_job
@@ -51,25 +52,50 @@ async def ctx(tmp_path):
 async def _perfil_de_ana(container, repos, session) -> Client:
     """Ana se describe a sí misma en el onboarding, no en un Word."""
     account = await container.auth_repo(session).create_account(
-        tenant_id=DEFAULT_TENANT_ID, tenant_name="Ana Pérez", name="Ana Pérez",
-        email="ana@example.com", password_hash="x",
+        tenant_id=DEFAULT_TENANT_ID,
+        tenant_name="Ana Pérez",
+        name="Ana Pérez",
+        email="ana@example.com",
+        password_hash="x",
     )
     # Los alimentos que Ana dijo que le gustan. Una lista realista y acotada:
     # este test es sobre el flujo completo, no sobre el tamaño del catálogo.
     gustos = {
-        "pechuga de pollo", "huevo entero", "atún en agua", "arroz blanco",
-        "arroz integral", "arepa de maíz", "papa", "avena en hojuelas",
-        "aguacate", "maní natural", "banano", "fresa", "mango",
-        "brócoli", "espinaca", "tomate", "yogur griego natural",
+        "pechuga de pollo",
+        "huevo entero",
+        "atún en agua",
+        "arroz blanco",
+        "arroz integral",
+        "arepa de maíz",
+        "papa",
+        "avena en hojuelas",
+        "aguacate",
+        "maní natural",
+        "banano",
+        "fresa",
+        "mango",
+        "brócoli",
+        "espinaca",
+        "tomate",
+        "yogur griego natural",
     }
     catalog = await repos.foods.list_universe()
     liked = [f.id for f in catalog if f.name_es in gustos]
     return await create_profile(
-        account_id=account.id, tenant_id=DEFAULT_TENANT_ID, name="Ana Pérez",
-        sex=Sex.FEMALE, age_years=28, height_cm=165.0, weight_kg=62.0,
-        goal=Goal.LOSE_FAT, activity_level=ActivityLevel.MODERATE,
-        meal_slots=list(MealSlot), city="Medellín", country="CO",
-        liked_food_ids=liked, restrictions=["no_seafood"],
+        account_id=account.id,
+        tenant_id=DEFAULT_TENANT_ID,
+        name="Ana Pérez",
+        sex=Sex.FEMALE,
+        age_years=28,
+        height_cm=165.0,
+        weight_kg=62.0,
+        goal=Goal.LOSE_FAT,
+        activity_level=ActivityLevel.MODERATE,
+        meal_slots=list(MealSlot),
+        city="Medellín",
+        country="CO",
+        liked_food_ids=liked,
+        restrictions=["no_seafood"],
         eating_pattern_raw="Desayuno rápido, almuerzo en la oficina, entreno de noche.",
         context_tags=["entrena_noche", "come_rapido"],
         client_repo=repos.clients,
@@ -89,9 +115,7 @@ async def test_del_onboarding_al_menu_aprobado(ctx) -> None:
     assert targets.daily.kcal > 1000
 
     # 4) Generación como job persistido (modo offline → heurístico)
-    job = new_job(
-        tenant_id=DEFAULT_TENANT_ID, idempotency_key=f"gen:{client.id}"
-    )
+    job = new_job(tenant_id=DEFAULT_TENANT_ID, idempotency_key=f"gen:{client.id}")
     await repos.jobs.add(job)
     config = container.config_provider.get_nutrition_config()
     job = await run_generation_job(
@@ -104,6 +128,7 @@ async def test_del_onboarding_al_menu_aprobado(ctx) -> None:
         plan_repo=repos.plans,
         config=config,
         llm=None,
+        offline_engine=build_offline_engine,
         prompts_dir=PROMPTS,
         model="offline-heuristic",
     )
@@ -122,6 +147,7 @@ async def test_del_onboarding_al_menu_aprobado(ctx) -> None:
         client_repo=repos.clients,
         config=config,
         llm=None,
+        offline_engine=build_offline_engine,
         prompts_dir=PROMPTS,
         model="offline-heuristic",
     )
@@ -133,22 +159,17 @@ async def test_del_onboarding_al_menu_aprobado(ctx) -> None:
     assert (await repos.clients.get(client.id)).active_plan_id == first.id
 
 
-async def test_the_free_meal_is_a_cell_with_nothing_in_it_and_the_day_aims_lower(
+async def test_quien_marca_comida_libre_igual_recibe_siete_dias_completos(
     ctx,
 ) -> None:
-    """La comida libre de la semana: el domingo en la cena.
-
-    Esa celda no lleva alimentos ni macros. Las demás comidas del domingo conservan
-    su objetivo de siempre, así que el domingo suma POR DEBAJO del objetivo diario —
-    a propósito: es la cena que el cliente se come donde quiera.
-    """
+    """La comida libre se eliminó: el domingo cena también es un plato de casa."""
     container, repos, session, _ = ctx
     foods = await repos.foods.list_universe()
     client = Client(
         id=uuid4(),
         tenant_id=DEFAULT_TENANT_ID,
         user_id=uuid4(),
-        name="Comida libre",
+        name="Sin libre",
         sex=Sex.FEMALE,
         age_years=30,
         height_cm=165,
@@ -165,32 +186,20 @@ async def test_the_free_meal_is_a_cell_with_nothing_in_it_and_the_day_aims_lower
         client=client, config_provider=container.config_provider, targets_repo=repos.targets
     )
     cycle = await generate_plan_for_client(
-        client=client, targets=targets, food_repo=repos.foods, plan_repo=repos.plans,
+        client=client,
+        targets=targets,
+        food_repo=repos.foods,
+        plan_repo=repos.plans,
         client_repo=repos.clients,
         config=container.config_provider.get_nutrition_config(),
-        llm=None, prompts_dir=PROMPTS, model="offline-heuristic",
+        llm=None,
+        offline_engine=build_offline_engine,
+        prompts_dir=PROMPTS,
+        model="offline-heuristic",
     )
-
-    sundays = [d for d in cycle.days if d.day_index == 6]
-    assert len(sundays) == 1, "el menú es de una semana: un solo domingo"
-
-    for sunday in sundays:
-        free = [m for m in sunday.meals if m.is_free_meal]
-        assert len(free) == 1
-        assert free[0].slot is MealSlot.DINNER
-        assert free[0].items == []
-        assert free[0].computed.kcal == 0
-        # Las demás comidas del domingo siguen ahí, con sus alimentos.
-        assert all(m.items for m in sunday.meals if not m.is_free_meal)
-        # Y el domingo apunta más bajo que un día normal.
-        assert sunday.totals.kcal < targets.daily.kcal * 0.95
-
-    # Ningún otro día tiene comida libre, y cuadran contra el objetivo completo.
-    others = [d for d in cycle.days if d.day_index != 6]
-    assert not any(m.is_free_meal for d in others for m in d.meals)
-    assert all(len(d.meals) == 5 for d in others)
-
-    # Y sobrevive al round-trip por la base.
-    reloaded = await repos.plans.get(cycle.id)
-    sunday = next(d for d in reloaded.days if d.day_index == 6)
-    assert any(m.is_free_meal for m in sunday.meals)
+    assert not any(m.is_free_meal for d in cycle.days for m in d.meals)
+    assert all(len(d.meals) == 5 for d in cycle.days)
+    sunday = next(d for d in cycle.days if d.day_index == 6)
+    cena = next(m for m in sunday.meals if m.slot is MealSlot.DINNER)
+    assert cena.items
+    assert cena.computed.kcal > 0

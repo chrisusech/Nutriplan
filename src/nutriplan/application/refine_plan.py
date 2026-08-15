@@ -13,8 +13,8 @@ from uuid import UUID
 
 import structlog
 
-from nutriplan.adapters.llm.prompts import load_prompt
 from nutriplan.application.food_pool import shortlist_for_llm
+from nutriplan.application.prompts import load_prompt
 from nutriplan.domain.critique import (
     CritiqueOutcome,
     apply_critique,
@@ -24,11 +24,12 @@ from nutriplan.domain.critique import (
 from nutriplan.domain.errors import LLMError
 from nutriplan.domain.models import Client, DayPlan, FoodItem, MacroTargets
 from nutriplan.domain.nutrition_config import NutritionConfig
+from nutriplan.domain.taste import TasteProfile
 from nutriplan.ports.llm_client import LLMClient
 
 logger = structlog.get_logger(__name__)
 
-REVIEW_PROMPT_VERSION = 1
+REVIEW_PROMPT_VERSION = 2
 # El relato del onboarding es texto libre de un desconocido: entra delimitado y
 # recortado, y su salida está encerrada por el schema.
 MAX_HABITS_CHARS = 1200
@@ -45,6 +46,7 @@ def build_review_prompt(
     client: Client,
     catalog: dict[UUID, FoodItem],
     aliases: dict[str, UUID] | None = None,
+    taste: TasteProfile | None = None,
 ) -> str:
     """La semana tal como quedó, más quién se la va a comer."""
     by_id = {v: k for k, v in (aliases or food_aliases(list(catalog.values()))).items()}
@@ -74,6 +76,15 @@ def build_review_prompt(
     if client.eating_pattern_raw:
         lines.append(_fence("- Cómo come, en sus palabras", client.eating_pattern_raw))
 
+    if taste is not None and not taste.is_empty:
+        lines.append("\nLO QUE YA NOS DIJO EN SEMANAS ANTERIORES:")
+        if taste.loved_dishes:
+            lines.append(f"- Le encantaron: {', '.join(taste.loved_dishes)}")
+        if taste.rejected_dishes:
+            lines.append(f"- No le gustaron: {', '.join(taste.rejected_dishes)}")
+        if taste.adjustments:
+            lines.append(f"- Pidió: {'; '.join(taste.adjustments)}")
+
     lines.append("\nALIMENTOS PARA SUSTITUIR (id | nombre | categoría):")
     lines += [
         f"- {by_id[f.id]} | {f.name_es} | {f.category.value}"
@@ -93,6 +104,7 @@ async def refine_week(
     llm: LLMClient | None,
     prompts_dir: Path,
     model: str,
+    taste: TasteProfile | None = None,
 ) -> CritiqueOutcome | None:
     """Devuelve la semana refinada, o None si no se pudo refinar.
 
@@ -107,9 +119,7 @@ async def refine_week(
     # menú más un abanico corto para sustituir.
     in_plan = {i.food_id for d in days for m in d.meals for i in m.items if i.food_id}
     shortlist = shortlist_for_llm(allowed)
-    catalog = {
-        f.id: f for f in allowed if f.id in in_plan or f in shortlist
-    }
+    catalog = {f.id: f for f in allowed if f.id in in_plan or f in shortlist}
     prompt = load_prompt(prompts_dir, "plan_review", REVIEW_PROMPT_VERSION)
     aliases = food_aliases(list(catalog.values()))
     schema = build_critique_schema(list(catalog.values()))
@@ -117,7 +127,7 @@ async def refine_week(
     try:
         critique = await llm.extract(
             system=prompt.text,
-            text=build_review_prompt(days, client, catalog, aliases),
+            text=build_review_prompt(days, client, catalog, aliases, taste=taste),
             schema=schema,
             model=model,
         )
@@ -132,5 +142,6 @@ async def refine_week(
         renamed=outcome.renamed,
         swaps_applied=outcome.applied,
         swaps_rejected=len(outcome.rejected),
+        flagged=outcome.flagged,
     )
     return outcome

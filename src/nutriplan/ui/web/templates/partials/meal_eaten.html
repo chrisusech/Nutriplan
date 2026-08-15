@@ -1,0 +1,25 @@
+{# Marcar la comida. Vive dentro de la tarjeta, no a un lado: si va fuera
+   el menú se corre y el check parece de otro componente. #}
+<form class="meal-check" method="post" action="/menu/comi"
+      hx-post="/menu/comi" hx-target="closest .meal-check"
+      hx-swap="outerHTML settle:0s" hx-disabled-elt="find button"
+      {% if progreso %}
+      data-kcal="{{ progreso.kcal }}" data-objetivo="{{ progreso.objetivo }}"
+      data-pct="{{ progreso.pct }}" data-estado="{{ progreso.estado }}"
+      data-eaten-n="{{ progreso.eaten_n }}" data-meals-n="{{ progreso.meals_n }}"
+      data-restante="{{ progreso.restante }}"
+      data-racha="{{ racha or 0 }}"
+      {% for m in progreso.macros %}
+      data-{{ m.key }}="{{ m.value }}"
+      {% endfor %}
+      {% endif %}>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="dia" value="{{ dia }}">
+  <input type="hidden" name="slot" value="{{ meal.slot }}">
+  <input type="hidden" name="eaten" value="{{ '0' if meal.eaten else '1' }}">
+  <button type="submit" class="btn btn-ghost btn-block {% if meal.eaten %}on{% endif %}"
+          aria-pressed="{{ 'true' if meal.eaten else 'false' }}">
+    <span class="icon">{{ 'check_circle' if meal.eaten else 'radio_button_unchecked' }}</span>
+    {{ 'Comido' if meal.eaten else 'Ya lo comí' }}
+  </button>
+</form>

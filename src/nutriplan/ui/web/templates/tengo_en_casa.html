@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Lo que tengo en casa{% endblock %}
+{% block page_class %}page-foods{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="{{ volver or '/' }}" aria-label="Volver"><span class="icon">arrow_back</span></a>
+<div>
+  <p class="app-kicker">{{ n_marcados }} marcados</p>
+  <h1 class="app-title">Lo que tengo en casa</h1>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="shop-intro">
+  <span class="icon">grocery</span>
+  <div>
+    <b>Solo para esta semana</b>
+    <p>Marca lo que ya tienes comprado. Al generar tu menú lo usamos primero, y
+       en la lista de compra aparece como «ya lo tienes» en vez de mandarte a
+       comprarlo otra vez. No hace falta poner cantidades.</p>
+  </div>
+</div>
+
+<form method="post" action="/tengo-en-casa" class="pantry-form">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
+
+  {% for group in grupos %}
+  <details class="food-group" {% if group.marcados %}open{% endif %}>
+    <summary>
+      <span class="food-group-name">{{ group.label }}</span>
+      <span class="food-count">
+        {% if group.marcados %}{{ group.marcados }}/{% endif %}{{ group['items'] | length }}
+      </span>
+      <span class="food-chevron"><span class="icon">expand_more</span></span>
+    </summary>
+    <ul class="food-lines">
+      {% for item in group['items'] %}
+      <li>
+        <label class="pantry-line">
+          <input type="checkbox" name="food_id" value="{{ item.id }}"
+                 {% if item.marcado %}checked{% endif %}>
+          <span class="shop-check"><span class="icon">check</span></span>
+          <span>{{ item.name }}</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% else %}
+  <p class="alert">Todavía no tienes alimentos en tu menú.
+     Añádelos en <a href="/mis-alimentos">Mis alimentos</a>.</p>
+  {% endfor %}
+
+  {# El botón va fijo abajo: la lista es larga y guardar no puede depender de
+     llegar al final haciendo scroll. #}
+  <div class="pantry-save">
+    <button class="btn btn-primary btn-big btn-block" type="submit">
+      <span class="icon">check</span>Guardar y volver
+    </button>
+  </div>
+</form>
+{% endblock %}

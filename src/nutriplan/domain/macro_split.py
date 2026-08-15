@@ -41,9 +41,7 @@ Meals = Sequence[tuple[MealSlot, list[FoodItem]]]
 def _has_source(
     foods: list[FoodItem], attr: str, group: frozenset[FoodCategory] | set[FoodCategory]
 ) -> bool:
-    return any(
-        f.category in group and not f.is_free and getattr(f, attr) > 0 for f in foods
-    )
+    return any(f.category in group and not f.is_free and getattr(f, attr) > 0 for f in foods)
 
 
 def _weight(config: NutritionConfig, slot: MealSlot, macro: str) -> float:
@@ -68,15 +66,11 @@ def macro_shares(meals: Meals, config: NutritionConfig) -> dict[MealSlot, dict[s
     shares: dict[MealSlot, dict[str, float]] = {slot: {} for slot, _foods in meals}
 
     for macro, (attr, group) in MACRO_SOURCES.items():
-        with_source = [
-            slot for slot, foods in meals if _has_source(foods, attr, group)
-        ]
+        with_source = [slot for slot, foods in meals if _has_source(foods, attr, group)]
         total = sum(_weight(config, slot, macro) for slot in with_source)
         for slot, _foods in meals:
             shares[slot][macro] = (
-                _weight(config, slot, macro) / total
-                if slot in with_source and total > 0
-                else 0.0
+                _weight(config, slot, macro) / total if slot in with_source and total > 0 else 0.0
             )
     return shares
 

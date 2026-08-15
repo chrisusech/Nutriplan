@@ -31,20 +31,26 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
     run_migrations_on_start: bool = True
     anthropic_api_key: str = ""
-    # Defaults de beta: Groq gpt-oss-20b solo para recetas (schema pequeño).
-    llm_model_ingest: str = "openai/gpt-oss-20b"
+    # Default de beta: Groq gpt-oss-20b (schema pequeño, barato).
     llm_model_generate: str = "openai/gpt-oss-20b"
     # Proveedor OpenAI-compatible (DeepSeek, Groq, OpenRouter, Ollama…).
     # Si ANTHROPIC_API_KEY está vacía y LLM_BASE_URL + LLM_API_KEY están seteadas,
     # se usa OpenAICompatClient en lugar del modo offline.
     llm_base_url: str = ""
     llm_api_key: str = ""
-    # Beta: motor con topes de porción. true + LLM_API_KEY → IA elige y nombra;
-    # el código sigue calculando gramos y validando.
+    # true + LLM_API_KEY → IA elige combos (flag de prueba). Producto: false —
+    # el motor arma la semana; la IA solo escribe recetas al ver el día.
     llm_select_foods: bool = False
-    # Rename/swaps vía critique tras un plan válido.
+    # Soft: pasada crítica extra (otro call). En flujo lean va apagada: la
+    # selección ya trae dish_name.
     llm_refine_names: bool = False
-    # Proveedor de reserva: entra cuando el primario falla o agota su cuota.
+    # Si true, tras el menú se generan todas las recetas en background.
+    # Lean default: false → una receta al abrir cada plato.
+    llm_eager_recipes: bool = False
+    # Reintentos de selección cuando manda la IA (cada uno = 1 call caro).
+    # El motor offline sigue usando generation.max_retries del YAML.
+    llm_select_max_retries: int = 1
+    # Proveedor de reserva: vacío = solo el primario (flujo lean).
     llm_fallback_base_url: str = ""
     llm_fallback_api_key: str = ""
     llm_fallback_model: str = ""
@@ -69,14 +75,16 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "NutriPlan <no-reply@nutriplan.app>"
 
-    redis_url: str = ""
-    object_storage_url: str = ""
     log_level: str = "INFO"
     session_secret: str = DEV_SESSION_SECRET
     # Credenciales del super_user. Si ambas están seteadas y la cuenta no existe,
     # se siembra al arrancar. Es la única cuenta que no sale del alta pública.
     admin_email: str = ""
     admin_password: str = ""
+    # El tick del domingo. En prod corre solo; en local hay que encenderlo.
+    auto_week_tick: bool = False
+    # POST /internal/tick. Vacío = la ruta no existe.
+    internal_tick_secret: str = ""
 
     # Rutas del proyecto (relativas a la raíz del repo)
     project_root: Path = Path(__file__).resolve().parents[3]
@@ -107,9 +115,16 @@ class Settings(BaseSettings):
         return self.project_root / "data" / "meals" / "meal_templates.yaml"
 
     @property
+    def recipes_catalog_path(self) -> Path:
+        return self.project_root / "data" / "recipes" / "catalog.yaml"
+
+    @property
+    def restaurants_catalog_path(self) -> Path:
+        return self.project_root / "data" / "restaurants" / "catalog.yaml"
+
+    @property
     def branding_dir(self) -> Path:
         return self.project_root / "config" / "branding"
-
 
 
 @lru_cache

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Comer fuera{% endblock %}
+{% block page_class %}page-week{% endblock %}
+
+{% block head_lead %}
+<a class="back" href="/?dia={{ dia }}" aria-label="Volver">
+  <span class="icon">arrow_back</span>
+</a>
+<h1 class="app-title">Voy a comer fuera</h1>
+{% endblock %}
+
+{% block content %}
+<p class="muted">Elige el restaurante y el plato. Sus macros entran al día y
+  recuadramos lo que aún no has comido. La lista de compra ya no lleva esa comida.</p>
+{% if consumidas is defined %}
+<p class="muted">Ya llevas <strong>{{ consumidas }}</strong> kcal.
+  Quedan <strong>{{ restante }}</strong> para lo que sigue.</p>
+{% endif %}
+
+<form method="get" action="/menu/fuera" class="onb-form">
+  <input type="hidden" name="dia" value="{{ dia }}">
+  <input type="hidden" name="slot" value="{{ slot }}">
+  <label class="field"><span>Buscar un plato</span>
+    <input name="q" value="{{ q }}" placeholder="pepperoni, tacos pastor…" maxlength="80">
+  </label>
+  <button class="btn btn-outline" type="submit">Buscar</button>
+</form>
+
+{% if hits %}
+<ul class="rows section">
+  {% for resto, dish in hits %}
+  <li>
+    <form method="post" action="/menu/fuera" class="row-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="dia" value="{{ dia }}">
+      <input type="hidden" name="slot" value="{{ slot }}">
+      <input type="hidden" name="restaurant_id" value="{{ resto.id }}">
+      <input type="hidden" name="dish_id" value="{{ dish.id }}">
+      <button class="row" type="submit">
+        <span class="row-text">{{ resto.name }} · {{ dish.name }}
+          <span class="row-sub">{{ dish.portion }} · P {{ dish.protein_g|int }} ·
+            C {{ dish.carb_g|int }} · G {{ dish.fat_g|int }} · {{ dish.kcal|int }} kcal</span>
+        </span>
+        <span class="row-chevron"><span class="icon">chevron_right</span></span>
+      </button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<ul class="rows section">
+  {% for r in restaurantes %}
+  <li>
+    <details class="resto" name="resto"{% if resto and resto.id == r.id %} open{% endif %}>
+      <summary class="row">
+        <span class="row-text">{{ r.name }}
+          <span class="row-sub">{{ r.dishes|length }} platos</span>
+        </span>
+        <span class="row-chevron"><span class="icon">expand_more</span></span>
+      </summary>
+      <ul class="resto-menu">
+        {% for dish in r.dishes %}
+        <li>
+          <form method="post" action="/menu/fuera">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="dia" value="{{ dia }}">
+            <input type="hidden" name="slot" value="{{ slot }}">
+            <input type="hidden" name="restaurant_id" value="{{ r.id }}">
+            <input type="hidden" name="dish_id" value="{{ dish.id }}">
+            <button class="row" type="submit">
+              <span class="row-text">{{ dish.name }}
+                <span class="row-sub">{{ dish.portion }} · {{ dish.kcal|int }} kcal</span>
+              </span>
+            </button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

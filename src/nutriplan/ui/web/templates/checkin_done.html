@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Peso guardado{% endblock %}
+{% block page_class %}page-checkin{% endblock %}
+
+{% block head_lead %}
+<h1 class="app-title">Semana cerrada</h1>
+{% endblock %}
+
+{% block content %}
+<section class="ready">
+  <span class="ready-badge"><span class="icon">check_circle</span></span>
+  <h2>Listo — {{ perfil.weight_kg }} kg</h2>
+
+  {% if decision %}
+  <p class="muted">
+    {% if decision.action.value == "lower" %}
+      Bajamos tu plan a <strong>{{ decision.new_kcal|int }} kcal</strong>
+      ({{ decision.delta_kcal|int }} kcal) según tu progreso.
+    {% elif decision.action.value == "raise" %}
+      Subimos tu plan a <strong>{{ decision.new_kcal|int }} kcal</strong>
+      (+{{ decision.delta_kcal|int }} kcal) para que el ritmo sea sostenible.
+    {% else %}
+      Mantienes <strong>{{ decision.new_kcal|int }} kcal</strong>: vas en el
+      ritmo esperado.
+    {% endif %}
+  </p>
+  {% else %}
+  <p class="muted">Recalculamos tus macros con este peso. Genera tu menú cuando quieras.</p>
+  {% endif %}
+
+  {% if note %}<p class="muted checkin-note">{{ note }}</p>{% endif %}
+
+  {% if interpreted %}
+  <p class="muted">Leímos tus comentarios: la semana siguiente los tiene en cuenta.</p>
+  {% endif %}
+
+  {% with n=en_casa_n, volver=pantry_volver|default('/listo') %}{% include "partials/pantry_link.html" %}{% endwith %}
+  {% if not perfil.active_plan_id or role == 'super_user' %}
+  <form method="post" action="/menu/generar" hx-post="/menu/generar"
+        hx-target="this" hx-swap="outerHTML">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <button class="btn btn-primary btn-big btn-block" type="submit">
+      <span class="icon">auto_awesome</span>Generar mi plan
+    </button>
+  </form>
+  {% else %}
+  <p class="muted">El domingo preparamos tu siguiente menú.</p>
+  {% endif %}
+  <a class="btn btn-ghost" href="/">Volver a mi semana</a>
+</section>
+{% endblock %}

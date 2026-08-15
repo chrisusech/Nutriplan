@@ -6,6 +6,7 @@ uso en proceso vía el container. Arranque:
     uv run nutriplan
 """
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,7 +15,6 @@ from uuid import UUID
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import PlainTextResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -26,6 +26,8 @@ from nutriplan.application.auth import SignupError, register
 from nutriplan.config.settings import Environment
 from nutriplan.container import Container, build_container
 from nutriplan.domain.models import Role
+from nutriplan.ui.web.account_cache import AccountGateCache
+from nutriplan.ui.web.assets import AssetFiles
 from nutriplan.ui.web.deps import container_of
 from nutriplan.ui.web.security import (
     RateLimiter,
@@ -47,12 +49,17 @@ _PUBLIC_PREFIXES = (
     "/terminos",
     "/soporte",
     "/health",
+    "/internal/tick",
     "/recuperar",
     "/static",
+    "/favicon.ico",
     "/logout",
     "/docs",
     "/openapi.json",
 )
+
+# Lo único que ve una cuenta desactivada. No es pública: hace falta sesión.
+INACTIVE_PATH = "/plan-inactivo"
 
 
 async def _seed_super_user(container: Container, session: AsyncSession) -> None:
@@ -66,12 +73,22 @@ async def _seed_super_user(container: Container, session: AsyncSession) -> None:
         return
     try:
         await register(
-            name="Administrador", email=email, password=password, auth_repo=auth_repo,
-            branding_dir=container.settings.branding_dir, role=Role.SUPER_USER,
+            name="Administrador",
+            email=email,
+            password=password,
+            auth_repo=auth_repo,
+            branding=container.branding_store,
+            role=Role.SUPER_USER,
         )
         logger.info("super_user_seeded", email=email)
     except SignupError as exc:
         logger.warning("super_user_seed_skipped", reason=str(exc))
+
+
+def _expired(request: Request) -> RedirectResponse:
+    """La sesión apunta a algo que ya no existe — pasa al reiniciar la base."""
+    request.session.clear()
+    return RedirectResponse("/login?sesion=expirada", status_code=303)
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -101,7 +118,15 @@ def create_app(container: Container | None = None) -> FastAPI:
             await session.commit()
         logger.info("startup_seed_done")
         app.state.jobs_in_flight = set()
+        app.state.generation_job_ids = set()
+        tick: asyncio.Task[None] | None = None
+        if container.settings.env is Environment.PROD or container.settings.auto_week_tick:
+            from nutriplan.application.auto_week import auto_week_loop
+
+            tick = asyncio.create_task(auto_week_loop(container))
         yield
+        if tick is not None:
+            tick.cancel()
         await container.engine.dispose()
 
     prod = container.settings.env is Environment.PROD
@@ -116,6 +141,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     )
     app.state.container = container
     app.state.rate_limiter = RateLimiter()
+    app.state.account_cache = AccountGateCache()
 
     # El guard se registra ANTES que SessionMiddleware para que este quede por
     # fuera (add_middleware inserta al frente): así request.session ya existe
@@ -124,41 +150,50 @@ def create_app(container: Container | None = None) -> FastAPI:
     async def require_login(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Guard por sesión y por rol.
+        """Guard por sesión, estado y rol.
 
-        Sin sesión → /login (salvo rutas públicas). El área /admin exige rol
-        super_user; el entrenador (user) entra a todo lo demás.
+        Sin sesión → /login (salvo rutas públicas). Con la cuenta desactivada,
+        solo el aviso de plan inactivo. El área /admin exige rol super_user; el
+        resto de la app es para cualquier cuenta activa.
         """
         path = request.url.path
         if path.startswith(_PUBLIC_PREFIXES):
             return await call_next(request)
 
         tenant_raw = request.session.get("tenant_id")
-        if tenant_raw:
-            try:
-                tenant_id = UUID(str(tenant_raw))
-            except ValueError:
-                request.session.clear()
-                return RedirectResponse("/login?sesion=expirada", status_code=303)
-            container = container_of(request)
+        if not tenant_raw:
+            return RedirectResponse("/login", status_code=303)
+        try:
+            tenant_id = UUID(str(tenant_raw))
+        except ValueError:
+            return _expired(request)
+
+        # Ni el estado ni el rol se creen de la cookie: desactivar a alguien
+        # tiene que surtir efecto ya, no en catorce días cuando le caduque la
+        # sesión. Pero tampoco se preguntan a la base en cada poll de la pantalla
+        # de generación: la respuesta vale unos segundos (ver `account_cache`).
+        container = container_of(request)
+        email = str(request.session.get("email") or "")
+        cache: AccountGateCache = request.app.state.account_cache
+        account = cache.get(email) if email else None
+        if account is None:
             async with container.session_factory() as session:
                 if await session.get(TenantRow, tenant_id) is None:
-                    request.session.clear()
-                    return RedirectResponse("/login?sesion=expirada", status_code=303)
+                    return _expired(request)
+                account = await container.auth_repo(session).get_by_email_any_provider(email)
+            if account is None:
+                return _expired(request)
+            cache.put(email, account)
 
-        if not request.session.get("tenant_id"):
-            return RedirectResponse("/login", status_code=303)
+        # Desactivada: entra, pero no ve nada más que el aviso de su plan.
+        if not account.is_active:
+            if path != INACTIVE_PATH:
+                return RedirectResponse(INACTIVE_PATH, status_code=303)
+        elif path == INACTIVE_PATH:
+            return RedirectResponse("/", status_code=303)
 
-        # El rol NO se cree de la cookie: bloquear a alguien tiene que echarlo
-        # ya, no en catorce días cuando le caduque la sesión.
-        if path.startswith("/admin"):
-            email = request.session.get("email")
-            async with container_of(request).session_factory() as session:
-                account = await container_of(request).auth_repo(session).get_by_email_any_provider(
-                    str(email or "")
-                )
-            if account is None or not account.is_active or account.role != Role.SUPER_USER:
-                return RedirectResponse("/", status_code=303)
+        if path.startswith("/admin") and account.role != Role.SUPER_USER:
+            return RedirectResponse("/", status_code=303)
         return await call_next(request)
 
     app.middleware("http")(csrf_middleware)
@@ -188,7 +223,13 @@ def create_app(container: Container | None = None) -> FastAPI:
             "Algo se rompió de nuestro lado. Ya lo estamos mirando.", status_code=500
         )
 
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", AssetFiles(directory=str(STATIC_DIR)), name="static")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> RedirectResponse:
+        """El navegador lo pide aunque la página declare su icono; sin esto es un
+        404 por visita en el log."""
+        return RedirectResponse("/static/icon-32.png", status_code=301)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -200,16 +241,32 @@ def create_app(container: Container | None = None) -> FastAPI:
         account,
         admin,
         auth,
+        checkin,
+        foods,
+        internal,
+        meals,
         menu,
         onboarding,
+        pantry,
+        plan,
+        progress,
+        shopping,
         week,
     )
 
     app.include_router(auth.router)
     app.include_router(week.router)
+    app.include_router(shopping.router)
+    app.include_router(foods.router)
+    app.include_router(pantry.router)
+    app.include_router(progress.router)
     app.include_router(account.router)
     app.include_router(onboarding.router)
     app.include_router(menu.router)
+    app.include_router(meals.router)
+    app.include_router(plan.router)
+    app.include_router(checkin.router)
+    app.include_router(internal.router)
     app.include_router(admin.router)
     return app
 

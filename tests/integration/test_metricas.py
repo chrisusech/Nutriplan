@@ -4,7 +4,6 @@ Dos cosas se prueban aquí: que sin consentimiento no se registra nada, y que
 lo que sí se registra sirve para decidir.
 """
 
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -50,8 +49,13 @@ def _registrar(client: TestClient, email: str, *, acepta: bool = True) -> None:
 
 def _onboarding(client: TestClient, **extra) -> None:
     data = {
-        "name": "Ana", "sex": "female", "age_years": 28, "height_cm": 165,
-        "weight_kg": 62, "goal": "lose_fat", "activity_level": "moderate",
+        "name": "Ana",
+        "sex": "female",
+        "age_years": 28,
+        "height_cm": 165,
+        "weight_kg": 62,
+        "goal": "lose_fat",
+        "activity_level": "moderate",
         "meal_slots": [s.value for s in MealSlot],
         "eating_pattern_raw": "Entreno de noche y ceno ligero.",
     }
@@ -129,12 +133,16 @@ def test_el_super_user_ve_el_embudo_y_lo_que_la_gente_escribio(app) -> None:
     _onboarding(app)
     app.post("/logout", follow_redirects=False)
     app.post(
-        "/login", data={"email": SUPER_EMAIL, "password": SUPER_PASSWORD},
+        "/login",
+        data={"email": SUPER_EMAIL, "password": SUPER_PASSWORD},
         follow_redirects=False,
     )
 
     panel = app.get("/admin/metricas")
     assert panel.status_code == 200
+    assert "Activos" in panel.text
+    assert "Algo falla" in panel.text
+    assert "No les gusta" in panel.text
     assert "El embudo" in panel.text
     assert "Se registraron" in panel.text
     # El dato cualitativo: la pregunta con la que arrancó todo esto
@@ -160,26 +168,69 @@ def test_el_embudo_solo_encadena_pasos_que_dependen_del_anterior(app, container)
     from nutriplan.adapters.db.repositories.metrics import Funnel
 
     embudo = Funnel(
-        registros=10, consintieron=4, completaron_onboarding=8,
-        generaron_menu=5, calificaron=2, opinaron=9,
+        registros=10,
+        consintieron=4,
+        completaron_onboarding=8,
+        generaron_menu=5,
+        calificaron=2,
+        opinaron=9,
     )
     valores = [total for _, total in embudo.pasos]
     assert valores == sorted(valores, reverse=True)
-    assert [e for e, _ in embudo.aparte] == [
-        "Aceptaron compartir datos", "Nos escribieron"
-    ]
+    assert [e for e, _ in embudo.aparte] == ["Aceptaron compartir datos", "Nos escribieron"]
 
 
-def test_el_super_user_puede_descargar_los_platos(app) -> None:
+def _como_super(app: TestClient) -> None:
     app.post("/logout", follow_redirects=False)
     app.post(
-        "/login", data={"email": SUPER_EMAIL, "password": SUPER_PASSWORD},
+        "/login",
+        data={"email": SUPER_EMAIL, "password": SUPER_PASSWORD},
         follow_redirects=False,
     )
+
+
+def test_el_super_user_se_descarga_todo_lo_que_el_beta_ha_recogido(app) -> None:
+    """El CSV no es un resumen: es la materia prima para sentarse a analizar."""
+    _registrar(app, "ana@correo.com")
+    _onboarding(app)
+    app.post(
+        "/feedback",
+        data={"category": "receta", "message": "El pollo se repite mucho", "nps": "8"},
+        follow_redirects=False,
+    )
+    _como_super(app)
+
     csv = app.get("/admin/metricas.csv")
     assert csv.status_code == 200
     assert csv.headers["content-type"].startswith("text/csv")
-    assert "plantilla,media,votos" in csv.text
+    for bloque in (
+        "RESUMEN",
+        "PLATOS",
+        "COMENTARIOS SOBRE PLATOS",
+        "CIERRES DE SEMANA",
+        "LO QUE PIDEN CAMBIAR",
+        "OPINIONES",
+        "QUIÉNES SON Y CÓMO COMEN",
+        "ALIMENTOS ELEGIDOS Y QUITADOS",
+        "RECETAS",
+        "SEMANAS GENERADAS",
+        "USO DÍA A DÍA",
+    ):
+        assert bloque in csv.text, f"falta el bloque {bloque}"
+    assert "El pollo se repite mucho" in csv.text
+    assert "Entreno de noche y ceno ligero." in csv.text
+
+
+def test_lo_que_prueba_el_admin_no_ensucia_el_analisis(app) -> None:
+    """El laboratorio genera menús de verdad; si entraran al CSV, cada análisis
+    empezaría por descartarlos a mano."""
+    _como_super(app)
+    app.post(
+        "/feedback",
+        data={"category": "general", "message": "probando desde el laboratorio"},
+        follow_redirects=False,
+    )
+    assert "probando desde el laboratorio" not in app.get("/admin/metricas.csv").text
 
 
 def test_un_plato_con_pocos_votos_no_sale_como_el_mejor(container) -> None:

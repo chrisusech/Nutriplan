@@ -27,11 +27,18 @@ FOODS = [
 ]
 # (fdc_id, nutrient_id, amount)
 NUTRIENTS = [
-    (171077, 1008, "403"), (171077, 1003, "22.9"), (171077, 1005, "3.1"),
-    (171077, 1004, "33.1"), (171077, 1093, "653"),
+    (171077, 1008, "403"),
+    (171077, 1003, "22.9"),
+    (171077, 1005, "3.1"),
+    (171077, 1004, "33.1"),
+    (171077, 1093, "653"),
     # El pollo no trae 1008: solo la energía de Atwater.
-    (171705, 2047, "165"), (171705, 1003, "31.0"), (171705, 1004, "3.6"),
-    (168409, 1008, "130"), (168409, 1005, "28.2"), (168409, 1079, "0.4"),
+    (171705, 2047, "165"),
+    (171705, 1003, "31.0"),
+    (171705, 1004, "3.6"),
+    (168409, 1008, "130"),
+    (168409, 1005, "28.2"),
+    (168409, 1079, "0.4"),
     (168409, 2000, ""),  # amount vacío: se ignora
     (999999, 1008, "500"),  # branded: ni siquiera debería mirarse
 ]
@@ -142,7 +149,7 @@ def test_se_puede_recuperar_un_alimento_por_su_fdc_id(bulk, tmp_path) -> None:
 
 
 def test_el_nombre_curado_encuentra_su_descripcion_larga_de_usda(bulk, tmp_path) -> None:
-    """"chicken breast" tiene que ganar contra la descripción kilométrica que
+    """ "chicken breast" tiene que ganar contra la descripción kilométrica que
     lo contiene, que es el caso normal del catálogo."""
     db = tmp_path / "usda.db"
     build_sqlite(bulk, db)

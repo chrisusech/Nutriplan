@@ -28,27 +28,47 @@ PERFILES = [
     ("hombre 90 kg, volumen, 5 comidas", "male", 30, 180, 90, "gain_muscle", CINCO),
     (
         "hombre 70 kg, mantener, 4 comidas",
-        "male", 45, 175, 70, "maintain",
+        "male",
+        45,
+        175,
+        70,
+        "maintain",
         ["desayuno", "almuerzo", "snack_pm", "cena"],
     ),
     (
         "mujer 62 kg, déficit, 3 comidas",
-        "female", 28, 165, 62, "lose_fat",
+        "female",
+        28,
+        165,
+        62,
+        "lose_fat",
         ["desayuno", "almuerzo", "cena"],
     ),
     (
         "hombre 60 kg, volumen, 3 comidas",
-        "male", 22, 170, 60, "gain_muscle",
+        "male",
+        22,
+        170,
+        60,
+        "gain_muscle",
         ["desayuno", "almuerzo", "cena"],
     ),
     (
         "mujer 75 kg, déficit fuerte, 3 comidas",
-        "female", 40, 170, 75, "lose_fat",
+        "female",
+        40,
+        170,
+        75,
+        "lose_fat",
         ["desayuno", "almuerzo", "cena"],
     ),
     (
         "hombre 100 kg, volumen, 5 comidas",
-        "male", 28, 185, 100, "gain_muscle",
+        "male",
+        28,
+        185,
+        100,
+        "gain_muscle",
         CINCO,
     ),
 ]
@@ -77,20 +97,28 @@ def app(container):
 
 def _alta(client: TestClient, email: str, perfil: tuple) -> None:
     _, sex, age, height, weight, goal, slots = perfil
-    assert client.post(
-        "/registro",
-        data={"name": "Prueba", "email": email, "password": "clave-segura-1"},
-        follow_redirects=False,
-    ).status_code == 303
+    assert (
+        client.post(
+            "/registro",
+            data={"name": "Prueba", "email": email, "password": "clave-segura-1"},
+            follow_redirects=False,
+        ).status_code
+        == 303
+    )
     # Tras el alta aterriza en consentimiento; sin él no hay onboarding libre.
     cons = client.post("/consentimiento", data={"acepta": "1"}, follow_redirects=False)
     assert cons.status_code in (303, 200), cons.text
     resp = client.post(
         "/onboarding",
         data={
-            "name": "Prueba", "sex": sex, "age_years": age,
-            "height_cm": height, "weight_kg": weight, "goal": goal,
-            "activity_level": "moderate", "meal_slots": slots,
+            "name": "Prueba",
+            "sex": sex,
+            "age_years": age,
+            "height_cm": height,
+            "weight_kg": weight,
+            "goal": goal,
+            "activity_level": "moderate",
+            "meal_slots": slots,
         },
         follow_redirects=False,
     )
@@ -104,10 +132,10 @@ def _generar(client: TestClient) -> None:
     assert job is not None, f"no arrancó: {started.text[:300]}"
     deadline = time.monotonic() + GENERATION_TIMEOUT_S
     while time.monotonic() < deadline:
-        html = client.get("/menu/estado", params={"job": job.group(1), "n": 0}).text
-        if "Todo listo" in html:
+        resp = client.get("/menu/estado", params={"job": job.group(1), "n": 0})
+        if resp.headers.get("HX-Redirect", "").startswith("/compra"):
             return
-        assert FAILURE_MARKER not in html, f"falló: {html[:500]}"
+        assert FAILURE_MARKER not in resp.text, f"falló: {resp.text[:500]}"
         time.sleep(0.05)
     pytest.fail("timeout generando")
 

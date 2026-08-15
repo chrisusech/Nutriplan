@@ -1,0 +1,62 @@
+/* Movimiento. Un vocabulario corto y el mismo en toda la app.
+
+   La regla: el movimiento explica de dónde viene algo. Si no explica nada,
+   sobra. Y quien pidió menos movimiento en su sistema lo pidió en serio — al
+   final de esta hoja se apaga todo. */
+
+/* Cambiar de día o entrar en una pantalla es una navegación completa: con esto
+   el navegador funde una con otra y deja de verse el parpadeo blanco. */
+@view-transition { navigation: auto; }
+
+::view-transition-old(root) { animation: fade-out var(--dur-2) var(--ease-out) both; }
+::view-transition-new(root) { animation: rise var(--dur-3) var(--ease-out) both; }
+
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(0.75rem); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 0.35; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position: 200% 0; } }
+@keyframes ring-in { from { --pct: 0; } }
+@keyframes plate-spin { to { transform: rotate(360deg); } }
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-0.375rem); }
+}
+
+/* Una lista que entra escalonada se lee como una lista, no como un bloque. */
+.stagger > * { animation: rise var(--dur-3) var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger > *:nth-child(3) { animation-delay: 0.1s; }
+.stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.stagger > *:nth-child(7) { animation-delay: 0.26s; }
+.stagger > *:nth-child(n + 8) { animation-delay: 0.3s; }
+
+/* Piezas con nombre propio: el navegador las lleva de una pantalla a la otra
+   en vez de fundirlas con el resto. */
+.app-head { view-transition-name: app-head; }
+.nav { view-transition-name: app-nav; }
+.day-hero { view-transition-name: day-hero; }
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

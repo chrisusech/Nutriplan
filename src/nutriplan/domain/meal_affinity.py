@@ -28,9 +28,8 @@ def is_shake(food: FoodItem) -> bool:
 
 def breakfast_protein(food: FoodItem) -> bool:
     """Proteína apta para desayuno: huevos, lácteos o batido — no carnes/pescado."""
-    return (
-        allows(food, MealSlot.BREAKFAST)
-        and (is_egg(food) or is_shake(food) or food.category is FoodCategory.DAIRY)
+    return allows(food, MealSlot.BREAKFAST) and (
+        is_egg(food) or is_shake(food) or food.category is FoodCategory.DAIRY
     )
 
 

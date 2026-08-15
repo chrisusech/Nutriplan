@@ -1,0 +1,811 @@
+# Macros de restaurantes (vol. 3). Los gramos P/C/G son la fuente de verdad;
+# las kcal las calcula el código (4P+4C+9G). Dedupe del PDF original.
+version: 3.0.0
+restaurants:
+- id: crepes
+  name: Crepes & Waffles
+  dishes:
+  - id: lomito-arabe
+    name: Lomito árabe
+    portion: 1 plato
+    protein_g: 45
+    carb_g: 40
+    fat_g: 35
+  - id: pollo-thai
+    name: Pollo Thai
+    portion: 1 plato
+    protein_g: 40
+    carb_g: 35
+    fat_g: 30
+  - id: montes-de-maria
+    name: Montes de María
+    portion: 1 plato
+    protein_g: 25
+    carb_g: 60
+    fat_g: 25
+  - id: sombrero-vueltiao
+    name: Sombrero vueltiao
+    portion: 1 plato
+    protein_g: 35
+    carb_g: 67
+    fat_g: 35
+  - id: crepe-mexicano
+    name: Crepe mexicano
+    portion: 1 crepe
+    protein_g: 35
+    carb_g: 55
+    fat_g: 30
+  - id: crepe-ternera
+    name: Crepe de ternera
+    portion: 1 crepe
+    protein_g: 37
+    carb_g: 50
+    fat_g: 25
+  - id: crepe-camarones
+    name: Crepe de camarones en salsa
+    portion: 1 crepe
+    protein_g: 25
+    carb_g: 40
+    fat_g: 30
+  - id: crepe-pollo-peruano
+    name: Crepe pollo peruano
+    portion: 1 crepe
+    protein_g: 30
+    carb_g: 60
+    fat_g: 25
+  - id: pita-pavo-queso
+    name: Pita pavo y queso
+    portion: 1 pita
+    protein_g: 37
+    carb_g: 50
+    fat_g: 25
+  - id: waffle-frutos-rojos
+    name: Waffle frutos rojos
+    portion: 1 waffle
+    protein_g: 10
+    carb_g: 55
+    fat_g: 30
+  - id: waffle-nutella
+    name: Waffle Nutella
+    portion: 1 waffle
+    protein_g: 8
+    carb_g: 80
+    fat_g: 36
+  - id: vainilla-hot-chocolate
+    name: Vainilla hot chocolate
+    portion: 1 vaso
+    protein_g: 8
+    carb_g: 40
+    fat_g: 30
+  - id: helado-chocorrochelle
+    name: Helado chocorrochelle
+    portion: 1 copa
+    protein_g: 6
+    carb_g: 37
+    fat_g: 15
+  - id: sopa-covarachia
+    name: Sopa covarachía (ahuyama)
+    portion: 1 tazón
+    protein_g: 3
+    carb_g: 13
+    fat_g: 10
+  - id: ensalada-barra
+    name: Ensalada de la barra (sin salsas)
+    portion: 1 plato
+    protein_g: 40
+    carb_g: 35
+    fat_g: 30
+  - id: ensalada-valparaiso
+    name: Ensalada Valparaíso
+    portion: 1 plato
+    protein_g: 32
+    carb_g: 25
+    fat_g: 25
+  - id: ensalada-mediterranea
+    name: Ensalada mediterránea
+    portion: 1 plato
+    protein_g: 15
+    carb_g: 18
+    fat_g: 20
+- id: wok
+  name: Wok
+  dishes:
+  - id: pad-thai
+    name: Pad Thai
+    portion: 1 plato
+    protein_g: 27
+    carb_g: 40
+    fat_g: 20
+  - id: lok-lak
+    name: Lok lak
+    portion: 1 plato
+    protein_g: 30
+    carb_g: 35
+    fat_g: 25
+  - id: arroz-cantones
+    name: Arroz cantones
+    portion: 1 plato
+    protein_g: 27
+    carb_g: 70
+    fat_g: 25
+  - id: nasi-goreng
+    name: Nasi goreng
+    portion: 1 plato
+    protein_g: 22
+    carb_g: 67
+    fat_g: 20
+  - id: ramen-shoyu
+    name: Ramen shoyu
+    portion: 1 plato
+    protein_g: 35
+    carb_g: 70
+    fat_g: 35
+  - id: pollo-ensalada-mango
+    name: Pollo ensalada de mango
+    portion: 1 plato
+    protein_g: 27
+    carb_g: 45
+    fat_g: 22
+  - id: khao-soi
+    name: Khao soi
+    portion: 1 sopa
+    protein_g: 30
+    carb_g: 70
+    fat_g: 35
+  - id: khao-pad
+    name: Khao pad
+    portion: 1 plato
+    protein_g: 22
+    carb_g: 65
+    fat_g: 15
+  - id: philadelphia-4
+    name: Philadelphia (4 bocados)
+    portion: 4 bocados
+    protein_g: 15
+    carb_g: 40
+    fat_g: 15
+  - id: california-maki
+    name: California maki
+    portion: 1 rollo
+    protein_g: 20
+    carb_g: 35
+    fat_g: 17
+  - id: chirasi-don
+    name: Chirasi don
+    portion: 1 plato
+    protein_g: 45
+    carb_g: 36
+    fat_g: 15
+  - id: ensalada-siam
+    name: Ensalada Siam
+    portion: 1 plato
+    protein_g: 25
+    carb_g: 30
+    fat_g: 12
+  - id: som-tam
+    name: Som tam clásico
+    portion: 1 plato
+    protein_g: 27
+    carb_g: 27
+    fat_g: 15
+- id: taqueria
+  name: La Taquería
+  dishes:
+  - id: tacos-chicharron
+    name: Tacos chicharrón
+    portion: 2 tacos
+    protein_g: 25
+    carb_g: 33
+    fat_g: 25
+  - id: tacos-pastor
+    name: Tacos al pastor
+    portion: 2 tacos
+    protein_g: 22
+    carb_g: 30
+    fat_g: 20
+  - id: tacos-birria
+    name: Tacos de birria
+    portion: 2 tacos
+    protein_g: 30
+    carb_g: 40
+    fat_g: 35
+  - id: quesadilla
+    name: Quesadilla
+    portion: 1 quesadilla
+    protein_g: 15
+    carb_g: 35
+    fat_g: 30
+  - id: super-burrito
+    name: Súper burrito ropa vieja y maduritos
+    portion: 1 burrito
+    protein_g: 38
+    carb_g: 80
+    fat_g: 25
+  - id: enchilada
+    name: Enchilada
+    portion: 1 plato
+    protein_g: 35
+    carb_g: 70
+    fat_g: 30
+- id: mcdonalds
+  name: McDonald's
+  dishes:
+  - id: cuarto-libra
+    name: Cuarto de libra
+    portion: 1 hamburguesa
+    protein_g: 30
+    carb_g: 37
+    fat_g: 28
+  - id: big-mac
+    name: Big Mac
+    portion: 1 hamburguesa
+    protein_g: 25
+    carb_g: 46
+    fat_g: 34
+  - id: mcnifica
+    name: McNífica
+    portion: 1 hamburguesa
+    protein_g: 27
+    carb_g: 39
+    fat_g: 32
+  - id: hamburguesa-queso
+    name: Hamburguesa con queso
+    portion: 1 hamburguesa
+    protein_g: 15
+    carb_g: 31
+    fat_g: 13
+  - id: papas-pequenas
+    name: Papas pequeñas
+    portion: 1 porción
+    protein_g: 3
+    carb_g: 28
+    fat_g: 11
+  - id: papas-medianas
+    name: Papas medianas
+    portion: 1 porción
+    protein_g: 4
+    carb_g: 39
+    fat_g: 17
+  - id: papas-grandes
+    name: Papas grandes
+    portion: 1 porción
+    protein_g: 6
+    carb_g: 50
+    fat_g: 21
+  - id: mc-coloso
+    name: McColoso
+    portion: 1 copa
+    protein_g: 9
+    carb_g: 55
+    fat_g: 15
+  - id: mcflurry-oreo
+    name: McFlurry Oreo (arequipe)
+    portion: 1 vaso
+    protein_g: 10
+    carb_g: 56
+    fat_g: 15
+  - id: mcflurry-mm
+    name: McFlurry M&M's
+    portion: 1 vaso
+    protein_g: 10
+    carb_g: 65
+    fat_g: 15
+  - id: cono-vainilla
+    name: Cono vainilla
+    portion: 1 cono
+    protein_g: 5
+    carb_g: 30
+    fat_g: 9
+  - id: sundae-fresa
+    name: Sundae de fresa
+    portion: 1 copa
+    protein_g: 6
+    carb_g: 50
+    fat_g: 6
+- id: corral
+  name: El Corral
+  dishes:
+  - id: casera
+    name: Corral casera
+    portion: 1 hamburguesa
+    protein_g: 35
+    carb_g: 58
+    fat_g: 31
+  - id: especial
+    name: Corral especial
+    portion: 1 hamburguesa
+    protein_g: 39
+    carb_g: 60
+    fat_g: 35
+  - id: mexicana
+    name: Corral mexicana
+    portion: 1 hamburguesa
+    protein_g: 36
+    carb_g: 67
+    fat_g: 30
+  - id: criolla
+    name: Corral criolla
+    portion: 1 hamburguesa
+    protein_g: 40
+    carb_g: 70
+    fat_g: 40
+  - id: hawaiana
+    name: Corral hawaiana
+    portion: 1 hamburguesa
+    protein_g: 35
+    carb_g: 75
+    fat_g: 30
+  - id: doble-queso
+    name: Corral doble con queso
+    portion: 1 hamburguesa
+    protein_g: 65
+    carb_g: 60
+    fat_g: 45
+  - id: corralisima-cuarto
+    name: Corralísima cuarto de libra
+    portion: 1 hamburguesa
+    protein_g: 65
+    carb_g: 60
+    fat_g: 35
+  - id: corralisima-mozzarella
+    name: Corralísima con queso mozzarella
+    portion: 1 hamburguesa
+    protein_g: 35
+    carb_g: 60
+    fat_g: 30
+  - id: corralisima-terreno
+    name: Corralísima todo terreno
+    portion: 1 hamburguesa
+    protein_g: 55
+    carb_g: 60
+    fat_g: 45
+- id: dominos
+  name: Domino's
+  dishes:
+  - id: pepperoni
+    name: Pizza pepperoni
+    portion: 1 porción
+    protein_g: 12
+    carb_g: 35
+    fat_g: 15
+  - id: pollo
+    name: Pizza de pollo
+    portion: 1 porción
+    protein_g: 15
+    carb_g: 36
+    fat_g: 10
+  - id: cerdo-bbq
+    name: Cerdo BBQ
+    portion: 1 porción
+    protein_g: 17
+    carb_g: 36
+    fat_g: 20
+  - id: canela-bites
+    name: Canela bites
+    portion: 1 bocado
+    protein_g: 2
+    carb_g: 12
+    fat_g: 9
+  - id: arequipe-rolls
+    name: Arequipe rolls
+    portion: 1 bocado
+    protein_g: 2
+    carb_g: 20
+    fat_g: 9
+- id: subway
+  name: Subway
+  dishes:
+  - id: italianisimo
+    name: Italianísimo
+    portion: 15 cm
+    protein_g: 20
+    carb_g: 60
+    fat_g: 30
+  - id: melt
+    name: Subway melt
+    portion: 15 cm
+    protein_g: 30
+    carb_g: 56
+    fat_g: 15
+  - id: pollo
+    name: Subway pollo
+    portion: 15 cm
+    protein_g: 30
+    carb_g: 51
+    fat_g: 3.8
+  - id: galleta
+    name: Galleta
+    portion: 1 galleta
+    protein_g: 5
+    carb_g: 35
+    fat_g: 10
+- id: beiked
+  name: Beiked
+  dishes:
+  - id: birthday-cake
+    name: Birthday cake
+    portion: 1 porción
+    protein_g: 7
+    carb_g: 75
+    fat_g: 30
+  - id: cinnamon-roll
+    name: Cinnamon roll
+    portion: 1 rollo
+    protein_g: 8
+    carb_g: 67
+    fat_g: 35
+  - id: leche-klim
+    name: Leche Klim
+    portion: 1 porción
+    protein_g: 10
+    carb_g: 65
+    fat_g: 35
+  - id: milo
+    name: Milo
+    portion: 1 porción
+    protein_g: 5
+    carb_g: 74
+    fat_g: 38
+  - id: salted-caramel
+    name: Salted caramel & pecans
+    portion: 1 porción
+    protein_g: 3
+    carb_g: 75
+    fat_g: 34
+  - id: red-velvet
+    name: Red velvet
+    portion: 1 porción
+    protein_g: 4
+    carb_g: 75
+    fat_g: 40
+  - id: nutella
+    name: Nutella
+    portion: 1 porción
+    protein_g: 6
+    carb_g: 77
+    fat_g: 35
+  - id: oreo-teuffle
+    name: Oreo teuffle
+    portion: 1 porción
+    protein_g: 5
+    carb_g: 74
+    fat_g: 38
+- id: homeburgers
+  name: Home Burgers
+  dishes:
+  - id: sencilla-queso
+    name: Hamburguesa sencilla con queso
+    portion: 1 hamburguesa
+    protein_g: 37
+    carb_g: 45
+    fat_g: 40
+  - id: sencilla-tocineta
+    name: Hamburguesa sencilla con queso y tocineta
+    portion: 1 hamburguesa
+    protein_g: 40
+    carb_g: 66
+    fat_g: 47
+  - id: doble-tocineta
+    name: Hamburguesa doble con queso y tocineta
+    portion: 1 hamburguesa
+    protein_g: 60
+    carb_g: 4
+    fat_g: 42
+  - id: sencilla
+    name: Hamburguesa sencilla
+    portion: 1 hamburguesa
+    protein_g: 35
+    carb_g: 44
+    fat_g: 30
+  - id: sencilla-papas
+    name: Hamburguesa sencilla + papas
+    portion: 1 combo
+    protein_g: 40
+    carb_g: 110
+    fat_g: 55
+- id: oakberry
+  name: Oakberry
+  dishes:
+  - id: base-pequeno
+    name: Pequeño (solo base)
+    portion: 1 vaso
+    protein_g: 6
+    carb_g: 20
+    fat_g: 10
+  - id: granola
+    name: Adición granola
+    portion: 1 porción
+    protein_g: 3
+    carb_g: 15
+    fat_g: 3
+  - id: banano
+    name: Adición banano
+    portion: 1 porción
+    protein_g: 0
+    carb_g: 8
+    fat_g: 0
+  - id: coco
+    name: Adición coco
+    portion: 1 porción
+    protein_g: 1
+    carb_g: 3
+    fat_g: 5
+  - id: chia
+    name: Adición chía
+    portion: 1 porción
+    protein_g: 3
+    carb_g: 5
+    fat_g: 3
+  - id: mantequilla-mani
+    name: Adición mantequilla de maní
+    portion: 1 porción
+    protein_g: 8
+    carb_g: 6
+    fat_g: 14
+  - id: fresa
+    name: Adición fresa
+    portion: 1 porción
+    protein_g: 0
+    carb_g: 10
+    fat_g: 0
+- id: dilucca
+  name: Di Lucca
+  dishes:
+  - id: panettone
+    name: Panettone
+    portion: 1 porción
+    protein_g: 5
+    carb_g: 47
+    fat_g: 10
+  - id: pappardelle-ragu
+    name: Pappardelle ragú de ternera
+    portion: 1 plato
+    protein_g: 37
+    carb_g: 90
+    fat_g: 22
+  - id: penne-bolognesa
+    name: Penne bolognesa gratinado
+    portion: 1 plato
+    protein_g: 61
+    carb_g: 84
+    fat_g: 35
+  - id: penne-al-forno
+    name: Penne al forno
+    portion: 1 plato
+    protein_g: 30
+    carb_g: 95
+    fat_g: 20
+  - id: linguini-bolognesa
+    name: Linguini bolognesa
+    portion: 1 plato
+    protein_g: 60
+    carb_g: 98
+    fat_g: 30
+  - id: linguine-mare
+    name: Linguine frutti di mare
+    portion: 1 plato
+    protein_g: 35
+    carb_g: 90
+    fat_g: 22
+  - id: penne-salmon
+    name: Penne al salmón
+    portion: 1 plato
+    protein_g: 30
+    carb_g: 84
+    fat_g: 35
+  - id: ravioli-salmon
+    name: Ravioli al salmón
+    portion: 1 plato
+    protein_g: 22
+    carb_g: 75
+    fat_g: 25
+- id: srwok
+  name: Sr. Wok
+  dishes:
+  - id: pollo-naranja
+    name: Pollo a la naranja
+    portion: 6 unidades
+    protein_g: 30
+    carb_g: 22
+    fat_g: 17
+  - id: arroz
+    name: Arroz
+    portion: 1 porción
+    protein_g: 7
+    carb_g: 70
+    fat_g: 10
+  - id: pasta-cocida
+    name: Pasta cocida
+    portion: 1 porción
+    protein_g: 12
+    carb_g: 56
+    fat_g: 15
+  - id: costillas-bbq
+    name: Costillas BBQ
+    portion: 1 porción
+    protein_g: 35
+    carb_g: 15
+    fat_g: 30
+  - id: lumpia
+    name: Lumpia
+    portion: 1 unidad
+    protein_g: 5
+    carb_g: 25
+    fat_g: 17
+- id: qbano
+  name: Qbano
+  dishes:
+  - id: ropa-vieja
+    name: Ropa vieja
+    portion: 21 cm
+    protein_g: 41
+    carb_g: 45
+    fat_g: 45
+  - id: especial
+    name: Especial
+    portion: 21 cm
+    protein_g: 20
+    carb_g: 45
+    fat_g: 35
+  - id: roastbeef
+    name: Roastbeef
+    portion: 21 cm
+    protein_g: 40
+    carb_g: 45
+    fat_g: 25
+  - id: salsa-ajo
+    name: Salsa de ajo
+    portion: 1 porción
+    protein_g: 2
+    carb_g: 10
+    fat_g: 12
+- id: poke
+  name: Poke
+  dishes:
+  - id: luau
+    name: Luau bowl
+    portion: 1 plato mediano
+    protein_g: 30
+    carb_g: 75
+    fat_g: 40
+  - id: pollo-crispy
+    name: Pollo crispy
+    portion: 1 plato mediano
+    protein_g: 28
+    carb_g: 85
+    fat_g: 40
+  - id: acevichado
+    name: Acevichado
+    portion: 1 plato mediano
+    protein_g: 28
+    carb_g: 75
+    fat_g: 30
+  - id: de-origen
+    name: De origen bowl
+    portion: 1 plato mediano
+    protein_g: 35
+    carb_g: 85
+    fat_g: 40
+  - id: ono
+    name: Ono bowl
+    portion: 1 plato mediano
+    protein_g: 25
+    carb_g: 65
+    fat_g: 25
+- id: panaderia
+  name: Panadería
+  dishes:
+  - id: rollito
+    name: Pan rollito mediano
+    portion: 1 pan
+    protein_g: 3
+    carb_g: 65
+    fat_g: 10
+  - id: baguette
+    name: Baguette sencillo
+    portion: 15 cm
+    protein_g: 2
+    carb_g: 22
+    fat_g: 6
+  - id: croissant
+    name: Croissant sencillo
+    portion: 1 unidad
+    protein_g: 6
+    carb_g: 65
+    fat_g: 15
+  - id: croissant-almendra
+    name: Croissant de almendra
+    portion: 1 unidad
+    protein_g: 6
+    carb_g: 65
+    fat_g: 22
+  - id: pan-yuca
+    name: Pan de yuca mediano
+    portion: 1 unidad
+    protein_g: 7
+    carb_g: 30
+    fat_g: 10
+  - id: pan-bono
+    name: Pan de bono mediano
+    portion: 1 unidad
+    protein_g: 3
+    carb_g: 12
+    fat_g: 6
+  - id: almohabana
+    name: Almojábana mediana
+    portion: 1 unidad
+    protein_g: 8
+    carb_g: 23
+    fat_g: 11
+- id: cine
+  name: Cine
+  dishes:
+  - id: palomitas
+    name: Palomitas medianas
+    portion: 1 envase
+    protein_g: 5
+    carb_g: 45
+    fat_g: 18
+  - id: perro
+    name: Perro caliente
+    portion: 1 unidad
+    protein_g: 12
+    carb_g: 40
+    fat_g: 22
+  - id: nachos
+    name: Nachos
+    portion: 1 porción
+    protein_g: 10
+    carb_g: 45
+    fat_g: 30
+- id: tipicos
+  name: Comidas típicas
+  dishes:
+  - id: bunuelo
+    name: Buñuelo
+    portion: 1 unidad
+    protein_g: 4
+    carb_g: 60
+    fat_g: 13
+  - id: pavo
+    name: Rodaja de pavo
+    portion: 1 rodaja
+    protein_g: 9
+    carb_g: 0
+    fat_g: 3
+  - id: natilla
+    name: Natilla
+    portion: 40 g
+    protein_g: 6
+    carb_g: 20
+    fat_g: 10
+  - id: ensalada-papa
+    name: Ensalada de papa
+    portion: 100 g
+    protein_g: 6
+    carb_g: 25
+    fat_g: 15
+  - id: tamal
+    name: Tamal tolimense
+    portion: 1 tamal
+    protein_g: 16
+    carb_g: 70
+    fat_g: 20
+  - id: lechona
+    name: Lechona
+    portion: 200 g
+    protein_g: 8
+    carb_g: 56
+    fat_g: 20
+  - id: bandeja-paisa
+    name: Bandeja paisa pequeña
+    portion: 1 plato
+    protein_g: 70
+    carb_g: 109
+    fat_g: 67
+  - id: ajiaco
+    name: Ajiaco mediano (sin crema ni alcaparras)
+    portion: 1 tazón
+    protein_g: 35
+    carb_g: 70
+    fat_g: 5

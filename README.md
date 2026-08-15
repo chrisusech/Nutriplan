@@ -1,8 +1,9 @@
 # NutriPlan
 
 Generador de menús nutricionales semanales (7 días, hasta 5 comidas/día) que la persona
-lee **en la app** — sin PDF ni DOCX. Arquitectura hexagonal: el dominio es puro;
-FastAPI, SQLite y el LLM son adaptadores.
+lee **en la app** — sin PDF ni DOCX. La semana se precalcula con el motor (gramos y
+macros) y trae lista de compra; la IA solo mejora recetas al abrir un día.
+Arquitectura hexagonal: el dominio es puro; FastAPI, SQLite y el LLM son adaptadores.
 
 Especificación original: `ESPECIFICACION_BACKEND_planes_nutricionales.md.pdf`.
 
