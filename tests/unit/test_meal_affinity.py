@@ -44,13 +44,13 @@ def test_meat_fish_seafood_are_main_not_breakfast_or_snack(foods) -> None:
 def test_breakfast_vs_main_carbs(foods) -> None:
     # avena/pan/arepa son de desayuno; arroz/pasta/papa son de plato principal
     assert meal_affinity.is_breakfast_carb(foods["avena en hojuelas"])
-    assert meal_affinity.is_breakfast_carb(foods["arepa de maíz"])
+    assert meal_affinity.is_breakfast_carb(foods["arepa Sarys extradélgada"])
     assert not meal_affinity.is_breakfast_carb(foods["arroz blanco cocido"])
     # La avena no va en almuerzo ni cena. El pan y la arepa SÍ pueden: quien solo
     # tiene arepa tiene que poder almorzar. Lo que decide es el peso, no el permiso.
     assert not meal_affinity.is_main_carb(foods["avena en hojuelas"])
     assert meal_affinity.is_main_carb(foods["arroz blanco cocido"])
-    assert meal_affinity.is_main_carb(foods["arepa de maíz"])
+    assert meal_affinity.is_main_carb(foods["arepa Sarys extradélgada"])
 
 
 def test_the_weight_says_whose_meal_it_is(foods) -> None:
@@ -61,7 +61,7 @@ def test_the_weight_says_whose_meal_it_is(foods) -> None:
     """
     arroz, arepa, pan = (
         foods["arroz blanco cocido"],
-        foods["arepa de maíz"],
+        foods["arepa Sarys extradélgada"],
         foods["pan integral"],
     )
     for main in (MealSlot.LUNCH, MealSlot.DINNER):
@@ -76,3 +76,10 @@ def test_the_weight_says_whose_meal_it_is(foods) -> None:
     # Un alimento que no declara pesos vale lo de siempre — el catálogo entero se
     # comportaba así antes de que esto existiera.
     assert foods["lentejas cocidas"].weight_in(MealSlot.LUNCH) == DEFAULT_SLOT_WEIGHT
+
+
+def test_el_pan_pita_pesa_igual_que_los_otros_panes(foods) -> None:
+    pita = foods["pan pita integral"]
+    pan = foods["pan integral"]
+    assert pita.weight_in(MealSlot.BREAKFAST) == pan.weight_in(MealSlot.BREAKFAST)
+    assert pita.weight_in(MealSlot.LUNCH) == pan.weight_in(MealSlot.LUNCH)

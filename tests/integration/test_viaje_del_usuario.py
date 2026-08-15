@@ -429,10 +429,13 @@ def test_marcar_comido_con_htmx_no_recarga_el_dia(app) -> None:
     )
     assert resp.status_code == 200, resp.text[:400]
     assert "<html" not in resp.text.lower()
-    assert "day-hero" not in resp.text
+    assert 'id="day-hero"' in resp.text
+    assert "hx-swap-oob" in resp.text
     assert "meal-check" in resp.text
     assert "Comido" in resp.text
     assert 'hx-post="/menu/comi"' in resp.text
+    assert 'class="ring-value">' in resp.text
+    assert 'class="ring-value">0</span>' not in resp.text
 
 
 def test_comer_fuera_en_la_app_recuadra_el_martes(app) -> None:

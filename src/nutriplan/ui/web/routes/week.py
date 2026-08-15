@@ -135,7 +135,7 @@ async def _comi_swap(
     *,
     slot: MealSlot,
 ) -> HTMLResponse:
-    """Solo el botón. El anillo se actualiza en el cliente (sin fogonazo)."""
+    """El botón y el anillo (OOB). Así las kcal nuevas no dependen del JS."""
     repos = repos_of(request, session)
     day = next((d for d in plan.days if d.day_index == day_index), None)
     if day is None:

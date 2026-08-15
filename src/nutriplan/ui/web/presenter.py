@@ -9,7 +9,7 @@ retirarla, todo lo que quedaba en pie era esto.
 
 from typing import Any
 
-from nutriplan.domain.models import CORE_MEAL_SLOTS, FoodCategory, Goal, MealSlot
+from nutriplan.domain.models import CORE_MEAL_SLOTS, FoodCategory, FoodItem, Goal, MealSlot
 from nutriplan.ui.web.format import MACRO_COLORS
 from nutriplan.ui.web.week_view import SLOT_META
 
@@ -108,7 +108,7 @@ CONTEXT_TOGGLES = [
     {"key": "come_rapido", "label": "Como rápido", "icon": "bolt"},
 ]
 
-# Desayuno, almuerzo y cena no se pueden quitar; los snacks sí.
+# Todas las comidas se pueden quitar; hace falta al menos una.
 MEAL_TOGGLES = [
     {
         "slot": slot,
@@ -119,14 +119,20 @@ MEAL_TOGGLES = [
     for slot in MealSlot
 ]
 
-# `inverted` marca las que se enuncian al revés: la casilla dice "con malteada"
-# pero la restricción que guarda es "no_shake".
+# `no_shake` sigue filtrando perfiles viejos; ya no se pregunta en el alta.
 RESTRICTION_TOGGLES = [
     {"key": "no_seafood", "label": "Sin mariscos", "icon": "set_meal", "inverted": False},
     {"key": "no_dairy", "label": "Sin lácteos", "icon": "icecream", "inverted": False},
-    {"key": "no_shake", "label": "Con malteada", "icon": "blender", "inverted": True},
     {"key": "no_gluten", "label": "Sin gluten", "icon": "bakery_dining", "inverted": False},
 ]
+
+# Ajo y demás condimentos entran al motor, no a la lista que se marca.
+HIDDEN_PICKER_TAGS = frozenset({"condimento"})
+
+
+def show_in_picker(food: FoodItem) -> bool:
+    return HIDDEN_PICKER_TAGS.isdisjoint(food.tags)
+
 
 FOOD_GROUPS: list[dict[str, Any]] = [
     {"cat": FoodCategory.PROTEIN, "label": "Proteínas", "icon": "egg_alt"},

@@ -27,7 +27,9 @@ class ConsoleEmailSender:
 
     async def send(self, *, to: str, subject: str, body: str) -> None:
         self.sent.append({"to": to, "subject": subject, "body": body})
-        logger.info("email_console", to=to, subject=subject, body=body)
+        # Sin destinatario, sin cuerpo, sin token: el enlace vive en `sent`
+        # para las pruebas, no en el log.
+        logger.info("verification_email_sent")
 
 
 class SmtpEmailSender:
@@ -67,6 +69,6 @@ class SmtpEmailSender:
             await asyncio.to_thread(self._send_blocking, to, subject, body)
         except (smtplib.SMTPException, OSError) as exc:
             # El asunto sí, el cuerpo no: lleva el token de un solo uso.
-            logger.warning("email_failed", to=to, subject=subject, error=str(exc))
+            logger.warning("email_failed", subject=subject, error=str(exc))
             raise EmailError("No se pudo enviar el correo") from exc
-        logger.info("email_sent", to=to, subject=subject)
+        logger.info("email_sent", subject=subject)

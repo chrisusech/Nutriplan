@@ -65,7 +65,7 @@ def test_no_dairy_removes_whey_and_dairy(catalog) -> None:
     allowed = allowed_foods(catalog, ["no_dairy"])
     names = {f.name_es for f in allowed}
     assert "yogur griego natural" not in names
-    assert "proteína en polvo whey" not in names
+    assert "proteína en polvo" not in names
     assert "pechuga de pollo" in names
 
 

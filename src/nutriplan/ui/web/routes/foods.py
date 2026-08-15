@@ -34,7 +34,7 @@ def grouped(foods: list[FoodItem], *, marked: frozenset[str] = frozenset()) -> l
         items = [
             {"id": str(f.id), "name": f.name_es.capitalize(), "marcado": str(f.id) in marked}
             for f in sorted(foods, key=lambda f: f.name_es)
-            if f.category == meta["cat"]
+            if f.category == meta["cat"] and presenter.show_in_picker(f)
         ]
         if items:
             marcados = sum(1 for i in items if i["marcado"])

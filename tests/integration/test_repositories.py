@@ -215,7 +215,7 @@ async def test_food_custom_is_tenant_scoped(session) -> None:
     assert "pechuga de pollo" in names_b
 
     found = await repo_a.search("arepa")
-    assert {f.name_es for f in found} >= {"arepa de la abuela", "arepa de maíz"}
+    assert {f.name_es for f in found} >= {"arepa de la abuela", "arepa Sarys extradélgada"}
 
 
 async def test_targets_and_plan_roundtrip(session) -> None:

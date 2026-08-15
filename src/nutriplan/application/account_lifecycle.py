@@ -40,7 +40,7 @@ async def send_verification_email(
             "Si no fuiste tú, ignora este mensaje."
         ),
     )
-    logger.info("verification_email_sent", email=email)
+    logger.info("verification_email_sent")
 
 
 async def confirm_email(*, token: str, secret: str, auth_repo: AuthRepository) -> str:

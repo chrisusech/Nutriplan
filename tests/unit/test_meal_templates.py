@@ -35,7 +35,7 @@ DAILY = MacroTargets(kcal=1800, protein_g=104.0, carb_g=200.0, fat_g=52.0)
 # La lista EXACTA del cliente "Testing", el del plan que salía con yogur los siete
 # días. Es el caso de regresión del bug reportado.
 TESTING_FOODS = [
-    "arepa de maíz",
+    "arepa Sarys extradélgada",
     "arroz integral cocido",
     "batata cocida",
     "garbanzos cocidos",
@@ -251,7 +251,7 @@ def test_lunch_and_dinner_are_rice_and_potato_not_bread_and_arepa(catalog, testi
     selector = TemplateSelector(testing_allowed, catalog, DAILY, seed=0)
     week = selector.select_week(seed=0)
 
-    breads = {"arepa de maíz", "pan integral"}
+    breads = {"arepa Sarys extradélgada", "pan integral"}
     served = [
         (day, slot, food.name_es)
         for day, meals in enumerate(week)
@@ -311,7 +311,7 @@ def test_the_only_carb_you_have_is_the_one_you_eat(catalog, foods) -> None:
     only_arepa = [
         foods[name]
         for name in (
-            "arepa de maíz",
+            "arepa Sarys extradélgada",
             "pechuga de pollo",
             "huevo entero",
             "yogur griego natural",
@@ -331,7 +331,7 @@ def test_the_only_carb_you_have_is_the_one_you_eat(catalog, foods) -> None:
         for food in meals[MealSlot.LUNCH].foods
         if food.category is FoodCategory.CARB
     }
-    assert lunch_carbs == {"arepa de maíz"}
+    assert lunch_carbs == {"arepa Sarys extradélgada"}
 
 
 def test_an_optional_component_can_actually_be_left_out(catalog, foods) -> None:

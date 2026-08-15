@@ -126,11 +126,22 @@ export const initWheels = () => {
     ruedas.forEach((wheel) => {
       pinta(wheel, valores(wheel));
       centra(wheel, wheel.dataset.value);
+      const encaja = () => {
+        const i = indiceActual(wheel);
+        wheel.scrollTo({ top: i * alto(wheel), behavior: 'smooth' });
+        marca(wheel);
+      };
       let t;
       wheel.addEventListener('scroll', () => {
         clearTimeout(t);
         t = setTimeout(() => marca(wheel), 60);
       }, { passive: true });
+      wheel.addEventListener('scrollend', encaja, { passive: true });
+      wheel.addEventListener('click', (event) => {
+        const li = event.target.closest('.wheel-item');
+        if (!li) return;
+        centra(wheel, li.dataset.value, { animado: true });
+      });
     });
 
     sheet.addEventListener('sheet:open', () => {

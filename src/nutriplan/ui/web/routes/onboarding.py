@@ -18,7 +18,6 @@ from nutriplan.application.weekly_checkin import seed_weight_from_profile
 from nutriplan.domain.errors import ValidationError
 from nutriplan.domain.food_filter import RESTRICTION_TAG_MAP
 from nutriplan.domain.models import (
-    CORE_MEAL_SLOTS,
     ActivityLevel,
     Goal,
     MealSlot,
@@ -78,16 +77,15 @@ def _restricciones(raw: list[str]) -> list[str]:
 
 
 def _meal_slots(raw: list[str]) -> list[MealSlot]:
-    """Las comidas elegidas; las tres principales no son opcionales."""
+    """Las comidas que marcó. Vacío no se rellena: hace falta al menos una."""
     chosen = []
     for value in raw:
         try:
             chosen.append(MealSlot(value))
         except ValueError:
             continue
-    for core in CORE_MEAL_SLOTS:
-        if core not in chosen:
-            chosen.append(core)
+    if not chosen:
+        raise ValidationError("Elige al menos una comida.")
     return [s for s in MealSlot if s in chosen]
 
 
@@ -101,7 +99,7 @@ async def _food_groups(
         items = [
             {"id": str(f.id), "name": f.name_es.capitalize(), "on": str(f.id) in selected}
             for f in sorted(universe, key=lambda f: f.name_es)
-            if f.category == meta["cat"]
+            if f.category == meta["cat"] and presenter.show_in_picker(f)
         ]
         if items:
             groups.append({**meta, "items": items})

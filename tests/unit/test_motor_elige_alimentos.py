@@ -75,7 +75,7 @@ def _despensa_completa() -> list[FoodItem]:
             "atún en agua",
             "yogur griego natural",
             "arroz integral cocido",
-            "arepa de maíz",
+            "arepa Sarys extradélgada",
             "pan integral",
             "banano",
             "fresa",

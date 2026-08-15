@@ -66,6 +66,7 @@ async def _perfil_de_ana(container, repos, session) -> Client:
         "atún en agua",
         "arroz blanco",
         "arroz integral",
+        "arepa Sarys extradélgada",
         "arepa de maíz",
         "papa",
         "avena en hojuelas",
@@ -80,7 +81,9 @@ async def _perfil_de_ana(container, repos, session) -> Client:
         "yogur griego natural",
     }
     catalog = await repos.foods.list_universe()
-    liked = [f.id for f in catalog if f.name_es in gustos]
+    liked = [
+        f.id for f in catalog if f.name_es in gustos or any(alias in gustos for alias in f.aliases)
+    ]
     return await create_profile(
         account_id=account.id,
         tenant_id=DEFAULT_TENANT_ID,

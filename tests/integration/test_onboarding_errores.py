@@ -92,15 +92,21 @@ def test_un_alimento_marcado_que_no_es_un_id_se_ignora_sin_romper(app) -> None:
     assert _enviar(app, food_ids=["no-soy-un-uuid", ""]).status_code == 303
 
 
-def test_sin_marcar_ninguna_comida_igual_se_come_lo_principal(app, container) -> None:
-    """Nadie debería quedarse sin desayuno por no tocar un checkbox."""
+def test_sin_marcar_ninguna_comida_pide_al_menos_una(app) -> None:
+    """Desayuno y cena ya no se rellenan solos: hay que elegir."""
+    resp = _enviar(app, meal_slots=[])
+    assert resp.status_code == 200
+    assert "al menos una comida" in resp.text.lower()
+
+
+def test_sin_desayuno_el_perfil_queda_con_almuerzo_y_cena(app, container) -> None:
     import asyncio
 
     from sqlalchemy import select
 
     from nutriplan.adapters.db.models import ClientRow
 
-    assert _enviar(app, meal_slots=[]).status_code == 303
+    assert _enviar(app, meal_slots=["almuerzo", "cena"]).status_code == 303
 
     async def _comidas() -> list[str]:
         async with container.session_factory() as session:
@@ -108,9 +114,7 @@ def test_sin_marcar_ninguna_comida_igual_se_come_lo_principal(app, container) ->
             return list(fila.scalars().one())
 
     comidas = asyncio.run(_comidas())
-    assert "desayuno" in comidas
-    assert "almuerzo" in comidas
-    assert "cena" in comidas
+    assert comidas == ["almuerzo", "cena"]
 
 
 def test_lo_que_no_quiere_comer_se_separa_por_comas_o_por_lineas(app, container) -> None:

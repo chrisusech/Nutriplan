@@ -79,6 +79,7 @@ async def _perfil(container, repos, session):
         "atún en agua",
         "arroz blanco",
         "arroz integral",
+        "arepa Sarys extradélgada",
         "arepa de maíz",
         "papa",
         "avena en hojuelas",
@@ -92,7 +93,11 @@ async def _perfil(container, repos, session):
         "tomate",
         "yogur griego natural",
     }
-    catalog = [f for f in await repos.foods.list_universe() if f.name_es in gustos]
+    catalog = [
+        f
+        for f in await repos.foods.list_universe()
+        if f.name_es in gustos or any(alias in gustos for alias in f.aliases)
+    ]
     return await create_profile(
         account_id=account.id,
         tenant_id=DEFAULT_TENANT_ID,

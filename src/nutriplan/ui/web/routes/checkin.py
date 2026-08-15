@@ -1,8 +1,7 @@
-"""Cierre de semana: peso, calificaciones y cómo le fue.
+"""Cierre de semana: peso y cinco estrellas.
 
-Las tres cosas que hacen falta para armar la semana siguiente. El peso ajusta
-las kcal, las notas dicen qué repetir, y el comentario es lo que la IA lee para
-entender lo que los números no cuentan.
+El peso ajusta las kcal. Las notas dicen qué repetir. El comentario, si lo hay,
+es lo que la IA lee — no es puerta.
 """
 
 from typing import Annotated
@@ -20,7 +19,6 @@ from nutriplan.application.weekly_checkin import (
 )
 from nutriplan.domain.errors import ValidationError
 from nutriplan.domain.week import iso_week_start
-from nutriplan.domain.week_close import is_valid_comment
 from nutriplan.domain.week_recap import week_recap
 from nutriplan.ui.web.deps import (
     account_id_of,
@@ -83,18 +81,19 @@ async def checkin_submit(
     if client is None:
         return RedirectResponse("/onboarding", status_code=303)
 
-    plan = (
-        await repos.plans.get(client.active_plan_id) if client.active_plan_id is not None else None
+    closure = await week_closure(
+        client=client,
+        weights=repos.weights,
+        ratings=repos.ratings,
     )
-    # La primera semana no tiene plan que comentar: solo se pesa.
-    if plan is not None and not is_valid_comment(comentario):
+    if not closure.is_first_week and not closure.ratings_done:
         return await _form_with_error(
             request,
             session,
             weight_kg,
             comentario,
-            "Cuéntanos en una frase cómo te fue esta semana: es lo que usamos "
-            "para ajustar la siguiente.",
+            f"Califica al menos {closure.ratings_required} platos de esta semana "
+            "para poder cerrarla.",
         )
 
     try:

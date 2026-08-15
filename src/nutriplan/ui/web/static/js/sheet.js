@@ -31,6 +31,15 @@ export const cerrar = (sheet) => {
 };
 
 export const initSheets = () => {
+  // Si el gesto empezó en el panel (girar la rueda), soltar sobre el velo
+  // no debe cerrar: en iOS el target del click acaba siendo el <dialog>.
+  let downOnPanel = false;
+  document.addEventListener('pointerdown', (event) => {
+    const sheet = event.target.closest('dialog.sheet');
+    if (!sheet) return;
+    downOnPanel = !!event.target.closest('.sheet-panel');
+  }, { passive: true });
+
   document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-sheet-open]');
     if (opener) {
@@ -45,7 +54,8 @@ export const initSheets = () => {
       return;
     }
     // Tocar el velo: el clic cae en el propio <dialog>, no en su panel.
-    if (event.target.matches('dialog.sheet')) cerrar(event.target);
+    if (event.target.matches('dialog.sheet') && !downOnPanel) cerrar(event.target);
+    downOnPanel = false;
   });
 
   // Escape lo cierra el navegador de golpe; se intercepta para que salga

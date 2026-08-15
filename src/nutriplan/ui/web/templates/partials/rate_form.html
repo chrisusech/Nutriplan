@@ -27,11 +27,10 @@
       {% endif %}
     </label>
     <textarea id="comment-{{ meal.slot }}" name="comment" rows="2" maxlength="400"
-              {% if meal.slot == abierta and not meal.comment %}autofocus{% endif %}
-              placeholder="Sabor, porción, lo que cambiarías…">{{ meal.comment or '' }}</textarea>
+              placeholder="Si quieres, sabor, porción, lo que cambiarías…">{{ meal.comment or '' }}</textarea>
     <button class="btn btn-ghost" type="submit" name="rating"
             value="{{ meal.rating }}">
-      <span class="icon">send</span>Enviar
+      Guardar nota
     </button>
     {% if meal.comment and meal.slot == abierta %}
     <p class="rate-saved"><span class="icon">check</span>Guardado. Gracias.</p>

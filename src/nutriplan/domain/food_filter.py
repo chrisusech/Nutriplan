@@ -17,6 +17,7 @@ KNOWN_TAGS = {
     "soya",
     "batido",
     "vegano",
+    "condimento",
 }
 
 # Restricciones canónicas (como llegan del intake confirmado) → tags prohibidos.

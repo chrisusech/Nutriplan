@@ -37,7 +37,10 @@ def foods():
 
 def day_meals(foods):
     return [
-        (MealSlot.BREAKFAST, [foods["huevo entero"], foods["arepa de maíz"], foods["aguacate"]]),
+        (
+            MealSlot.BREAKFAST,
+            [foods["huevo entero"], foods["arepa Sarys extradélgada"], foods["aguacate"]],
+        ),
         (MealSlot.SNACK_AM, [foods["yogur griego natural"], foods["banano"]]),
         (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
         (MealSlot.SNACK_PM, [foods["queso fresco"], foods["manzana"]]),
@@ -73,7 +76,10 @@ def test_a_snack_of_only_fruit_squares_the_day(foods, nutrition_config) -> None:
     absorben lo que el snack no lleva.
     """
     meals = [
-        (MealSlot.BREAKFAST, [foods["huevo entero"], foods["arepa de maíz"], foods["aguacate"]]),
+        (
+            MealSlot.BREAKFAST,
+            [foods["huevo entero"], foods["arepa Sarys extradélgada"], foods["aguacate"]],
+        ),
         (MealSlot.SNACK_AM, [foods["manzana"]]),  # solo fruta
         (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
         (MealSlot.SNACK_PM, [foods["banano"], foods["almendras"]]),  # fruta + grasa
@@ -103,7 +109,10 @@ def test_a_client_who_eats_four_meals_gets_four(foods, nutrition_config) -> None
     assert sum(s.kcal for s in config.meal_distribution.values()) == pytest.approx(1.0)
 
     meals = [
-        (MealSlot.BREAKFAST, [foods["huevo entero"], foods["arepa de maíz"], foods["aguacate"]]),
+        (
+            MealSlot.BREAKFAST,
+            [foods["huevo entero"], foods["arepa Sarys extradélgada"], foods["aguacate"]],
+        ),
         (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
         (MealSlot.SNACK_PM, [foods["yogur griego natural"], foods["manzana"]]),
         (MealSlot.DINNER, [foods["tilapia"], foods["batata cocida"]]),
@@ -112,6 +121,23 @@ def test_a_client_who_eats_four_meals_gets_four(foods, nutrition_config) -> None
     assert [m.slot for m in solved] == slots
     assert validate_day(solved, DAILY, config, shares=macro_shares(meals, config)) == []
     assert sum(m.computed.kcal for m in solved) == pytest.approx(DAILY.kcal, rel=0.08)
+
+
+def test_sin_desayuno_el_reparto_queda_en_dos_comidas_que_suman_el_dia(
+    foods, nutrition_config
+) -> None:
+    """Desayuno y cena son opcionales: el día se reparte entre lo que sí come."""
+    slots = [MealSlot.LUNCH, MealSlot.DINNER]
+    config = nutrition_config.for_slots(slots)
+    assert list(config.meal_distribution) == slots
+    assert sum(s.kcal for s in config.meal_distribution.values()) == pytest.approx(1.0)
+    assert sum(s.protein_g for s in config.meal_distribution.values()) == pytest.approx(1.0)
+    meals = [
+        (MealSlot.LUNCH, [foods["pechuga de pollo"], foods["arroz blanco cocido"]]),
+        (MealSlot.DINNER, [foods["tilapia"], foods["batata cocida"]]),
+    ]
+    solved = solve_day_portions(meals, DAILY, config)
+    assert [m.slot for m in solved] == slots
 
 
 def test_portions_land_on_numbers_a_person_can_weigh(foods, nutrition_config) -> None:
@@ -250,7 +276,7 @@ def _selection(days: list[dict]) -> PlanSelection:
 
 def _full_day(foods, i: int) -> dict:
     ids = {
-        "desayuno": [foods["huevo entero"].id, foods["arepa de maíz"].id],
+        "desayuno": [foods["huevo entero"].id, foods["arepa Sarys extradélgada"].id],
         "snack_am": [foods["yogur griego natural"].id, foods["banano"].id],
         "almuerzo": [foods["pechuga de pollo"].id, foods["arroz blanco cocido"].id],
         "snack_pm": [foods["queso fresco"].id, foods["manzana"].id],
@@ -273,7 +299,7 @@ def test_structure_accepts_valid_selection(foods) -> None:
 def test_structure_flags_violations(foods) -> None:
     lookup = {str(f.id): f for f in foods.values()}
     day = _full_day(foods, 0)
-    day["meals"][0]["food_ids"] = [str(foods["arepa de maíz"].id)]  # sin proteína
+    day["meals"][0]["food_ids"] = [str(foods["arepa Sarys extradélgada"].id)]  # sin proteína
     day["meals"][1]["food_ids"] = [  # 3 ítems: un snack no es una comida
         str(foods["yogur griego natural"].id),
         str(foods["banano"].id),

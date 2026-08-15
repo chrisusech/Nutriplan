@@ -3,6 +3,7 @@
 import smtplib
 
 import pytest
+from structlog.testing import capture_logs
 
 from nutriplan.adapters.email import ConsoleEmailSender, EmailError, SmtpEmailSender
 
@@ -11,6 +12,21 @@ async def test_en_local_el_correo_se_queda_a_la_vista_y_no_sale_a_ningun_lado() 
     sender = ConsoleEmailSender()
     await sender.send(to="ana@correo.com", subject="Hola", body="Cuerpo")
     assert sender.sent == [{"to": "ana@correo.com", "subject": "Hola", "body": "Cuerpo"}]
+
+
+async def test_el_log_de_alta_no_deja_correo_ni_enlace_de_verificacion() -> None:
+    """El enlace vive en memoria para las pruebas; el log no lleva PII."""
+    sender = ConsoleEmailSender()
+    with capture_logs() as logs:
+        await sender.send(
+            to="ana@correo.com",
+            subject="Confirma tu correo",
+            body="https://app.nutriplan.test/verificar/token-secreto",
+        )
+    blob = " ".join(str(entry) for entry in logs)
+    assert "ana@correo.com" not in blob
+    assert "/verificar/" not in blob
+    assert any(entry.get("event") == "verification_email_sent" for entry in logs)
 
 
 async def test_un_smtp_caido_falla_ruidosamente_y_no_en_silencio(monkeypatch) -> None:

@@ -68,7 +68,7 @@
 .wheel-sep { font: 700 var(--t-xl) Poppins, sans-serif; color: var(--ink); }
 .wheel-unit { font: 600 var(--t-md) Poppins, sans-serif; color: var(--muted); }
 
-.wheel-frame { position: relative; flex: 0 1 7rem; }
+.wheel-frame { position: relative; flex: 0 1 8.5rem; }
 /* La banda del centro dice cuál es el valor elegido sin escribirlo dos veces. */
 .wheel-band {
   position: absolute;
@@ -102,9 +102,12 @@
   align-items: center;
   justify-content: center;
   height: 2.75rem;
+  padding: 0 1.25rem;
+  min-width: 100%;
   scroll-snap-align: center;
   font: 600 var(--t-lg) Poppins, sans-serif;
   color: var(--faint);
+  cursor: pointer;
   transition: color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .wheel-item.on {

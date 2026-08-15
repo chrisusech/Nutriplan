@@ -22,7 +22,7 @@ from nutriplan.domain.adapt_targets import AdaptationDecision, decision_from_tar
 from nutriplan.domain.errors import LLMError, ValidationError
 from nutriplan.domain.models import Client, NutritionTargets, WeightEntry
 from nutriplan.domain.week import iso_week_start
-from nutriplan.domain.week_close import WeekClosure, is_valid_comment
+from nutriplan.domain.week_close import RATINGS_REQUIRED, WeekClosure, is_valid_comment
 from nutriplan.ports.config_provider import ConfigProvider
 from nutriplan.ports.llm_client import LLMClient
 from nutriplan.ports.repository import ClientRepository, TargetsRepository
@@ -74,10 +74,10 @@ async def week_closure(
     meals_in_plan: int = 0,
     today: date | None = None,
 ) -> WeekClosure:
-    """El estado del cierre: peso y comentario de la semana.
+    """El estado del cierre: peso y cinco estrellas de la semana vivida.
 
-    Las calificaciones se cuentan para enseñarlas, no para bloquear. `meals_in_plan`
-    se acepta por compatibilidad con quien ya llamaba así.
+    El comentario se guarda si lo hay, pero no abre ni cierra la puerta.
+    `meals_in_plan` se acepta por compatibilidad con quien ya llamaba así.
     """
     _ = meals_in_plan
     entry = await weights.for_week(client.id, iso_week_start(today))
@@ -92,7 +92,7 @@ async def week_closure(
     return WeekClosure(
         has_weight=entry is not None,
         ratings=await ratings.count_for_plan(client.active_plan_id),
-        ratings_required=0,
+        ratings_required=RATINGS_REQUIRED,
         has_comment=is_valid_comment(entry.client_comment if entry else None),
     )
 

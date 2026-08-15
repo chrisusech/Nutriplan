@@ -26,8 +26,8 @@
   </div>
   {% endif %}
   <h2>¿Cuánto pesas hoy?</h2>
-  <p class="onb-hint">Con tu peso adaptamos las kcal, y con lo que nos cuentes
-     armamos la semana siguiente a tu medida.</p>
+  <p class="onb-hint">Con tu peso adaptamos las kcal. Las estrellas de tus
+     platos nos dicen qué repetirte. El comentario, si quieres dejarlo, suma.</p>
 
   {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
 
@@ -46,10 +46,9 @@
     {% if not closure or not closure.is_first_week %}
     <label class="field" for="comentario"><span>¿Cómo te fue esta semana?</span>
       <textarea id="comentario" name="comentario" rows="4" maxlength="1200"
-                placeholder="Qué te gustó, qué no volverías a comer, si te faltó tiempo para cocinar…"
-                required>{{ last_comment or '' }}</textarea>
+                placeholder="Qué te gustó, qué no volverías a comer, si te faltó tiempo para cocinar…">{{ last_comment or '' }}</textarea>
     </label>
-    <p class="muted">Esto es lo que leemos para ajustar tu semana siguiente.</p>
+    <p class="muted">Opcional. Si lo escribes, lo leemos para la semana siguiente.</p>
     {% endif %}
 
     <button class="btn btn-primary btn-big btn-block" type="submit">
@@ -68,14 +67,12 @@
         <span class="icon">{{ 'check_circle' if closure.has_weight else 'radio_button_unchecked' }}</span>
         <span>Tu peso de esta semana</span>
       </li>
-      <li class="{{ 'done' if closure.has_comment else '' }}">
-        <span class="icon">{{ 'check_circle' if closure.has_comment else 'radio_button_unchecked' }}</span>
-        <span>Contarnos cómo te fue</span>
+      <li class="{{ 'done' if closure.ratings_done else '' }}">
+        <span class="icon">{{ 'check_circle' if closure.ratings_done else 'radio_button_unchecked' }}</span>
+        <span>Calificar al menos {{ closure.ratings_required }} platos
+          {% if closure.ratings %}({{ closure.ratings }}){% endif %}</span>
       </li>
     </ul>
-    {% if closure.ratings %}
-    <p class="muted">Has calificado {{ closure.ratings }} plato{{ 's' if closure.ratings != 1 else '' }} — ayuda, no es obligatorio.</p>
-    {% endif %}
     <p class="muted">¿Algo que no quieres volver a ver?
        <a href="/mis-alimentos">Revisa tus alimentos</a>.</p>
   </div>

@@ -59,8 +59,8 @@ class UnitGranularity(StrEnum):
     HALF = "half"  # aguacate, pan, banano → medias unidades permitidas
 
 
-# Las comidas que un plan no puede quitar. Los snacks sí: hay clientes de cuatro
-# comidas, y de tres.
+# Las comidas "de plato" frente a los snacks. Ya no son obligatorias: basta
+# con una comida al día. El presentador las usa para etiquetar, no para forzar.
 CORE_MEAL_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
 
 # El menú es de una semana. No es una configuración: es el producto.
@@ -141,12 +141,8 @@ class Client(BaseModel):
     @model_validator(mode="after")
     def _default_meal_slots(self) -> "Client":
         chosen = set(self.meal_slots) or set(MealSlot)
-        missing = [s for s in CORE_MEAL_SLOTS if s not in chosen]
-        if missing:
-            raise ValueError(
-                "Un plan necesita desayuno, almuerzo y cena; faltan: "
-                + ", ".join(s.value for s in missing)
-            )
+        if not chosen:
+            raise ValueError("Un plan necesita al menos una comida")
         self.meal_slots = [s for s in MealSlot if s in chosen]  # orden del día
         return self
 

@@ -1,4 +1,4 @@
-version: "2026.08.12"                  # se guarda en cada plan (procedencia)
+version: "2026.08.14"                  # se guarda en cada plan (procedencia)
 activity_factors:
   sedentary: 1.20
   light: 1.375
@@ -6,7 +6,7 @@ activity_factors:
   active: 1.725
   very_active: 1.90
 goal_adjustments:                      # fracción sobre TDEE
-  lose_fat: -0.18
+  lose_fat: -0.21
   maintain: 0.0
   gain_muscle: 0.10
 # Proteína y grasa se fijan al SUELO de su rango: es lo que deja más kcal libres

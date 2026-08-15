@@ -19,6 +19,7 @@ from nutriplan.domain.models import (
     Goal,
     MacroFormula,
     MacroTargets,
+    MealSlot,
     Sex,
 )
 from nutriplan.domain.nutrition_config import NutritionConfig
@@ -43,17 +44,17 @@ def make_client(**overrides) -> Client:
 
 def test_golden_female_lose_fat(nutrition_config) -> None:
     # BMR  = 10*62 + 6.25*165 - 5*30 - 161 = 1340.25
-    # TDEE = 1340.25 * 1.55 = 2077.3875 ; déficit = * 0.82 = 1703.46
+    # TDEE = 1340.25 * 1.55 = 2077.3875 ; déficit = * 0.79 = 1641.14
     # piso = max(BMR 1340.25, mínimo mujer 1450) = 1450  →  manda el déficit
     # prot = 1.6 * 62 =  99.2 → 396.8 kcal
     # fat  = 0.8 * 62 =  49.6 → 446.4 kcal   (el 28% de kcal habría dado 53.0)
-    # carb = (1703.46 - 396.8 - 446.4) / 4 = 215.1
+    # carb = (1641.14 - 396.8 - 446.4) / 4 = 199.5
     targets = compute_targets(make_client(), nutrition_config)
-    assert targets.daily.kcal == pytest.approx(1703.5, abs=0.1)
+    assert targets.daily.kcal == pytest.approx(1641.1, abs=0.1)
     assert targets.daily.protein_g == pytest.approx(99.2, abs=0.1)
     assert targets.daily.fat_g == pytest.approx(49.6, abs=0.1)
-    assert targets.daily.carb_g == pytest.approx(215.1, abs=0.1)
-    assert targets.daily.fiber_g == pytest.approx(23.8, abs=0.1)  # 1703.46/1000 * 14
+    assert targets.daily.carb_g == pytest.approx(199.5, abs=0.1)
+    assert targets.daily.fiber_g == pytest.approx(23.0, abs=0.1)  # 1641.14/1000 * 14
     assert targets.config_version == nutrition_config.version
 
 
@@ -255,6 +256,21 @@ def test_formula_g_per_kg_drives_macros(nutrition_config) -> None:
     # el carbo cierra el invariante energético contra las kcal del objetivo
     recomposed = targets.daily.protein_g * 4 + targets.daily.carb_g * 4 + targets.daily.fat_g * 9
     assert recomposed == pytest.approx(targets.daily.kcal, abs=1.0)
+
+
+def test_sin_desayuno_el_dia_sigue_cuadrando(nutrition_config) -> None:
+    """Almuerzo y cena bastan: el reparto se renormaliza y suma el día."""
+    client = make_client(meal_slots=[MealSlot.LUNCH, MealSlot.DINNER])
+    assert client.meal_slots == [MealSlot.LUNCH, MealSlot.DINNER]
+    config = nutrition_config.for_slots(client.meal_slots)
+    targets = compute_targets(client, config)
+    assert set(targets.per_meal) == {MealSlot.LUNCH, MealSlot.DINNER}
+    assert sum(m.kcal for m in targets.per_meal.values()) == pytest.approx(
+        targets.daily.kcal, abs=0.2
+    )
+    assert sum(m.protein_g for m in targets.per_meal.values()) == pytest.approx(
+        targets.daily.protein_g, abs=0.2
+    )
 
 
 def test_manual_kcal_override(nutrition_config) -> None:

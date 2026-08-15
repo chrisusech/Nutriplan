@@ -20,7 +20,7 @@ CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foo
 _NS = uuid5(NAMESPACE_URL, "nutriplan/tests")
 
 MENU = {
-    MealSlot.BREAKFAST: [("huevo entero", 100), ("arepa de maíz", 70), ("aguacate", 50)],
+    MealSlot.BREAKFAST: [("huevo entero", 100), ("arepa Sarys extradélgada", 70), ("aguacate", 50)],
     MealSlot.SNACK_AM: [("yogur griego natural", 170), ("banano", 120)],
     MealSlot.LUNCH: [("pechuga de pollo", 150), ("arroz blanco cocido", 120)],
     MealSlot.SNACK_PM: [("queso fresco", 60), ("manzana", 180)],

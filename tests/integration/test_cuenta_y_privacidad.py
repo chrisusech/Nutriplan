@@ -91,6 +91,16 @@ def test_al_registrarse_recibe_un_correo_para_confirmar_su_direccion(app, mailer
     assert "https://app.nutriplan.test/verificar/" in mailer.sent[0]["body"]
 
 
+def test_al_darse_de_alta_el_log_no_lleva_correo_ni_enlace(app) -> None:
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        _signup(app)
+    blob = " ".join(str(entry) for entry in logs)
+    assert "ana@correo.com" not in blob
+    assert "/verificar/" not in blob
+
+
 def test_el_enlace_del_correo_confirma_la_direccion(app, mailer) -> None:
     _signup(app)
     link = re.search(r"/verificar/(\S+)", mailer.sent[0]["body"]).group(1)

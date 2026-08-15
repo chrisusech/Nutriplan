@@ -177,7 +177,7 @@ def test_the_main_meals_prefer_the_staple_carbs_over_the_bread(catalog) -> None:
     """
     by_name = {f.name_es: f for f in catalog}
     staples = ["arroz blanco cocido", "papa cocida", "quinoa cocida", "plátano maduro cocido"]
-    breads = ["pan integral", "arepa de maíz", "tortilla de maíz"]
+    breads = ["pan integral", "arepa Sarys extradélgada", "tortilla de maíz"]
 
     for main in (MealSlot.LUNCH, MealSlot.DINNER):
         worst_staple = min(by_name[n].weight_in(main) for n in staples)
@@ -189,3 +189,36 @@ def test_the_main_meals_prefer_the_staple_carbs_over_the_bread(catalog) -> None:
         food = by_name[name]
         assert food.weight_in(MealSlot.BREAKFAST) == MAX_SLOT_WEIGHT
         assert food.weight_in(MealSlot.BREAKFAST) > food.weight_in(MealSlot.LUNCH)
+
+
+def test_el_catalogo_habla_como_en_la_cocina(catalog) -> None:
+    """Los nombres que ve la persona: sin jerga, con la marca de la arepa."""
+    by_name = {f.name_es: f for f in catalog}
+    assert "proteína en polvo" in by_name
+    assert "whey" in by_name["proteína en polvo"].aliases
+    assert "tofu" in by_name
+    assert "tofu firme" not in by_name
+    assert "ajo" in by_name
+    assert "condimento" in by_name["ajo"].tags
+    leche = by_name["leche deslactosada"]
+    assert leche.category is FoodCategory.DAIRY
+    assert "lacteo" in leche.tags
+    arepa = by_name["arepa Sarys extradélgada"]
+    assert "arepa" in arepa.aliases
+    assert "arepa de maíz" in arepa.aliases
+    pita = by_name["pan pita integral"]
+    assert pita.weight_in(MealSlot.BREAKFAST) == MAX_SLOT_WEIGHT
+    assert pita.weight_in(MealSlot.LUNCH) == by_name["pan integral"].weight_in(MealSlot.LUNCH)
+    for raro in (
+        "frijol cargamanto",
+        "cuscús cocido",
+        "bulgur cocido",
+        "cebada perlada cocida",
+        "trigo sarraceno cocido",
+        "amaranto cocido",
+        "mijo cocido",
+        "tempeh",
+        "tahini",
+        "huevo de codorniz",
+    ):
+        assert raro not in by_name, raro

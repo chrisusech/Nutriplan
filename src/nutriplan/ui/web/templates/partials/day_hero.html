@@ -1,4 +1,4 @@
-<section class="card day-hero" id="day-hero">
+<section class="card day-hero" id="day-hero"{% if oob %} hx-swap-oob="true"{% endif %}>
   <div class="day-hero-top">
     {% if progreso %}
     <div class="ring" data-pct="{{ progreso.pct }}" data-estado="{{ progreso.estado }}">
@@ -55,4 +55,5 @@
       {% endfor %}
     {% endif %}
   </ul>
+  <p class="muted">Los gramos son del alimento ya cocido.</p>
 </section>

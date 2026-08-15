@@ -1,2 +1,5 @@
-{# Solo el botón. El anillo se pinta en JS: reemplazarlo en iOS es un fogonazo. #}
+{# El botón, y el anillo por OOB: en iOS el JS no llega a pintar las kcal. #}
 {% include "partials/meal_eaten.html" %}
+{% with oob=true %}
+{% include "partials/day_hero.html" %}
+{% endwith %}

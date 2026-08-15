@@ -11,10 +11,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from nutriplan.domain.models import ActivityLevel, Goal, MealSlot, Sex
 
-# Las comidas que ningún plan puede quitar. Los snacks sí son opcionales: hay
-# clientes de cuatro comidas, y de tres.
-CORE_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
-
 MACRO_COLUMNS = ("kcal", "protein_g", "carb_g")
 
 
@@ -117,12 +113,10 @@ class NutritionConfig(BaseModel):
             for goal, value in values.items():
                 if not lo <= value <= hi:
                     raise ValueError(f"{name}[{goal.value}] = {value} fuera del rango [{lo}, {hi}]")
-        # El reparto puede tener MENOS de cinco comidas (un cliente come cuatro),
-        # pero nunca puede quedarse sin desayuno, almuerzo o cena: los snacks son
-        # lo único opcional.
-        missing = [s.value for s in CORE_SLOTS if s not in self.meal_distribution]
-        if missing:
-            raise ValueError(f"meal_distribution debe incluir {', '.join(missing)}")
+        # El YAML trae las cinco; for_slots deja solo las que la persona come.
+        # Una sola comida basta: su cuota absorbe el día.
+        if not self.meal_distribution:
+            raise ValueError("meal_distribution no puede estar vacío")
         for macro in MACRO_COLUMNS:
             total = sum(getattr(s, macro) for s in self.meal_distribution.values())
             if abs(total - 1.0) > 1e-6:

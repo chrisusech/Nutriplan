@@ -32,8 +32,10 @@ def test_la_unidad_va_primero_porque_es_lo_que_la_persona_necesita_saber() -> No
     assert portion_text(120, foods["pechuga de pollo"]) == "Pechuga de pollo — 120 g"
 
 
-def test_un_huevo_de_codorniz_no_se_confunde_con_un_huevo_entero() -> None:
-    # La unidad ('huevo', 'pita') no puede tragarse el resto del nombre.
+def test_la_arepa_se_lee_con_la_marca_y_el_pita_no_pierde_el_apellido() -> None:
+    # La unidad ('arepa', 'pita') no puede tragarse el resto del nombre.
     foods = catalog_by_name()
-    assert portion_text(110, foods["huevo de codorniz"]) == "11 huevos de codorniz (110 g)"
+    assert portion_text(140, foods["arepa Sarys extradélgada"]) == (
+        "2 arepas Sarys extradélgadas (140 g)"
+    )
     assert portion_text(90, foods["pan pita integral"]) == "1½ panes pita integrales (90 g)"

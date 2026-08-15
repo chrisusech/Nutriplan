@@ -1,9 +1,8 @@
 """Qué significa "cerrar la semana", y qué falta cuando no está cerrada.
 
-Antes de la semana siguiente pedimos el peso y una frase sobre cómo fue. El
-peso adapta las kcal; el comentario es lo que la IA traduce a gustos. Calificar
-platos sigue existiendo — alimenta el motor y las métricas — pero ya no es
-puerta: pedir diez notas era fricción de beta.
+Antes de la semana siguiente pedimos el peso y cinco platos con estrella. El
+peso adapta las kcal; las notas alimentan el motor. El comentario es bienvenido
+y la IA lo lee — pero no es puerta: nadie se queda sin menú por no escribir.
 """
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 MIN_COMMENT_CHARS = 10
+RATINGS_REQUIRED = 5
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class WeekClosure:
     def is_closed(self) -> bool:
         if self.is_first_week:
             return self.has_weight
-        return self.has_weight and self.has_comment
+        return self.has_weight and self.ratings_done
 
     @property
     def progress(self) -> int:
@@ -41,7 +41,7 @@ class WeekClosure:
             return 100 if self.has_weight else 0
         done = 0.0
         done += 1.0 if self.has_weight else 0.0
-        done += 1.0 if self.has_comment else 0.0
+        done += 1.0 if self.ratings_done else 0.0
         return int(round(done / 2 * 100))
 
     @property
@@ -57,8 +57,8 @@ class WeekClosure:
         pending: list[str] = []
         if not self.has_weight:
             pending.append("registrar tu peso de esta semana")
-        if not self.has_comment:
-            pending.append("contarnos cómo te fue")
+        if not self.ratings_done:
+            pending.append(f"calificar al menos {self.ratings_required} platos")
         return pending
 
     @property

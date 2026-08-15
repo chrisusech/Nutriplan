@@ -107,7 +107,7 @@ classes:
     label: mantequilla de frutos secos
     categories: [fat]
     names_any:
-      [mantequilla de maní, mantequilla de almendras, mantequilla de marañón, tahini]
+      [mantequilla de maní, mantequilla de almendras, mantequilla de marañón]
 
   # Frutos secos y semillas enteros, para picar.
   frutos_secos:
