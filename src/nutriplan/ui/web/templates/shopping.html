@@ -35,13 +35,13 @@
 {% endif %}
 {# Lo primero que se lee tiene que decir qué es esto: una sola compra que cubre
    los siete días, no lo de hoy. #}
-<div class="shop-intro">
+<div class="shop-intro" data-shop-week="{{ desde.isoformat() }}">
   <span class="icon">calendar_month</span>
   <div>
     <b>Una sola compra para toda la semana</b>
     <p>Todo lo que necesitas del {{ desde.strftime('%d/%m') }} al
        {{ hasta.strftime('%d/%m') }}, sumado y en cantidades ya calculadas.
-       Los gramos son del alimento ya cocido.
+       Los gramos son del alimento crudo, como se compra.
        Marca lo que vayas echando al carrito.
        {% if n_en_casa %}Las {{ n_en_casa }} líneas atenuadas ya las tienes en
        casa: no hace falta comprarlas.{% endif %}</p>
@@ -66,11 +66,15 @@
       {# Tacharlo es cosa de la pantalla, no del servidor: nadie quiere que su
          lista del súper viaje a una base de datos. #}
       <label class="shop-line">
-        <input type="checkbox">
+        <input type="checkbox" data-shop-id="{{ line.name_es }}">
         <span class="shop-check"><span class="icon">check</span></span>
         <span class="shop-name">{{ line.name_es|capitalize }}</span>
         <span class="shop-qty">
           {% if line.unit_label %}{{ line.unit_label }} · {% endif %}{{ line.grams|int }} g
+          {# Un arroz que se compra en 380 g y se sirve en 1.060 g descoloca si
+             no se dice por qué. #}
+          {% if line.grams_cocido %}<small class="muted">crudo · {{ line.grams_cocido|int }} g
+            ya cocido</small>{% endif %}
         </span>
       </label>
       {% endif %}

@@ -121,6 +121,8 @@ const acepta = (sheet) => {
 
 export const initWheels = () => {
   for (const sheet of document.querySelectorAll('[data-wheel-sheet]')) {
+    if (sheet.dataset.bound === '1') continue;
+    sheet.dataset.bound = '1';
     const ruedas = [...sheet.querySelectorAll('[data-wheel]')];
     sheet.dataset.unidad = unidadDe(sheet) || 'kg';
     ruedas.forEach((wheel) => {

@@ -19,7 +19,17 @@
       color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
     var(--bg);
 }
-.welcome-head { display: flex; justify-content: flex-end; }
+.welcome-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.welcome-beta {
+  font: 600 var(--t-xs) Poppins, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
 
 /* --- El plato que gira ----------------------------------------------------- */
 

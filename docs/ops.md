@@ -40,9 +40,21 @@ fly secrets set \
   SMTP_HOST=smtp.resend.com SMTP_PORT=587 SMTP_USER=resend SMTP_PASSWORD=… \
   SMTP_FROM='NutriPlan <no-reply@nutriplan.co>' \
   GOOGLE_CLIENT_ID=… \
-  APPLE_CLIENT_ID=… \
+  APPLE_CLIENT_ID=app.nutriplan \
   ADMIN_EMAIL=… ADMIN_PASSWORD=…
 ```
+
+`APPLE_CLIENT_ID` es el **bundle** `app.nutriplan` (el `aud` del identity token
+nativo). No uses un Services ID de web.
+
+Webhook de App Store Server Notifications V2 (sin secreto compartido; Apple
+firma el JWS):
+
+```
+https://app.nutriplan.co/internal/app-store
+```
+
+Si aún no hay dominio propio, vale `https://<app>.fly.dev/internal/app-store`.
 
 Nunca en git. Techo de gasto en Google (20–50 USD/mes al empezar). No actives
 `LLM_SELECT_FOODS` en prod.
@@ -77,7 +89,27 @@ fly deploy
 ## Dominio
 
 Capacitor apunta a `https://app.nutriplan.co` (`mobile/capacitor.config.js`).
-En Fly: `fly certs add app.nutriplan.co` y DNS CNAME al app.
+**No es obligatorio para Apple**: el WebView puede cargar `https://<app>.fly.dev`
+(HTTPS lo da Fly) y el usuario nunca escribe esa URL. Sí es casi obligatorio en
+la práctica: el hostname se **compila dentro del .ipa**; cambiarlo después
+exige un update en la Store, y sin dominio propio el correo de verificación se
+ve spam. Se puede comprar en paralelo al código. En Fly:
+`fly certs add app.nutriplan.co` y DNS CNAME al app.
+
+## Primer arranque (humano, tras el merge)
+
+1. Proyecto Supabase Pro + `DATABASE_URL` (pooler 6543) y `DIRECT_DATABASE_URL` (5432)
+2. `fly deploy` con el Dockerfile (incluye extra `apple`)
+3. Secrets de la lista de arriba. `BASE_URL` y `ALLOWED_HOSTS` = el hostname
+   real (`app.nutriplan.co` o `*.fly.dev`)
+4. Desde Safari: `/health` debe responder `{"status":"ok"}`. Luego `/login`,
+   `/privacidad`, `/terminos`, `/soporte` y un registro real (el correo tiene
+   que llegar)
+5. Pegar el webhook IAP en App Store Connect
+6. Recién entonces: productos `nutriplan.monthly` / `nutriplan.annual`, banco,
+   Archive. QA en iPhone: `docs/iphone-qa.md`
+
+Hasta que `/health` no responda 200, **no** Archive.
 
 ## Backups
 

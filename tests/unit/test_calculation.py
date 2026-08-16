@@ -273,6 +273,12 @@ def test_sin_desayuno_el_dia_sigue_cuadrando(nutrition_config) -> None:
     )
 
 
+def test_un_perfil_viejo_sin_comidas_sigue_con_las_cinco() -> None:
+    """Vacío deserializa a las cinco; no revienta con un ValueError muerto."""
+    client = make_client(meal_slots=[])
+    assert client.meal_slots == list(MealSlot)
+
+
 def test_manual_kcal_override(nutrition_config) -> None:
     formula = MacroFormula(protein_g_per_kg=2.0, fat_g_per_kg=1.0, kcal_override=1800.0)
     targets = compute_targets(make_client(), nutrition_config, formula=formula)

@@ -23,7 +23,7 @@ def _google_responds(payload: dict, status: int = 200, monkeypatch=None) -> None
         async def __aexit__(self, *exc):
             return False
 
-        async def get(self, url, params=None):
+        async def post(self, url, data=None):
             return httpx.Response(status, json=payload)
 
     monkeypatch.setattr("nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _FakeClient())
@@ -84,6 +84,41 @@ async def test_sin_client_id_configurado_no_se_verifica_nada() -> None:
         await verify_google_id_token("t", client_id="")
 
 
+async def test_el_id_token_no_viaja_en_la_url(monkeypatch) -> None:
+    """GET ?id_token=eyJ… acaba en el log de httpx. El canje es POST al cuerpo."""
+    seen: dict[str, object] = {}
+
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, data=None):
+            seen["url"] = url
+            seen["data"] = data
+            return httpx.Response(
+                200,
+                json={
+                    "aud": CLIENT_ID,
+                    "sub": "1",
+                    "email": "ana@gmail.com",
+                    "email_verified": "true",
+                },
+            )
+
+        async def get(self, url, params=None):
+            raise AssertionError("el JWT no puede ir en la query")
+
+    monkeypatch.setattr("nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _FakeClient())
+    token = "eyJhbGciOiJSUzI1NiJ9.payload.firma"
+    await verify_google_id_token(token, client_id=CLIENT_ID)
+    assert "id_token" not in str(seen.get("url"))
+    assert token not in str(seen.get("url"))
+    assert seen.get("data") == {"id_token": token}
+
+
 async def test_si_google_no_responde_no_se_deja_entrar_por_las_dudas(monkeypatch) -> None:
     class _BrokenClient:
         async def __aenter__(self):
@@ -92,7 +127,7 @@ async def test_si_google_no_responde_no_se_deja_entrar_por_las_dudas(monkeypatch
         async def __aexit__(self, *exc):
             return False
 
-        async def get(self, url, params=None):
+        async def post(self, url, data=None):
             raise httpx.ConnectError("sin red")
 
     monkeypatch.setattr("nutriplan.adapters.oauth.httpx.AsyncClient", lambda **kw: _BrokenClient())

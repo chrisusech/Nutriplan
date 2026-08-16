@@ -45,6 +45,7 @@ from nutriplan.ui.web.deps import (
     track_event,
 )
 from nutriplan.ui.web.gate import week_gate
+from nutriplan.ui.web.public_errors import GEN_FAILED, JOB_STALE
 
 router = APIRouter()
 
@@ -374,16 +375,13 @@ async def generation_status(
     except ValueError:
         job_row = None
 
-    if job_row is not None and is_stale(job_row):
-        # El proceso que lo generaba ya no está. Mejor decirlo que dejar girar
-        # la rueda: el botón de reintentar vuelve a encolarlo.
-        job_row = None
+    if job_row is None or is_stale(job_row):
+        # El proceso que lo generaba ya no está, o el id no existe. Mejor
+        # decirlo que dejar girar la rueda: el botón vuelve a encolarlo.
+        return render(request, "partials/gen_error.html", client=client, error=JOB_STALE)
 
-    if job_row is None or job_row.status == JobStatus.FAILED:
-        error = (job_row.error if job_row else None) or (
-            "La generación se interrumpió. Vuelve a intentarlo."
-        )
-        return render(request, "partials/gen_error.html", client=client, error=error)
+    if job_row.status == JobStatus.FAILED:
+        return render(request, "partials/gen_error.html", client=client, error=GEN_FAILED)
 
     if job_row.status == JobStatus.DONE:
         # Navegación completa: un hx-swap del <body> con el HTML entero dejaba

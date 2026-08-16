@@ -112,7 +112,7 @@ def test_de_registrarse_a_tener_su_menu_en_pantalla(app) -> None:
     _generar(app)
     semana = app.get("/").text
     assert "Ingredientes" in semana
-    assert "En cola" in semana or "Preparación" in semana or "generando tu receta" in semana.lower()
+    assert "Ver receta" in semana or "Preparación" in semana or "Reintentar receta" in semana
     assert semana.count('<details class="meal"') == 5
     compra = app.get("/compra")
     assert compra.status_code == 200
@@ -189,7 +189,7 @@ def test_al_poner_la_nota_la_app_pregunta_por_que(app) -> None:
         data={"dia": 0, "slot": "desayuno", "rating": 2},
         follow_redirects=False,
     )
-    assert resp.headers["location"] == "/?dia=0&nota=desayuno#nota-desayuno"
+    assert resp.headers["location"] == "/?dia=0&nota=desayuno"
 
     html = app.get("/", params={"dia": 0, "nota": "desayuno"}).text
     assert "¿Qué falló?" in html
@@ -436,6 +436,9 @@ def test_marcar_comido_con_htmx_no_recarga_el_dia(app) -> None:
     assert 'hx-post="/menu/comi"' in resp.text
     assert 'class="ring-value">' in resp.text
     assert 'class="ring-value">0</span>' not in resp.text
+    assert "data-protein-g=" in resp.text
+    assert "data-carb-g=" in resp.text
+    assert "data-fat-g=" in resp.text
 
 
 def test_comer_fuera_en_la_app_recuadra_el_martes(app) -> None:
@@ -548,11 +551,13 @@ def test_el_paywall_concede_semanas_con_una_compra_local(app) -> None:
     assert pagina.status_code == 200
     assert "Activar mi plan" in pagina.text
     assert "nutriplan.monthly" in pagina.text
+    assert "El cobro se hace en el iPhone" in pagina.text
+    assert "Restaurar compras" in pagina.text
     resp = app.post(
         "/plan/activar",
         data={
             "product_id": "nutriplan.monthly",
-            "transaction_id": "txn-test-1",
+            "transaction_id": "local-txn-test-1",
         },
         follow_redirects=False,
     )
@@ -563,11 +568,81 @@ def test_el_paywall_concede_semanas_con_una_compra_local(app) -> None:
         "/plan/activar",
         data={
             "product_id": "nutriplan.monthly",
-            "transaction_id": "txn-test-1",
+            "transaction_id": "local-txn-test-1",
         },
         follow_redirects=False,
     )
     assert otra.status_code == 303
+    assert otra.headers["location"] == "/perfil"
+
+
+def test_un_id_inventado_no_activa_el_plan(app) -> None:
+    _registrar(app)
+    resp = app.post(
+        "/plan/activar",
+        data={
+            "product_id": "nutriplan.monthly",
+            "transaction_id": "txn-inventado",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    where = resp.headers["location"]
+    assert where.startswith("/plan?error=")
+    assert "429" not in where
+    assert "Gemini" not in where
+
+
+def test_un_jws_de_sandbox_activa_el_plan(app, container) -> None:
+    from nutriplan.adapters.iap.fake import FakeStoreVerifier
+    from nutriplan.domain.membership import APP_BUNDLE_ID, IAP_MONTHLY_PRODUCT
+    from nutriplan.ports.iap import VerifiedPurchase
+
+    _registrar(app, email="jws@correo.com")
+    container.__dict__["iap_verifier"] = FakeStoreVerifier(
+        purchases={
+            "jws-sandbox": VerifiedPurchase(
+                transaction_id="sk2-1",
+                original_transaction_id="sk2-0",
+                product_id=IAP_MONTHLY_PRODUCT,
+                bundle_id=APP_BUNDLE_ID,
+                environment="Sandbox",
+            )
+        }
+    )
+    resp = app.post(
+        "/plan/activar",
+        data={"signed_transaction": "jws-sandbox"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/perfil"
+
+
+def test_un_jws_de_otro_bundle_no_activa_el_plan(app, container) -> None:
+    from nutriplan.adapters.iap.fake import FakeStoreVerifier
+    from nutriplan.domain.membership import IAP_MONTHLY_PRODUCT
+    from nutriplan.ports.iap import VerifiedPurchase
+
+    _registrar(app, email="ajeno@correo.com")
+    container.__dict__["iap_verifier"] = FakeStoreVerifier(
+        purchases={
+            "jws-ajeno": VerifiedPurchase(
+                transaction_id="x",
+                original_transaction_id="x",
+                product_id=IAP_MONTHLY_PRODUCT,
+                bundle_id="com.otra.app",
+                environment="Sandbox",
+            )
+        }
+    )
+    resp = app.post(
+        "/plan/activar",
+        data={"signed_transaction": "jws-ajeno"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/plan?error=")
 
 
 def test_en_el_perfil_puede_poner_sus_macros(app) -> None:

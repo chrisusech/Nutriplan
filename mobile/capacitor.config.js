@@ -27,10 +27,21 @@ module.exports = {
       backgroundColor: '#131010',
       androidSplashResourceName: 'splash',
     },
-    PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] },
     LocalNotifications: {
       smallIcon: 'ic_stat_icon',
       iconColor: '#FF7A62',
+    },
+    Keyboard: {
+      resize: 'native',
+      resizeOnFullScreen: true,
+    },
+    SocialLogin: {
+      providers: {
+        google: true,
+        apple: true,
+        facebook: false,
+        twitter: false,
+      },
     },
   },
 };

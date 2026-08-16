@@ -152,6 +152,14 @@ def is_super_user(request: Request) -> bool:
     return role_of(request) == Role.SUPER_USER
 
 
+ADMIN_HOME = "/admin/metricas"
+
+
+def landing_without_profile(request: Request) -> str:
+    """Sin ficha de cliente: la consola, no el cuestionario del usuario."""
+    return ADMIN_HOME if is_super_user(request) else "/onboarding"
+
+
 async def acting_account(request: Request, session: AsyncSession) -> Account | None:
     """La cuenta logueada, con sus cupos, para el enforcement. `None` si no hay sesión."""
     email = request.session.get("email") if "session" in request.scope else None

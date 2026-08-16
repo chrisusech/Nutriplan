@@ -41,11 +41,12 @@ from nutriplan.adapters.db.repositories import (
 from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.adapters.db.session import create_engine, create_session_factory
 from nutriplan.adapters.email import ConsoleEmailSender, SmtpEmailSender
+from nutriplan.adapters.iap.apple_jws import AppleJWSVerifier
 from nutriplan.adapters.llm.offline_engine import build_offline_engine
 from nutriplan.adapters.meals.recipe_catalog_store import cached_recipe_catalog
 from nutriplan.adapters.meals.restaurant_store import cached_restaurant_catalog
 from nutriplan.adapters.meals.template_store import cached_meal_catalog
-from nutriplan.config.settings import Settings, get_settings
+from nutriplan.config.settings import Environment, Settings, get_settings
 from nutriplan.domain.meal_template import MealCatalog
 from nutriplan.domain.models import Branding, Client
 from nutriplan.domain.nutrition_config import NutritionConfig
@@ -54,6 +55,7 @@ from nutriplan.domain.restaurant import RestaurantCatalog
 from nutriplan.observability.logging import configure_logging
 from nutriplan.ports.branding import BrandingStore
 from nutriplan.ports.email_sender import EmailSender
+from nutriplan.ports.iap import StoreTransactionVerifier
 from nutriplan.ports.llm_client import LLMClient
 from nutriplan.ports.plan_selector import OfflineEngineFactory
 
@@ -104,6 +106,11 @@ class Container:
     def membership_repo(self, session: AsyncSession) -> SqlMembershipRepository:
         """Sin tenant: el super_user concede semanas a cuentas que no son suyas."""
         return SqlMembershipRepository(session)
+
+    @cached_property
+    def iap_verifier(self) -> StoreTransactionVerifier:
+        """Apple firma el JWS; Sandbox y Production valen en cualquier ENV."""
+        return AppleJWSVerifier()
 
     def account_eraser(self, session: AsyncSession) -> SqlAccountEraser:
         return SqlAccountEraser(session)
@@ -251,7 +258,7 @@ class Container:
 
     @cached_property
     def mailer(self) -> EmailSender:
-        """SMTP si está configurado; si no, el correo se escribe en el log."""
+        """SMTP si está configurado; si no, consola (enlace por stderr en local)."""
         if self.settings.smtp_host:
             return SmtpEmailSender(
                 host=self.settings.smtp_host,
@@ -260,7 +267,7 @@ class Container:
                 password=self.settings.smtp_password,
                 sender=self.settings.smtp_from,
             )
-        return ConsoleEmailSender()
+        return ConsoleEmailSender(dump_body=self.settings.env is not Environment.PROD)
 
     def branding(self, tenant_id: UUID | None = None) -> Branding:
         """Marca del entrenador (por tenant). Sin caché: el selector de color de

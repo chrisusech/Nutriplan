@@ -25,6 +25,7 @@ DEFAULT_PLAN_WEEKS = 4
 DEFAULT_PLAN_DAYS = 30
 IAP_ANNUAL_WEEKS = 52
 IAP_ANNUAL_DAYS = 365
+APP_BUNDLE_ID = "app.nutriplan"
 IAP_MONTHLY_PRODUCT = "nutriplan.monthly"
 IAP_ANNUAL_PRODUCT = "nutriplan.annual"
 IAP_PRODUCTS: dict[str, tuple[int, int]] = {
@@ -46,7 +47,11 @@ class GrantSource(StrEnum):
 
 
 class MembershipGrant(BaseModel):
-    """Semanas concedidas a una cuenta. Append-only: la historia no se edita."""
+    """Semanas concedidas a una cuenta. Append-only salvo reembolso de Apple.
+
+    Un reembolso o revocación es la única mutación: `expires_at` pasa a ahora.
+    No se borran filas ni se inventan semanas negativas.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -60,6 +65,7 @@ class MembershipGrant(BaseModel):
     source: GrantSource = GrantSource.MANUAL
     granted_by: UUID | None = None
     external_ref: str | None = Field(default=None, max_length=120)
+    original_transaction_id: str | None = Field(default=None, max_length=120)
     note: str | None = Field(default=None, max_length=300)
 
     def is_live(self, now: datetime) -> bool:

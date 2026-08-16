@@ -270,3 +270,21 @@ def _config():
     from nutriplan.adapters.config_yaml import YamlConfigProvider
 
     return YamlConfigProvider(ROOT / "config" / "nutrition.default.yaml").get_nutrition_config()
+
+
+def test_lo_mismo_sin_pan_entiende_la_negacion_y_el_typo() -> None:
+    from nutriplan.domain.swap_note import parse_swap_note
+
+    foods = list(catalog_by_name().values())
+    intent = parse_swap_note("Quiero lo mismo sin plan blanco", foods)
+    assert intent.keep_same is True
+    assert "pan" in intent.exclude
+    assert intent.missing_dish is False
+
+
+def test_papas_a_la_francesa_no_estan_en_el_catalogo() -> None:
+    from nutriplan.domain.swap_note import parse_swap_note
+
+    foods = list(catalog_by_name().values())
+    intent = parse_swap_note("Carne con papas a la francesa", foods)
+    assert intent.missing_dish is True

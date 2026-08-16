@@ -1,10 +1,8 @@
 """Constructor de un PlanCycle fijo y determinista para tests de render."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
-from nutriplan.adapters.food.curated_loader import load_curated_foods
 from nutriplan.domain.models import (
     Branding,
     DayPlan,
@@ -15,8 +13,8 @@ from nutriplan.domain.models import (
     MealSlot,
     PlanCycle,
 )
+from tests.fixtures.foods import catalog_by_name as _catalog_by_name
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
 _NS = uuid5(NAMESPACE_URL, "nutriplan/tests")
 
 MENU = {
@@ -29,7 +27,7 @@ MENU = {
 
 
 def catalog_by_name() -> dict[str, FoodItem]:
-    return {f.name_es: f for f in load_curated_foods(CSV_PATH)}
+    return _catalog_by_name()
 
 
 def _computed(portions: list[tuple[FoodItem, float]]) -> MacroTargets:

@@ -7,15 +7,11 @@
   {% if aviso %}<p class="alert">{{ aviso }}</p>{% endif %}
   {% if error %}<p class="alert">{{ error }}</p>{% endif %}
 
-  {# El cliente pide /menu/receta por cada plato del día (no un batch largo:
-     Gemini + HTMX cortaban la petición única y solo quedaban 1–2 recetas). #}
-  <div id="day-recipes-boot" class="sr-only" data-hydrate-day-recipes hidden></div>
-
   <ul class="meals stagger">
     {% for meal in day.meals %}
     <li>
       <details class="meal{% if meal.eaten %} eaten{% endif %}" id="nota-{{ meal.slot }}"
-               {% if meal.slot == abierta or (loop.first and not abierta) %}open{% endif %}>
+               {% if meal.slot == abierta %}open{% endif %}>
         <summary>
           <span class="meal-icon" aria-hidden="true"><span class="icon">{{ meal.icon }}</span></span>
           <span class="meal-text">
@@ -64,14 +60,26 @@
           <div class="recipe">
             <div class="recipe-block">
               <h4>Ingredientes</h4>
-              <ul class="ingredients">
+              {# Las dos medidas viajan en el HTML y el interruptor solo cambia
+                 cuál se lee: sin ida al servidor y sin recalcular macros, que
+                 son siempre los del alimento ya cocido. #}
+              <ul class="ingredients" data-peso="cocido">
                 {% for item in meal['items'] %}
                 <li>
                   <span class="ing-name">{{ item.name }}</span>
-                  <span class="ing-qty">{{ item.qty }}</span>
+                  <span class="ing-qty"
+                        data-qty-cocido="{{ item.qty }}"
+                        data-qty-crudo="{{ item.qty_crudo | default(item.qty) }}"
+                        >{{ item.qty }}</span>
                 </li>
                 {% endfor %}
               </ul>
+              {% if meal['items'] | selectattr('convertible') | first %}
+              <button type="button" class="btn btn-ghost btn-peso" data-peso-toggle
+                      aria-pressed="false">
+                Ver en crudo
+              </button>
+              {% endif %}
             </div>
             <div class="recipe-prep"
                  data-recipe-url="/menu/receta?dia={{ dia }}&slot={{ meal.slot }}">
@@ -83,12 +91,10 @@
               {% include "partials/meal_prep.html" %}
               {% endwith %}
               {% else %}
-              <div class="recipe-loading is-queued recipe-prep-pending" role="status">
-                <span class="icon" aria-hidden="true">schedule</span>
-                <div class="recipe-loading-copy">
-                  <span class="recipe-loading-title">En cola</span>
-                  <span class="recipe-loading-sub">Generaremos tu receta en un momento…</span>
-                </div>
+              <div class="recipe-prep-idle" role="status">
+                <button type="button" class="btn btn-ghost recipe-retry" data-recipe-retry>
+                  Ver receta
+                </button>
               </div>
               {% endif %}
             </div>

@@ -4,7 +4,10 @@ from uuid import UUID
 
 from nutriplan.domain.models import FoodItem
 
-# Vocabulario de tags de la base de alimentos.
+# Vocabulario de tags de la base de alimentos. No todos prohíben algo: los
+# descriptivos existen porque el motor de platos los usa para descartar
+# combinaciones (`none_tags` en food_classes.yaml), no porque nadie los declare
+# como restricción. Un tag que no esté aquí revienta el test del catálogo.
 KNOWN_TAGS = {
     "mariscos",
     "pescado",
@@ -18,6 +21,9 @@ KNOWN_TAGS = {
     "batido",
     "vegano",
     "condimento",
+    # Descriptivos: el atún de lata no va en un batido, el plátano no es postre.
+    "conserva",
+    "platano",
 }
 
 # Restricciones canónicas (como llegan del intake confirmado) → tags prohibidos.

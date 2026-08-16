@@ -12,6 +12,10 @@ import structlog
 
 def configure_logging(level: str = "INFO") -> None:
     logging.basicConfig(level=level, format="%(message)s")
+    # httpx a INFO imprime la URL completa. Un GET a tokeninfo con el JWT en
+    # query (o un POST mal logueado) dejaría el id_token en la consola.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

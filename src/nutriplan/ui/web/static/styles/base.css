@@ -23,7 +23,7 @@
 @font-face {
   font-family: 'Material Symbols Rounded'; font-style: normal;
   font-weight: 300 700; font-display: block;
-  src: url('/static/fonts/material-symbols-rounded.woff2?v=3645d888') format('woff2');
+  src: url('/static/fonts/material-symbols-rounded.woff2?v=a7abe26d') format('woff2');
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -32,6 +32,7 @@ html {
   -webkit-text-size-adjust: 100%;
   background: var(--bg);
   touch-action: manipulation;
+  --kb: 0px;
 }
 
 body {
@@ -42,10 +43,19 @@ body {
   font-size: var(--t-md);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  /* El rebote de iOS deja ver el fondo del navegador debajo de la barra. */
   overscroll-behavior-y: none;
-  /* El resaltado azul del toque delata que esto es una web dentro de la app. */
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  /* La app no es un documento: un long-press no debe abrir Copiar/Traducir. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input, textarea, select {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; }

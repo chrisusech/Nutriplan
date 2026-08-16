@@ -66,6 +66,9 @@
 }
 .back:active { background: var(--card-2); transform: scale(0.92); }
 .back .icon { font-size: 1.5rem; }
+/* `.back { display: flex }` gana al `hidden` del navegador: en el primer paso
+   del cuestionario la flecha se veía y no hacía nada. */
+.back[hidden] { display: none; }
 
 /* --- Barra inferior -------------------------------------------------------- */
 

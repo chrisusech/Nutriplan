@@ -74,12 +74,12 @@ async def week_closure(
     meals_in_plan: int = 0,
     today: date | None = None,
 ) -> WeekClosure:
-    """El estado del cierre: peso y cinco estrellas de la semana vivida.
+    """El estado del cierre: peso y estrellas de la semana vivida.
 
     El comentario se guarda si lo hay, pero no abre ni cierra la puerta.
-    `meals_in_plan` se acepta por compatibilidad con quien ya llamaba así.
+    Si el plan tiene menos platos que el tope, no pedimos más notas que comidas.
     """
-    _ = meals_in_plan
+    required = min(RATINGS_REQUIRED, meals_in_plan) if meals_in_plan > 0 else RATINGS_REQUIRED
     entry = await weights.for_week(client.id, iso_week_start(today))
     if client.active_plan_id is None:
         return WeekClosure(
@@ -92,7 +92,7 @@ async def week_closure(
     return WeekClosure(
         has_weight=entry is not None,
         ratings=await ratings.count_for_plan(client.active_plan_id),
-        ratings_required=RATINGS_REQUIRED,
+        ratings_required=required,
         has_comment=is_valid_comment(entry.client_comment if entry else None),
     )
 

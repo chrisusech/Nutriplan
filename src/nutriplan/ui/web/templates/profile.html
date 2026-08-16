@@ -206,7 +206,7 @@
 </ul>
 
 <section class="card danger-zone">
-  <form method="post" action="/logout">
+  <form method="post" action="/logout" hx-boost="false">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <button class="btn btn-outline btn-block" type="submit">
       <span class="icon">logout</span>Cerrar sesión
@@ -217,7 +217,7 @@
     <p class="muted">Se borran tu perfil, tus menús, tus calificaciones y tus
       comentarios. Las estadísticas de uso se conservan sin nada que te identifique.
       No se puede deshacer.</p>
-    <form method="post" action="/perfil/eliminar">
+    <form method="post" action="/perfil/eliminar" hx-boost="false">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <button class="btn btn-danger btn-block" type="submit">
         Sí, eliminar mi cuenta

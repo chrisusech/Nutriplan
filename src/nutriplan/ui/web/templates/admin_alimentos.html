@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Alimentos{% endblock %}
+{% block page_class %}page-admin{% endblock %}
+
+{% block content %}
+{% include "partials/admin_nav.html" %}
+<h1>Alimentos</h1>
+<p class="muted">El catálogo vive en la base de datos: lo que se corrija aquí se
+  queda, también después de reiniciar. Son miles de alimentos, así que se
+  busca — no se navega. <b>{{ total }}</b> coinciden.</p>
+
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok" role="status">{{ ok }}</div>{% endif %}
+
+<form method="get" action="/admin/alimentos" class="card admin-filters">
+  <label class="field"><span>Buscar</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="pechuga, arroz, salmón…"></label>
+  <label class="field"><span>Categoría</span>
+    <select name="categoria">
+      <option value="">todas</option>
+      {% for c in categorias %}
+      <option value="{{ c.value }}" {% if categoria == c.value %}selected{% endif %}>{{ c.value }}</option>
+      {% endfor %}
+    </select></label>
+  <label class="field"><span>Nivel</span>
+    <select name="nivel">
+      <option value="">todo el catálogo</option>
+      <option value="nucleo" {% if nivel == 'nucleo' %}selected{% endif %}>núcleo (se lista)</option>
+      <option value="fondo" {% if nivel == 'fondo' %}selected{% endif %}>fondo (solo por búsqueda)</option>
+    </select></label>
+  <button class="btn btn-primary" type="submit"><span class="icon">search</span>Buscar</button>
+</form>
+
+<details class="card admin-new">
+  <summary>Añadir un alimento que no está en USDA</summary>
+  <form method="post" action="/admin/alimentos/guardar">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="source" value="curated">
+    <label class="field"><span>Nombre</span>
+      <input name="name_es" required maxlength="60" placeholder="arepa de maíz"></label>
+    <label class="field"><span>Categoría</span>
+      <select name="category">
+        {% for c in categorias %}<option value="{{ c.value }}">{{ c.value }}</option>{% endfor %}
+      </select></label>
+    <label class="field"><span>kcal /100 g</span><input name="kcal_100g" required></label>
+    <label class="field"><span>Proteína</span><input name="protein_100g" required></label>
+    <label class="field"><span>Carbohidrato</span><input name="carb_100g" required></label>
+    <label class="field"><span>Grasa</span><input name="fat_100g" required></label>
+    <label class="field"><span>Fibra</span><input name="fiber_100g"></label>
+    <label class="field"><span>Comidas</span>
+      <input name="meal_slots" placeholder="desayuno;almuerzo" required></label>
+    <label class="field-check">
+      <input type="checkbox" name="engine_default" value="1" checked>
+      <span>Se lista (núcleo)</span></label>
+    <button class="btn btn-primary" type="submit"><span class="icon">add</span>Crear</button>
+  </form>
+</details>
+
+<ul class="admin-list">
+  {% for f in alimentos %}
+  <li class="card admin-row">
+    <details>
+      <summary>
+        <span class="admin-who"><b>{{ f.name_es }}</b>
+          <small class="muted">{{ f.category.value }} ·
+            {{ f.kcal_100g|round|int }} kcal ·
+            P {{ f.protein_100g }} C {{ f.carb_100g }} G {{ f.fat_100g }}
+            {% if f.state.value != 'no_aplica' %}· {{ f.state.value }}{% endif %}
+            {% if f.yield_factor %}· rinde {{ f.yield_factor }}×{% endif %}
+            {% if not f.engine_default %}· solo por búsqueda{% endif %}
+          </small>
+        </span>
+      </summary>
+      <form method="post" action="/admin/alimentos/guardar" class="admin-edit">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="food_id" value="{{ f.id }}">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="source" value="{{ f.source }}">
+        <input type="hidden" name="fdc_id" value="{{ f.fdc_id or '' }}">
+        <label class="field"><span>Nombre</span>
+          <input name="name_es" value="{{ f.name_es }}" required maxlength="60"></label>
+        <label class="field"><span>Nombre original</span>
+          <input name="name_en" value="{{ f.name_en or '' }}"></label>
+        <label class="field"><span>Categoría</span>
+          <select name="category">
+            {% for c in categorias %}
+            <option value="{{ c.value }}" {% if f.category == c %}selected{% endif %}>{{ c.value }}</option>
+            {% endfor %}
+          </select></label>
+        <label class="field"><span>kcal /100 g</span>
+          <input name="kcal_100g" value="{{ f.kcal_100g }}" required></label>
+        <label class="field"><span>Proteína</span>
+          <input name="protein_100g" value="{{ f.protein_100g }}" required></label>
+        <label class="field"><span>Carbohidrato</span>
+          <input name="carb_100g" value="{{ f.carb_100g }}" required></label>
+        <label class="field"><span>Grasa</span>
+          <input name="fat_100g" value="{{ f.fat_100g }}" required></label>
+        <label class="field"><span>Fibra</span>
+          <input name="fiber_100g" value="{{ f.fiber_100g }}"></label>
+
+        <label class="field"><span>Estado</span>
+          <select name="state">
+            {% for e in estados %}
+            <option value="{{ e.value }}" {% if f.state == e %}selected{% endif %}>{{ e.value }}</option>
+            {% endfor %}
+          </select></label>
+        <label class="field"><span>Cocción</span>
+          <select name="cooking_method">
+            <option value="">—</option>
+            {% for m in metodos %}
+            <option value="{{ m.value }}" {% if f.cooking_method == m %}selected{% endif %}>{{ m.value }}</option>
+            {% endfor %}
+          </select></label>
+        <label class="field"><span>Rinde (cocido/crudo)</span>
+          <input name="yield_factor" value="{{ f.yield_factor or '' }}"
+                 placeholder="2.8 = el arroz casi triplica"></label>
+
+        <label class="field"><span>Tags</span>
+          <input name="tags" value="{{ f.tags|join(';') }}"></label>
+        <label class="field"><span>Alias</span>
+          <input name="aliases" value="{{ f.aliases|join(';') }}"></label>
+        <label class="field"><span>Comidas</span>
+          <input name="meal_slots" value="{{ f.meal_slots|map(attribute='value')|join(';') }}"></label>
+
+        <label class="field"><span>Porción natural (g)</span>
+          <input name="default_unit_g" value="{{ f.default_unit_g or '' }}"></label>
+        <label class="field"><span>Se cuenta por</span>
+          <select name="unit_granularity">
+            {% for g in granularidades %}
+            <option value="{{ g.value }}" {% if f.unit_granularity == g %}selected{% endif %}>{{ g.value }}</option>
+            {% endfor %}
+          </select></label>
+        <label class="field"><span>Nombre de la unidad</span>
+          <input name="unit_name" value="{{ f.unit_name or '' }}"></label>
+        <label class="field"><span>Mínimo (g)</span>
+          <input name="portion_min_g" value="{{ f.portion_min_g or '' }}"></label>
+        <label class="field"><span>Máximo (g)</span>
+          <input name="portion_max_g" value="{{ f.portion_max_g or '' }}"></label>
+        <label class="field-check">
+          <input type="checkbox" name="engine_default" value="1"
+                 {% if f.engine_default %}checked{% endif %}>
+          <span>Se lista en el catálogo corto</span></label>
+
+        <button class="btn btn-primary" type="submit">
+          <span class="icon">check</span>Guardar
+        </button>
+      </form>
+      <form method="post" action="/admin/alimentos/retirar">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="food_id" value="{{ f.id }}">
+        <input type="hidden" name="q" value="{{ q }}">
+        <button class="btn btn-ghost" type="submit">
+          <span class="icon">no_meals</span>Retirar del catálogo
+        </button>
+      </form>
+    </details>
+  </li>
+  {% else %}
+  <li class="muted">Nada coincide con esa búsqueda.</li>
+  {% endfor %}
+</ul>
+
+{% if paginas > 1 %}
+<nav class="admin-pages">
+  {% if pagina > 1 %}
+  <a class="btn btn-ghost"
+     href="/admin/alimentos?q={{ q }}&categoria={{ categoria }}&nivel={{ nivel }}&pagina={{ pagina - 1 }}">
+     Anterior</a>
+  {% endif %}
+  <span class="muted">Página {{ pagina }} de {{ paginas }}</span>
+  {% if pagina < paginas %}
+  <a class="btn btn-ghost"
+     href="/admin/alimentos?q={{ q }}&categoria={{ categoria }}&nivel={{ nivel }}&pagina={{ pagina + 1 }}">
+     Siguiente</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -58,6 +58,7 @@ async def test_una_compra_mensual_regala_cuatro_semanas() -> None:
     assert grant.source is GrantSource.PAYMENT
     assert grant.weeks == 4
     assert grant.external_ref == "txn-apple-1"
+    assert grant.original_transaction_id == "txn-apple-1"
 
 
 async def test_la_misma_transaccion_no_concede_dos_veces() -> None:

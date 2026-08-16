@@ -2,6 +2,7 @@
 
 import asyncio
 import smtplib
+import sys
 from email.message import EmailMessage
 
 import structlog
@@ -16,20 +17,22 @@ class EmailError(NutriPlanError):
 
 
 class ConsoleEmailSender:
-    """Escribe el correo en el log en vez de enviarlo.
+    """Adaptador de local: el enlace no viaja por SMTP.
 
-    Es el adaptador de local: deja ver el enlace de verificación sin montar un
-    SMTP, y sin mandarle nada a nadie por accidente durante las pruebas.
+    El log estructurado solo anota el asunto (sin destinatario ni token). En
+    local el asunto sale por stderr para confirmar el envío; el enlace con el
+    token de un solo uso no se imprime.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, dump_body: bool = False) -> None:
         self.sent: list[dict[str, str]] = []
+        self._dump_body = dump_body
 
     async def send(self, *, to: str, subject: str, body: str) -> None:
         self.sent.append({"to": to, "subject": subject, "body": body})
-        # Sin destinatario, sin cuerpo, sin token: el enlace vive en `sent`
-        # para las pruebas, no en el log.
-        logger.info("verification_email_sent")
+        logger.info("console_email_sent", subject=subject)
+        if self._dump_body:
+            print(f"[mail] {subject}", file=sys.stderr)
 
 
 class SmtpEmailSender:

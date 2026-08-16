@@ -86,6 +86,15 @@ def test_la_semana_pasada_aporta_los_platos_a_penalizar() -> None:
     assert "guiso_criollo" in templates
 
 
+def test_regenerar_esta_semana_tambien_penaliza_los_platos_ya_servidos() -> None:
+    """«Generar otra semana» el mismo lunes no puede repetir el caldo de hace un rato."""
+    lunes = date(2026, 8, 10)
+    actual = _plan(lunes, [_day(0, eaten=True)])
+    keys, templates = dishes_of_previous_week([actual], lunes)
+    assert "guiso-pasado" in keys
+    assert "guiso_criollo" in templates
+
+
 def test_sudado_es_una_tecnica() -> None:
     assert has_technique("pollo sudado con papa")
     assert not has_technique("pollo con papa")

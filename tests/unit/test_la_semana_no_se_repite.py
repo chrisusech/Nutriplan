@@ -82,4 +82,14 @@ def test_si_falta_la_grasa_opcional_el_nombre_no_la_promete() -> None:
     pollo = _food("pechuga de pollo", FoodCategory.PROTEIN)
     arroz = _food("arroz blanco cocido", FoodCategory.CARB)
 
-    assert dish_name(plantilla, [pollo, arroz, None]) == "Pechuga de pollo con arroz blanco cocido"
+    assert dish_name(plantilla, [pollo, arroz, None]) == "Pechuga de pollo con arroz blanco"
+
+
+def test_el_titulo_no_copia_el_empaque_del_catalogo() -> None:
+    from nutriplan.domain.meal_template import is_inedible_title, kitchen_name
+
+    assert kitchen_name("atún en agua") == "atún en agua"
+    assert kitchen_name("plátano maduro cocido") == "plátano maduro"
+    assert is_inedible_title("Sopa de atún en agua con yuca")
+    assert is_inedible_title("Sopa de plátano maduro cocido con carne")
+    assert not is_inedible_title("Sudado de pollo con yuca")

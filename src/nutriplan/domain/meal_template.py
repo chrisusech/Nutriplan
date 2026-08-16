@@ -18,6 +18,7 @@ ser: manda el humano.
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import product
@@ -141,11 +142,46 @@ class Dish:
         return (self.template_id, *sorted(str(f.id) for f in self.foods))
 
 
+# Cosmética de títulos, no contabilidad: de cuánto pesa cocido se encarga
+# `FoodItem.state` y el factor de rendimiento. Esto solo existe para las filas
+# viejas que llevan el estado metido en el nombre («arroz blanco cocido»), que
+# en un menú se lee «arroz blanco»; las que importa el catálogo nuevo ya vienen
+# nombradas en limpio. El empaque («en agua», «en aceite») se deja: es lo que
+# distingue el atún de lata, y sin él dos platos distintos acabarían con el
+# mismo título.
+_COOKED_SUFFIXES = (" cocidos", " cocidas", " cocido", " cocida")
+
+
+def kitchen_name(name_es: str) -> str:
+    """Cómo se nombra el alimento en un título de menú, no en el catálogo."""
+    n = name_es.strip()
+    changed = True
+    while changed:
+        changed = False
+        lower = n.lower()
+        for suffix in _COOKED_SUFFIXES:
+            if lower.endswith(suffix):
+                n = n[: -len(suffix)].rstrip()
+                changed = True
+                break
+    return n
+
+
+def is_inedible_title(name: str) -> bool:
+    """Sopa de atún de lata o de plátano: nadie la pediría en un restaurante."""
+    folded = "".join(
+        c for c in unicodedata.normalize("NFD", name.lower()) if unicodedata.category(c) != "Mn"
+    )
+    if "sopa" not in folded:
+        return False
+    return any(word in folded for word in ("atun", "sardina", "platano"))
+
+
 def _name_from_foods(foods: tuple[FoodItem, ...]) -> str:
     """El nombre de reserva: lo que hay en el plato, tal cual."""
     if not foods:
         return "Plato"
-    names = [f.name_es for f in foods]
+    names = [kitchen_name(f.name_es) for f in foods]
     head, *rest = names
     if not rest:
         return head.capitalize()
@@ -167,7 +203,7 @@ def dish_name(template: MealTemplate, chosen: Sequence[FoodItem | None]) -> str:
     que no viene en el plato.
     """
     por_rol = {
-        c.role.value: f.name_es
+        c.role.value: kitchen_name(f.name_es)
         for c, f in zip(template.components, chosen, strict=True)
         if f is not None
     }

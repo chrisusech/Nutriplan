@@ -112,6 +112,8 @@ def test_con_cuatro_estrellas_no_se_cierra(app) -> None:
     resp = app.post("/check-in", data={"weight_kg": "61.4", "comentario": ""})
     assert resp.status_code == 200
     assert "califica al menos 5" in resp.text.lower()
+    # El peso sí queda: no se tira lo tecleado por faltar estrellas.
+    assert "61.4" in app.get("/check-in").text
 
 
 def test_cinco_estrellas_y_peso_cierran_sin_comentario(app) -> None:
@@ -192,7 +194,7 @@ def test_el_tick_del_domingo_arma_la_siguiente_si_ya_cerro(app, container) -> No
 
     _generar(app)
     _calificar(app)
-    app.post("/check-in", data={"weight_kg": "61.4", "comentario": "Todo bien esta semana"})
+    app.post("/check-in", data={"weight_kg": "61.4", "comentario": ""})
 
     async def _saldo_y_tick() -> tuple[int, object, object]:
         async with container.session_factory() as session:
@@ -240,3 +242,33 @@ def test_sin_cerrar_el_tick_no_inventa_un_menu(app, container) -> None:
     sunday = today + timedelta(days=(6 - today.weekday()))
     when = datetime(sunday.year, sunday.month, sunday.day, 19, 0, tzinfo=BOGOTA)
     assert asyncio.run(run_auto_week(container, when=when, force=True)) == 0
+
+
+def test_el_comentario_sin_estrellas_no_arma_la_semana(app, container) -> None:
+    """El domingo mira el mismo cierre que la UI: peso no basta, ni la frase."""
+    import asyncio
+    from datetime import datetime, timedelta
+
+    from nutriplan.application.auto_week import run_auto_week
+    from nutriplan.application.membership import grant_weeks
+    from nutriplan.domain.auto_week import BOGOTA
+
+    _generar(app)
+    app.post(
+        "/check-in",
+        data={"weight_kg": "61.4", "comentario": "Todo bien esta semana y con ganas"},
+    )
+
+    async def _saldo_y_tick() -> int:
+        async with container.session_factory() as session:
+            auth = container.auth_repo(session)
+            account = await auth.get_by_email_any_provider("ana@correo.com")
+            assert account is not None
+            await grant_weeks(account=account, memberships=container.membership_repo(session))
+            await session.commit()
+        today = datetime.now(BOGOTA).date()
+        sunday = today + timedelta(days=(6 - today.weekday()))
+        when = datetime(sunday.year, sunday.month, sunday.day, 19, 0, tzinfo=BOGOTA)
+        return await run_auto_week(container, when=when, force=True)
+
+    assert asyncio.run(_saldo_y_tick()) == 0

@@ -33,8 +33,9 @@ from nutriplan.application.password_reset import (
     email_behind_reset_link,
     request_password_reset,
 )
-from nutriplan.domain.models import Account, AuthProvider
+from nutriplan.domain.models import Account, AuthProvider, Role
 from nutriplan.ui.web.deps import (
+    ADMIN_HOME,
     account_id_of,
     container_of,
     db_session,
@@ -44,6 +45,11 @@ from nutriplan.ui.web.deps import (
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
+
+
+def _destino_tras_entrar(account: Account) -> str:
+    """El dueño aterriza en la consola; el resto, en su semana."""
+    return ADMIN_HOME if account.role == Role.SUPER_USER else "/"
 
 
 def _set_session(request: Request, account: Account) -> None:
@@ -160,6 +166,7 @@ async def password_reset_confirm(
                 email=email,
             )
         _set_session(request, cuenta)
+        return RedirectResponse(_destino_tras_entrar(cuenta), status_code=303)
     except SignupError as exc:
         return render(
             request,
@@ -168,18 +175,38 @@ async def password_reset_confirm(
             email=email or "",
             error=str(exc),
         )
-    return RedirectResponse("/", status_code=303)
 
 
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request) -> HTMLResponse:
+def _rebote_si_entro(request: Request) -> RedirectResponse | None:
+    """Atrás en el WebView no puede pintar el login con la sesión todavía viva."""
+    if request.session.get("user_id") and request.query_params.get("sesion") != "expirada":
+        return RedirectResponse("/", status_code=303)
+    return None
+
+
+def _signin(request: Request, **context: object) -> HTMLResponse:
+    """El formulario de entrar es una página. En iOS un <dialog> + teclado cuelga."""
+    return render(request, "auth.html", mode="signin", **context)
+
+
+@router.get("/login", response_model=None)
+async def login_page(request: Request) -> HTMLResponse | RedirectResponse:
+    if (rebote := _rebote_si_entro(request)) is not None:
+        return rebote
     error = None
     if request.query_params.get("sesion") == "expirada":
-        error = (
-            "Tu sesión ya no es válida — suele pasar tras cambiar o reiniciar la base "
-            "de datos. Vuelve a entrar o crea una cuenta nueva."
-        )
+        error = "Tu sesión ya no es válida. Vuelve a entrar o crea una cuenta nueva."
     return render(request, "auth.html", mode="login", error=error)
+
+
+@router.get("/entrar", response_model=None)
+async def signin_page(request: Request) -> HTMLResponse | RedirectResponse:
+    if (rebote := _rebote_si_entro(request)) is not None:
+        return rebote
+    error = None
+    if request.query_params.get("sesion") == "expirada":
+        error = "Tu sesión ya no es válida. Vuelve a entrar o crea una cuenta nueva."
+    return _signin(request, error=error)
 
 
 @router.post("/login", response_model=None)
@@ -195,19 +222,14 @@ async def login(
     # un detector de correos registrados.
     generico = "Correo o contraseña incorrectos."
     if cuenta is None:
-        return render(request, "auth.html", mode="login", error=generico)
+        return _signin(request, error=generico)
     if await session.get(TenantRow, cuenta.tenant_id) is None:
-        return render(
-            request,
-            "auth.html",
-            mode="login",
-            error=generico,
-        )
+        return _signin(request, error=generico)
     # Una cuenta desactivada sí entra: el guard la lleva a la pantalla que le
     # explica que su plan ya no está activo. Rebotarla aquí la dejaba creyendo
     # que había olvidado la contraseña.
     _set_session(request, cuenta)
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(_destino_tras_entrar(cuenta), status_code=303)
 
 
 @router.post("/logout")
@@ -292,8 +314,8 @@ async def verify_email(
             auth_repo=container.auth_repo(session),
         )
     except SignupError as exc:
-        return render(request, "auth.html", mode="login", error=str(exc))
-    return RedirectResponse("/login?verificado=1", status_code=303)
+        return _signin(request, error=str(exc))
+    return RedirectResponse("/entrar?verificado=1", status_code=303)
 
 
 # --- Google y Apple ---------------------------------------------------------
@@ -320,9 +342,7 @@ async def oauth_sign_in(
         elif provider == AuthProvider.APPLE:
             identity = await verify_apple_id_token(id_token, client_id=settings.apple_client_id)
         else:
-            return render(
-                request, "auth.html", mode="login", error="Ese proveedor no está disponible."
-            )
+            return _signin(request, error="Ese proveedor no está disponible.")
         # El código de beta solo aplica al alta: quien ya tiene cuenta entra.
         auth = container.auth_repo(session)
         if await auth.get_by_provider(identity.provider, identity.subject) is None:
@@ -338,7 +358,7 @@ async def oauth_sign_in(
             reset_tokens=container.password_reset_repo(session),
         )
     except (OAuthError, SignupError) as exc:
-        return render(request, "auth.html", mode="login", error=str(exc))
+        return _signin(request, error=str(exc))
     # Idempotente: quien ya entró antes no vuelve a recibir la semana de prueba.
     await grant_free_trial(account=account, memberships=container.membership_repo(session))
     _set_session(request, account)
@@ -347,6 +367,8 @@ async def oauth_sign_in(
     )
     if profile:
         return RedirectResponse("/", status_code=303)
+    if account.role == Role.SUPER_USER:
+        return RedirectResponse(ADMIN_HOME, status_code=303)
     destino = "/onboarding" if account.consent_analytics_at else "/consentimiento"
     return RedirectResponse(destino, status_code=303)
 

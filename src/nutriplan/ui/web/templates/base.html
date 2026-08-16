@@ -2,7 +2,7 @@
 <html lang="es" data-theme="{{ tema }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="{{ tema_color }}">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -31,11 +31,16 @@
       {% if plan %}data-habit-remind="1"{% endif %}
       hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
+  {# Las pestañas piden solo #shell: el documento no se recarga y el WebView
+     no pinta el fondo nativo negro entre pantallas. #}
+  <div id="shell" hx-history-elt data-page-class="{{ self.page_class() }}">
   <div class="app{% block app_class %}{% endblock %}">
     <header class="app-head">
       <div class="app-head-lead">
         {% block head_lead %}
-        <a class="logo" href="/">
+        <a class="logo" href="/"
+           hx-boost="true" hx-target="#shell" hx-select="#shell"
+           hx-swap="outerHTML show:window:top">
           <span class="logo-badge"><span class="icon">restaurant</span></span>
           <span>Nutri<span class="brand-word">Plan</span></span>
         </a>
@@ -50,7 +55,9 @@
   </div>
 
   {% if cuenta and active_tab not in ['onboarding', 'inactivo'] %}
-  <nav class="nav" aria-label="Navegación principal">
+  <nav class="nav" aria-label="Navegación principal"
+       hx-boost="true" hx-target="#shell" hx-select="#shell"
+       hx-swap="outerHTML show:window:top">
     <a href="/" class="{% if active_tab == 'semana' %}on{% endif %}"
        {% if active_tab == 'semana' %}aria-current="page"{% endif %}>
       <span class="nav-icon">
@@ -85,6 +92,7 @@
     {% endif %}
   </nav>
   {% endif %}
+  </div>
 
   <div id="wait-plate" class="wait-overlay" hidden>
     <div class="gen-plate" aria-hidden="true">

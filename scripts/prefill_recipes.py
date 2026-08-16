@@ -30,8 +30,7 @@ async def main() -> int:
     await upgrade_to_head_async(settings.database_url)
 
     async with container.session_factory() as session:
-        csv = settings.project_root / "data" / "foods" / "curated_foods.csv"
-        await seed_local(session, csv)
+        await seed_local(session)
         await session.commit()
 
     async with container.session_factory() as session:

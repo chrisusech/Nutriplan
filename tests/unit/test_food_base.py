@@ -1,20 +1,16 @@
 """Módulo 3: importador del CSV curado, filtro de restricciones y matching."""
 
-from pathlib import Path
-
 import pytest
+from tests.fixtures.foods import catalog_foods
 
-from nutriplan.adapters.food.curated_loader import load_curated_foods
 from nutriplan.domain.food_filter import KNOWN_TAGS, allowed_foods, forbidden_tags
 from nutriplan.domain.food_matching import match_food_names, normalize
 from nutriplan.domain.models import FoodCategory
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
-
 
 @pytest.fixture(scope="module")
 def catalog():
-    return load_curated_foods(CSV_PATH)
+    return catalog_foods()
 
 
 # --- Importador ---
@@ -35,7 +31,7 @@ def test_catalog_is_global_and_tagged_with_known_vocabulary(catalog) -> None:
 
 
 def test_import_is_idempotent(catalog) -> None:
-    again = load_curated_foods(CSV_PATH)
+    again = catalog_foods()
     assert [f.id for f in again] == [f.id for f in catalog]
 
 

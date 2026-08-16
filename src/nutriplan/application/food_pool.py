@@ -4,12 +4,18 @@ Vivía copiado en cuatro sitios (generar, editar y dos pantallas del generador),
 lo que hizo que "sorpréndeme" funcionara en uno y fallara en los otros tres.
 """
 
+from collections.abc import Callable, Sequence
 from uuid import UUID
 
 import structlog
 
 from nutriplan.domain.food_filter import allowed_foods
-from nutriplan.domain.generation_rules import SLOT_STRUCTURE
+from nutriplan.domain.generation_rules import (
+    CARB_GROUP,
+    FAT_GROUP,
+    PROTEIN_GROUP,
+    SLOT_STRUCTURE,
+)
 from nutriplan.domain.models import (
     Client,
     FoodCategory,
@@ -25,16 +31,9 @@ from nutriplan.ports.repository import ClientRepository
 
 logger = structlog.get_logger(__name__)
 
-# Solo carbo: es el macro que más se queda corto cuando el liked es arepa/pan.
-# Proteína/lácteo suelen alcanzar con lo marcado; forzar whey/parmesano ensucia.
-_COVER_CATEGORIES = (FoodCategory.CARB,)
-
-# Dos opciones, no una, donde el carbohidrato es obligatorio (desayuno y almuerzo).
-# Con una sola, el motor no tiene alternativa y sale el mismo carbo los siete días:
-# le pasó a un cliente de 2.900 kcal cuyo almuerzo pedía 128 g de carbo y solo el
-# arroz llegaba —la papa se topea en 100 g y el plátano en 87—, así que o repetía
-# arroz o servía platos que la validación tumbaba.
-_MIN_CARB_OPTIONS = 2
+# Piso por slot: carbo y grasa. Proteína no se inyecta si el liked ya trae carne.
+# Lácteo/fruta solo si el grupo P o C quedó en cero.
+_MIN_SLOT_OPTIONS = 2
 
 # No usar dulces como “parche” de carbo: cuadran macros pero no son desayuno.
 _CARB_SUPPLEMENT_SKIP = (
@@ -63,6 +62,10 @@ async def resolve_allowed_foods(
     Sin alimentos marcados la respuesta no es "nada", es "sorpréndeme": se abre
     el catálogo entero y lo recortan las restricciones. Obligar a marcar decenas
     de ingredientes era justo lo que agobiaba en el onboarding viejo.
+
+    Los condimentos (ajo, etc.) no se marcan en el picker y aun así entran al
+    motor: no son una elección, son la cocina. Quien los vete en /mis-alimentos
+    sí los saca.
     """
     liked = (
         await food_repo.get_by_ids(client.liked_food_ids)
@@ -73,18 +76,35 @@ async def resolve_allowed_foods(
     if disliked:
         liked = [f for f in liked if not matches_dislike(f, disliked)]
     banned: set[UUID] = set(await client_repo.list_banned_food_ids(client.id))
-    return allowed_foods(liked, client.restrictions, banned)
+    allowed = allowed_foods(liked, client.restrictions, banned)
+    if client.liked_food_ids:
+        universe = await food_repo.list_universe()
+        have = {f.id for f in allowed}
+        staples = [f for f in universe if "condimento" in f.tags and f.id not in have]
+        if staples:
+            allowed = [*allowed, *allowed_foods(staples, client.restrictions, banned)]
+    return allowed
 
 
-def _minimo(slot: MealSlot, category: FoodCategory) -> int:
-    """Cuántas opciones de esta categoría necesita el slot para armar la semana.
+def _count(
+    pool: Sequence[FoodItem],
+    slot: MealSlot,
+    categories: set[FoodCategory],
+    usable: Callable[[FoodItem, MealSlot], bool],
+) -> int:
+    return sum(
+        1
+        for food in pool
+        if food.category in categories and slot in food.meal_slots and usable(food, slot)
+    )
 
-    Donde el carbohidrato es obligatorio hacen falta dos: con una sola, siete
-    días solo pueden salir con el mismo carbo repetido.
-    """
-    if category is FoodCategory.CARB and SLOT_STRUCTURE[slot].requires_carb:
-        return _MIN_CARB_OPTIONS
-    return 1
+
+def _density(food: FoodItem, category: FoodCategory) -> float:
+    if category is FoodCategory.CARB:
+        return food.carb_100g
+    if category is FoodCategory.FAT:
+        return food.fat_100g
+    return food.protein_100g
 
 
 def supplement_pool_for_targets(
@@ -95,6 +115,7 @@ def supplement_pool_for_targets(
     config: NutritionConfig,
     disliked: set[str] | None = None,
     banned: set[UUID] | None = None,
+    restrictions: Sequence[str] | None = None,
 ) -> list[FoodItem]:
     """Si el pool liked no da para el slot, añade del universo lo mínimo.
 
@@ -102,57 +123,77 @@ def supplement_pool_for_targets(
     Sin avena u otro carbo en gramos el solver nunca cuadra. Preferencias siguen
     mandando; esto solo evita un menú imposible — o repetido hasta el aburrimiento,
     que es lo que sale cuando el slot tiene una única opción viable.
+
+    Restricciones recortan el universo *antes* de elegir el parche: con
+    `no_gluten` no entra pasta aunque falte carbo.
     """
     disliked = disliked or set()
     banned = banned or set()
     usable = usable_in_slot(daily, config)
-    have = {f.id for f in allowed}
+    pool = list(allowed)
+    have = {f.id for f in pool}
     extra: list[FoodItem] = []
+    try:
+        universe_ok = allowed_foods(universe, list(restrictions or []), banned)
+    except ValueError:
+        universe_ok = [f for f in universe if f.id not in banned]
+
+    def add(slot: MealSlot, category: FoodCategory, faltan: int) -> None:
+        if faltan <= 0:
+            return
+        skip = _CARB_SUPPLEMENT_SKIP if category is FoodCategory.CARB else ()
+        candidates = sorted(
+            (
+                food
+                for food in universe_ok
+                if food.id not in have
+                and food.category is category
+                and slot in food.meal_slots
+                and not matches_dislike(food, disliked)
+                and usable(food, slot)
+                and not any(s in food.name_es.lower() for s in skip)
+            ),
+            key=lambda food: (
+                0 if food.unit_granularity is UnitGranularity.GRAMS else 1,
+                -_density(food, category),
+                food.name_es,
+            ),
+        )
+        for pick in candidates[:faltan]:
+            extra.append(pick)
+            pool.append(pick)
+            have.add(pick.id)
+            logger.info(
+                "pool_supplemented",
+                slot=slot.value,
+                category=category.value,
+                food=pick.name_es,
+            )
 
     for slot in config.meal_distribution:
-        for category in _COVER_CATEGORIES:
-            tienen = sum(
-                1
-                for f in allowed
-                if f.category is category and slot in f.meal_slots and usable(f, slot)
+        rule = SLOT_STRUCTURE[slot]
+        if rule.requires_carb:
+            add(
+                slot,
+                FoodCategory.CARB,
+                _MIN_SLOT_OPTIONS - _count(pool, slot, {FoodCategory.CARB}, usable),
             )
-            faltan = _minimo(slot, category) - tienen
-            if faltan <= 0:
-                continue
-            candidates = sorted(
-                (
-                    f
-                    for f in universe
-                    if f.id not in have
-                    and f.id not in banned
-                    and f.category is category
-                    and slot in f.meal_slots
-                    and not matches_dislike(f, disliked)
-                    and usable(f, slot)
-                    and not (
-                        category is FoodCategory.CARB
-                        and any(s in f.name_es.lower() for s in _CARB_SUPPLEMENT_SKIP)
-                    )
-                ),
-                key=lambda f: (
-                    # Preferir carbos que se pesan (avena, arroz) sobre unidades.
-                    0 if f.unit_granularity is UnitGranularity.GRAMS else 1,
-                    -getattr(
-                        f,
-                        "carb_100g" if category is FoodCategory.CARB else "protein_100g",
-                    ),
-                    f.name_es,
-                ),
+        if _count(pool, slot, CARB_GROUP, usable) == 0:
+            add(slot, FoodCategory.FRUIT, _MIN_SLOT_OPTIONS)
+        if not rule.requires_carb and _count(pool, slot, {FoodCategory.FRUIT}, usable) == 0:
+            add(slot, FoodCategory.FRUIT, _MIN_SLOT_OPTIONS)
+            if _count(pool, slot, {FoodCategory.FRUIT, FoodCategory.DAIRY}, usable) == 0:
+                add(slot, FoodCategory.DAIRY, _MIN_SLOT_OPTIONS)
+        if rule.allows_fat_item:
+            add(
+                slot,
+                FoodCategory.FAT,
+                _MIN_SLOT_OPTIONS - _count(pool, slot, FAT_GROUP, usable),
             )
-            for pick in candidates[:faltan]:
-                extra.append(pick)
-                have.add(pick.id)
-                logger.info(
-                    "pool_supplemented",
-                    slot=slot.value,
-                    category=category.value,
-                    food=pick.name_es,
-                )
+        if rule.requires_protein and _count(pool, slot, PROTEIN_GROUP, usable) == 0:
+            add(slot, FoodCategory.PROTEIN, _MIN_SLOT_OPTIONS)
+            if _count(pool, slot, PROTEIN_GROUP, usable) == 0:
+                add(slot, FoodCategory.DAIRY, _MIN_SLOT_OPTIONS)
 
     return allowed + extra if extra else allowed
 

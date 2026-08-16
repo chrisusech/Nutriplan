@@ -11,11 +11,13 @@ Guía de listing: `docs/store-listing.md`. Infra de prod: `docs/ops.md`
 |---|---|
 | Login Google/Apple (`SocialLogin`) | `app.js` + `/auth/oauth/{provider}` |
 | Caché offline del menú (`Preferences`) | `app.js` guarda `week_html` |
-| Compartir día (`Share`) | botón `data-share-day` en la semana |
 | Haptics al generar | al ver “Todo listo” |
 | Splash | `launchAutoHide: true` + `hide()` al pintar; fondo `#131010` |
 | Recordatorio diario (`LocalNotifications`) | al abrir la semana: cancela el de hoy y programa 7 días a las 11:00 |
-| IAP StoreKit | botón `/plan` → hoja de Apple; el servidor verifica y concede semanas |
+| IAP StoreKit (`@capgo/native-purchases`) | `/plan` abre la hoja de Apple; el servidor verifica el JWS |
+| Push | **no** está en el binario; no declarar en el listing |
+
+QA del cobro: `docs/iphone-qa.md` (iOS ≥15, Sandbox, no Cloudflare).
 
 ## Compilar
 
@@ -45,12 +47,16 @@ NUTRIPLAN_URL=http://localhost:8000 npx cap run ios
 dominio de producción) y permite texto en claro. Sin la variable se compila
 contra producción, que es lo que va a la store.
 
-Dos cosas que hay que rehacer si se regenera `ios/` (está fuera de git):
+Tres cosas que hay que rehacer si se regenera `ios/` (está fuera de git):
 
 1. `NSAppTransportSecurity` → `NSAllowsLocalNetworking` en `App/App/Info.plist`;
    sin eso iOS bloquea el `http` del Mac y la pantalla sale en blanco.
 2. Para un iPhone físico: firma con tu Apple ID en Xcode, `NUTRIPLAN_URL` con la
    IP del Mac y el servidor escuchando en `0.0.0.0`, no en loopback.
+3. `IPHONEOS_DEPLOYMENT_TARGET = 15.0` en el proyecto y el target App (Debug y
+   Release). Capacitor 7 deja 14.0; `@capgo/native-purchases` exige 15. El
+   Podfile ya dice `platform :ios, '15.0'`. Sin esto Xcode avisa al enlazar el
+   framework de compras. La app pide iOS 15 o más (`docs/iphone-qa.md`).
 
 Depurar: Safari del Mac → Desarrollo → Simulador → la vista de NutriPlan; da
 consola e inspector sobre el WebView. Como la app carga el servidor y no un

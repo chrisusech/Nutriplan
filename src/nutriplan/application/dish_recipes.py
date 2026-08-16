@@ -14,6 +14,7 @@ import structlog
 from nutriplan.application.prompts import load_prompt
 from nutriplan.domain.dish_recipe import DishRecipe, GeneratedRecipe, dish_key
 from nutriplan.domain.errors import LLMError
+from nutriplan.domain.meal_template import is_inedible_title
 from nutriplan.domain.models import FoodItem, MacroTargets, MealEntry
 from nutriplan.domain.portion_label import portion_text
 from nutriplan.domain.portioning import macros_of
@@ -132,6 +133,7 @@ async def recipes_for_week(
         found = {k: r for k, r in cached.items() if r.source in ("ai", "curated")}
     else:
         found = dict(cached)
+    found = await _drop_inedible(found, repo)
     missing = {k: m for k, m in wanted.items() if k not in found}
     if not missing:
         logger.info("dish_recipes_all_cached", dishes=len(found), prefer_ai=prefer_ai)
@@ -148,7 +150,9 @@ async def recipes_for_week(
             if recipe is None:
                 recipe = _from_curated(key, meal, catalog, curated_list)
             if recipe is None:
-                recipe = cached.get(key)  # conserva yaml previo si la IA falló
+                prev = cached.get(key)
+                if prev is not None and not is_inedible_title(prev.name_es):
+                    recipe = prev
             if recipe is None:
                 recipe = _from_static(key, meal, catalog, static)
         else:
@@ -181,6 +185,21 @@ async def recipes_for_week(
         prefer_ai=prefer_ai,
     )
     return found
+
+
+async def _drop_inedible(
+    cached: dict[str, DishRecipe], repo: DishRecipeRepository
+) -> dict[str, DishRecipe]:
+    """Una sopa de atún en lata no se sirve aunque ya esté en la caché."""
+    kept: dict[str, DishRecipe] = {}
+    retire = getattr(repo, "retire", None)
+    for key, recipe in cached.items():
+        if not is_inedible_title(recipe.name_es):
+            kept[key] = recipe
+            continue
+        if callable(retire):
+            await retire(key)
+    return kept
 
 
 def _from_curated(
@@ -218,6 +237,8 @@ def _from_static(
     """
     steps = (static or {}).get(meal.template_id or "")
     if not steps:
+        return None
+    if is_inedible_title(meal.dish_name or ""):
         return None
     lines = ingredient_lines(meal, catalog)
     blob = " ".join(lines).lower()

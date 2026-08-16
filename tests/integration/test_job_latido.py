@@ -12,9 +12,10 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from tests.fixtures.foods import seed_foods
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
-from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
+from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.adapters.llm.offline_engine import build_offline_engine
 from nutriplan.application import jobs as jobs_mod
 from nutriplan.application.compute_targets import compute_and_store_targets
@@ -27,7 +28,6 @@ from nutriplan.ports.job_repository import JobStatus
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "prompts"
-CSV_PATH = ROOT / "data" / "foods" / "curated_foods.csv"
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ async def ctx(tmp_path):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     container = Container(tenant_id=DEFAULT_TENANT_ID)
     async with factory() as session:
-        await seed_local(session, CSV_PATH)
+        await seed_foods(session)
         yield container, container.repos(session), session
         await session.commit()
     await engine.dispose()

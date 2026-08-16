@@ -24,7 +24,6 @@ body.page-week {
   scrollbar-width: none;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
-  view-transition-name: day-strip;
 }
 .days::-webkit-scrollbar { display: none; }
 
@@ -114,6 +113,7 @@ body.page-week {
   border: 1px solid var(--line);
   box-shadow: var(--sh-1);
   overflow: clip;
+  scroll-margin-top: calc(var(--safe-t) + 4.5rem);
 }
 
 .meal > summary {
@@ -317,7 +317,7 @@ body.page-week {
   font: 600 var(--t-sm) Poppins, sans-serif;
   color: var(--text);
 }
-.rate-note textarea { min-height: 4.5rem; margin-bottom: var(--s-2); font-size: var(--t-sm); }
+.rate-note textarea { min-height: 4.5rem; margin-bottom: var(--s-2); font-size: 1rem; }
 .rate-saved {
   display: flex;
   align-items: center;
@@ -368,12 +368,15 @@ body.page-week {
 .regen { margin-top: var(--s-6); }
 .checkin-banner {
   display: flex;
+  flex-direction: column;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: var(--s-3);
   margin-top: var(--s-5);
+  text-align: center;
 }
+.checkin-banner .btn { align-self: center; }
 .alert { margin-top: var(--s-5); }
 
 /* --- Todo listo (sin plan todavía) ------------------------------------------ */

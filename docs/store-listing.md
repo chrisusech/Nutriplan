@@ -63,7 +63,21 @@ No se venden datos. IA de terceros recibe solo alimentos del plato (ver privacid
 5. TestFlight **Internal** puede salir **sin** IAP (una semana + activación a mano).
 6. Cuenta demo para revisión (correo + clave en las notas de review).
 7. Export compliance: HTTPS only / Exempt encryption if applicable
-8. **No declarar Push** en el listing hasta que el envío server-side exista.
+8. **No declarar Push** en el listing: el plugin no está en el binario.
+9. In-App Purchase capability + productos de suscripción auto-renovables.
+10. App Privacy: compras, salud, identificadores; sin tracking.
+11. Copyright: el titular de la cuenta de desarrollador (persona o sociedad).
+    Licencias de terceros: ver `pyproject.toml` / `mobile/package.json`.
+12. Edad 13+. Cuenta demo en las notas de review.
+
+## Titular que publica
+
+Apple cobra a la **entidad de la cuenta de desarrollador** (individuo o
+empresa). Esa misma entidad aparece como vendedor en la ficha y es quien firma
+privacidad y términos (`/privacidad`, `/terminos`). Si todavía es una persona
+física, los textos legales deben decirlo; no prometas una sociedad que no
+existe. El Paid Apps Agreement, banco e impuestos van **antes** del Submit con
+IAP.
 
 ## Google Play
 
@@ -92,8 +106,7 @@ npx cap open android
 - [ ] Generar menú (~1 s)
 - [ ] Ver semana offline (modo avión tras cache)
 - [ ] Login Google / Apple (mismo correo no duplica cuenta)
-- [ ] Paywall `/plan` + restaurar compras (sandbox)
-- [ ] Compartir día
+- [ ] Paywall `/plan` + restaurar compras (sandbox; **no** en Cloudflare)
 - [ ] Eliminar cuenta
 - [ ] `/privacidad` `/terminos` `/soporte` abren
 - [ ] Splash no se queda en negro

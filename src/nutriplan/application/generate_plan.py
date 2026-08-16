@@ -177,10 +177,15 @@ async def _generate_week(
             raise
         logger.warning("selection_fell_back_to_engine", error=str(exc))
         selector = _engine()
-        schema = build_selection_schema(allowed, slots, use_aliases=False)
+        # El mismo recorte que la vía normal. Con el catálogo grande, construir
+        # el `Literal` sobre el pool entero genera un enum de miles de opciones:
+        # justo lo que esta rama tiene que evitar, porque es la que corre cuando
+        # el modelo ya falló una vez.
+        fallback_visible = shortlist_for_llm(allowed)
+        schema = build_selection_schema(fallback_visible, slots, use_aliases=False)
         raw = await selector.select_plan(
             system=prompt.text,
-            prompt=build_selection_prompt(targets, allowed, config, feedback),
+            prompt=build_selection_prompt(targets, fallback_visible, config, feedback),
             schema=schema,
             model="engine-v1",
         )
@@ -444,6 +449,7 @@ async def generate_plan_for_client(
         config=config,
         disliked=disliked,
         banned=banned,
+        restrictions=client.restrictions,
     )
 
     # Lo que ya salió bien, acotado a lo que ESTA persona puede comer. Fuera del

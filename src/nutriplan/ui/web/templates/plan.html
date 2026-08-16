@@ -20,13 +20,19 @@
 <p class="alert">Todavía te quedan {{ membership.weeks_left }} semana{{ '' if membership.weeks_left == 1 else 's' }}.</p>
 {% endif %}
 
+<div class="paywall-web">
+  <p>El cobro se hace en el iPhone, con Apple. Abra NutriPlan en su teléfono
+    para activar el plan.</p>
+</div>
+
+<div class="paywall-native">
 <div class="card">
   <h2>Mensual</h2>
-  <p class="muted">4 semanas. El precio lo pone la ficha de App Store.</p>
+  <p class="muted"><span data-iap-price="{{ monthly }}">El precio lo muestra Apple.</span></p>
   <form method="post" action="/plan/activar">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <input type="hidden" name="product_id" value="{{ monthly }}">
-    <input type="hidden" name="transaction_id" value="" data-iap-txn>
+    <input type="hidden" name="signed_transaction" value="" data-iap-jws>
     <button class="btn btn-primary btn-block" type="submit" data-iap="{{ monthly }}">
       Continuar con Apple
     </button>
@@ -35,17 +41,26 @@
 
 <div class="card">
   <h2>Anual</h2>
-  <p class="muted">52 semanas. El precio lo pone la ficha de App Store.</p>
+  <p class="muted"><span data-iap-price="{{ annual }}">El precio lo muestra Apple.</span></p>
   <form method="post" action="/plan/activar">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <input type="hidden" name="product_id" value="{{ annual }}">
-    <input type="hidden" name="transaction_id" value="" data-iap-txn>
+    <input type="hidden" name="signed_transaction" value="" data-iap-jws>
     <button class="btn btn-primary btn-block" type="submit" data-iap="{{ annual }}">
       Continuar con Apple
     </button>
   </form>
 </div>
 
-<p class="muted">Si ya pagaste en otro iPhone, restaura la compra desde Ajustes
-  de Apple. Los términos están en <a href="/terminos">/terminos</a>.</p>
+<form method="post" action="/plan/activar" data-iap-restore-form>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="signed_transaction" value="" data-iap-jws>
+  <button class="btn btn-outline btn-block" type="button" data-iap-restore>
+    Restaurar compras
+  </button>
+</form>
+</div>
+
+<p class="muted">Si ya pagó en otro iPhone, restaure la compra. Los términos
+  están en <a href="/terminos">/terminos</a>.</p>
 {% endblock %}

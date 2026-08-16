@@ -108,7 +108,8 @@ def test_preguntar_por_un_job_que_no_existe_no_deja_la_rueda_girando(app) -> Non
         "/menu/estado",
         params={"job": "00000000-0000-4000-8000-000000000000", "n": 0},
     ).text
-    assert "no se encontró" in html or "interrumpió" in html
+    assert "interrumpió" in html
+    assert "autorenew" not in html
 
 
 def test_un_job_que_no_es_un_uuid_no_tumba_la_pantalla(app) -> None:

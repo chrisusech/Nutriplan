@@ -25,6 +25,7 @@ from nutriplan.adapters.db.seed import seed_local
 from nutriplan.application.auth import SignupError, register
 from nutriplan.config.settings import Environment
 from nutriplan.container import Container, build_container
+from nutriplan.domain.meal_template import validate_catalog
 from nutriplan.domain.models import Role
 from nutriplan.ui.web.account_cache import AccountGateCache
 from nutriplan.ui.web.assets import AssetFiles
@@ -42,6 +43,7 @@ logger = structlog.get_logger(__name__)
 # Rutas accesibles sin sesión. El alta es pública: cualquiera se registra.
 _PUBLIC_PREFIXES = (
     "/login",
+    "/entrar",
     "/registro",
     "/verificar",
     "/auth/oauth",
@@ -49,7 +51,7 @@ _PUBLIC_PREFIXES = (
     "/terminos",
     "/soporte",
     "/health",
-    "/internal/tick",
+    "/internal/",
     "/recuperar",
     "/static",
     "/favicon.ico",
@@ -112,11 +114,17 @@ def create_app(container: Container | None = None) -> FastAPI:
             logger.info("startup_migrations_done")
         logger.info("startup_seed_begin")
         async with container.session_factory() as session:
-            csv_path = container.settings.project_root / "data" / "foods" / "curated_foods.csv"
-            await seed_local(session, csv_path)
+            await seed_local(session)
             await _seed_super_user(container, session)
             await session.commit()
         logger.info("startup_seed_done")
+
+        # Selectores YAML por nombre: un rename huérfano debe fallar al arrancar.
+        async with container.session_factory() as session:
+            universo = await container.repos(session).foods.list_universe()
+        if universo:
+            validate_catalog(container.meal_catalog, universo)
+            logger.info("startup_catalog_ok", alimentos=len(universo))
         app.state.jobs_in_flight = set()
         app.state.generation_job_ids = set()
         tick: asyncio.Task[None] | None = None
@@ -219,9 +227,9 @@ def create_app(container: Container | None = None) -> FastAPI:
     async def unhandled(request: Request, exc: Exception) -> Response:
         """Un fallo nuestro no le cuenta al visitante cómo estamos por dentro."""
         logger.exception("unhandled_error", path=request.url.path, error=str(exc))
-        return PlainTextResponse(
-            "Algo se rompió de nuestro lado. Ya lo estamos mirando.", status_code=500
-        )
+        from nutriplan.ui.web.public_errors import UNHANDLED
+
+        return PlainTextResponse(UNHANDLED, status_code=500)
 
     app.mount("/static", AssetFiles(directory=str(STATIC_DIR)), name="static")
 

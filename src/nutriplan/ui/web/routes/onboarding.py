@@ -194,6 +194,7 @@ async def submit_onboarding(
                 "activity_level": activity_level,
                 "restrictions": restrictions,
                 "eating_pattern_raw": eating_pattern_raw,
+                "meal_slots": meal_slots,
             },
             groups=await _food_groups(request, session, set(food_ids)),
         )

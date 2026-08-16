@@ -59,6 +59,26 @@ class UnitGranularity(StrEnum):
     HALF = "half"  # aguacate, pan, banano → medias unidades permitidas
 
 
+class FoodState(StrEnum):
+    """En qué estado están los macros de la fila."""
+
+    RAW = "crudo"
+    COOKED = "cocido"
+    NOT_APPLICABLE = "no_aplica"  # aceite, leche, frutos secos: no se cocinan
+
+
+class CookingMethod(StrEnum):
+    """Cómo se cocinó la fila cocida. Informa a la receta, no al cálculo."""
+
+    BOILED = "hervido"
+    ROASTED = "asado"
+    GRILLED = "a la plancha"
+    BAKED = "horneado"
+    FRIED = "frito"
+    STEAMED = "al vapor"
+    STEWED = "guisado"
+
+
 # Las comidas "de plato" frente a los snacks. Ya no son obligatorias: basta
 # con una comida al día. El presentador las usa para etiquetar, no para forzar.
 CORE_MEAL_SLOTS = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
@@ -140,10 +160,10 @@ class Client(BaseModel):
 
     @model_validator(mode="after")
     def _default_meal_slots(self) -> "Client":
+        # Vacío = las cinco: filas viejas deserializan así. La puerta de "elige
+        # al menos una" vive en el onboarding, no aquí.
         chosen = set(self.meal_slots) or set(MealSlot)
-        if not chosen:
-            raise ValueError("Un plan necesita al menos una comida")
-        self.meal_slots = [s for s in MealSlot if s in chosen]  # orden del día
+        self.meal_slots = [s for s in MealSlot if s in chosen]
         return self
 
     @model_validator(mode="after")
@@ -203,7 +223,7 @@ _DEFAULT_SLOTS: dict[FoodCategory, tuple[MealSlot, ...]] = {
 class FoodItem(BaseModel):
     id: UUID
     tenant_id: UUID | None = None  # None = alimento global; con id = custom del tenant
-    source: str  # "USDA" | "TCAC" | "custom"
+    source: str  # "USDA" | "TCAC" | "custom" | "derived"
     source_ref: str | None = None  # p.ej. fdc_id de USDA
     name_es: str
     name_en: str | None = None
@@ -243,12 +263,28 @@ class FoodItem(BaseModel):
     is_free: bool = False
     free_text: str | None = None
 
+    state: FoodState = FoodState.NOT_APPLICABLE
+    cooking_method: CookingMethod | None = None
+
+    # g cocidos / g crudo. None = no hay par; no se convierte.
+    yield_factor: float | None = Field(default=None, gt=0)
+    raw_equivalent_id: UUID | None = None
+
+    # True = se lista (chips, pool). False = vivo, solo por búsqueda.
+    engine_default: bool = True
+
+    fdc_id: int | None = None  # ancla dura contra USDA FoodData Central
+
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "FoodItem":
         if not self.meal_slots:
             self.meal_slots = list(_DEFAULT_SLOTS[self.category])
         if "portion_step_g" not in self.model_fields_set:
             self.portion_step_g = _derive_portion_step(self.unit_granularity, self.default_unit_g)
+        # Clamp: un `almuerzo:99` de un dedo torcido dominaría el coste de la semana.
+        self.slot_weights = {
+            slot: min(max(weight, 1), MAX_SLOT_WEIGHT) for slot, weight in self.slot_weights.items()
+        }
         return self
 
     def weight_in(self, slot: MealSlot) -> int:

@@ -34,7 +34,7 @@ def grouped(foods: list[FoodItem], *, marked: frozenset[str] = frozenset()) -> l
         items = [
             {"id": str(f.id), "name": f.name_es.capitalize(), "marcado": str(f.id) in marked}
             for f in sorted(foods, key=lambda f: f.name_es)
-            if f.category == meta["cat"] and presenter.show_in_picker(f)
+            if f.category == meta["cat"]
         ]
         if items:
             marcados = sum(1 for i in items if i["marcado"])
@@ -44,7 +44,9 @@ def grouped(foods: list[FoodItem], *, marked: frozenset[str] = frozenset()) -> l
 
 @router.get("/mis-alimentos", response_model=None)
 async def my_foods(
-    request: Request, session: Annotated[AsyncSession, Depends(db_session)]
+    request: Request,
+    session: Annotated[AsyncSession, Depends(db_session)],
+    q: str = "",
 ) -> HTMLResponse | RedirectResponse:
     repos = repos_of(request, session)
     client = await repos.clients.get_by_user(account_id_of(request))
@@ -53,15 +55,31 @@ async def my_foods(
 
     allowed = await resolve_allowed_foods(client, food_repo=repos.foods, client_repo=repos.clients)
     universe = await repos.foods.list_universe()
+    fuera = addable(universe=universe, allowed=allowed, restrictions=client.restrictions)
+
+    # Buscar entra al catálogo profundo; navegar, no. Son miles de alimentos:
+    # una lista de todo no se puede leer, pero teclear «salmón» sí encuentra el
+    # salmón aunque nadie lo haya puesto nunca en el catálogo corto.
+    busqueda = q.strip()
+    hallazgos: list[FoodItem] = []
+    if busqueda:
+        conocidos = {food.id for food in allowed} | {food.id for food in fuera}
+        del_fondo = await repos.foods.search_deep(busqueda)
+        hallazgos = addable(
+            universe=[f for f in del_fondo if f.id not in conocidos],
+            allowed=[],
+            restrictions=client.restrictions,
+        )
+
     return render(
         request,
         "mis_alimentos.html",
         active_tab="perfil",
         perfil=client,
         dentro=grouped(allowed),
-        fuera=grouped(
-            addable(universe=universe, allowed=allowed, restrictions=client.restrictions)
-        ),
+        fuera=grouped(fuera),
+        busqueda=busqueda,
+        hallazgos=hallazgos,
         n_dentro=len(allowed),
     )
 

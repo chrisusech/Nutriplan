@@ -217,6 +217,19 @@ def test_el_titulo_prefiere_el_nombre_culinario_de_la_receta_ia() -> None:
     assert vista["title"] == "Pollo al limón con arroz"
 
 
+def test_una_sopa_de_atun_no_se_lee_en_la_semana() -> None:
+    atun = _food("atún en agua")
+    yuca = _food("yuca cocida")
+    comida = _meal(
+        MealSlot.LUNCH,
+        [atun, yuca],
+        dish_name="Sopa de atún en agua con yuca cocida",
+    )
+    vista = week_view.meal_view(comida, _catalogo([atun, yuca]))
+    assert "sopa" not in vista["title"].lower()
+    assert "atún" in vista["title"].lower() or "atun" in vista["title"].lower()
+
+
 def test_un_plato_sin_receta_todavia_igual_se_muestra() -> None:
     """La receta llega después que el plan y puede fallar: no puede dejar la
     pantalla en blanco."""
@@ -259,3 +272,27 @@ def test_el_anillo_empieza_vacio_hasta_que_marcas_una_comida() -> None:
     assert lleno["kcal"] == 100
     assert lleno["eaten_n"] == 1
     assert lleno["restante"] == 1900
+
+
+def test_el_heroe_del_dia_pinta_macros_aunque_no_haya_objetivo() -> None:
+    """Sin targets el anillo se apaga; los macros del día siguen teniendo nombre."""
+    from nutriplan.ui.web.deps import templates
+
+    html = templates.env.get_template("partials/day_hero.html").render(
+        day={
+            "protein_g": 80,
+            "carb_g": 200,
+            "fat_g": 50,
+            "kcal": 1800,
+            "label": "Lunes",
+            "meals": [1, 2, 3],
+            "fuera_slot": "almuerzo",
+        },
+        progreso=None,
+        dia=0,
+        oob=False,
+        racha=0,
+    )
+    assert "Proteína" in html
+    assert "80" in html
+    assert "Carbos" in html

@@ -1,5 +1,6 @@
 """Paywall: activar el plan mensual o anual tras la semana de prueba."""
 
+from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -7,9 +8,11 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutriplan.application.iap import activate_verified_purchase
 from nutriplan.application.membership import grant_iap, membership_of
 from nutriplan.config.settings import Environment
 from nutriplan.domain.membership import IAP_ANNUAL_PRODUCT, IAP_MONTHLY_PRODUCT
+from nutriplan.ports.iap import IAPError
 from nutriplan.ui.web.deps import (
     account_id_of,
     acting_account,
@@ -18,6 +21,7 @@ from nutriplan.ui.web.deps import (
     render,
     repos_of,
 )
+from nutriplan.ui.web.public_errors import PURCHASE_FAILED, sanitize_public_error
 
 router = APIRouter()
 
@@ -45,7 +49,7 @@ async def paywall(
         membership=state,
         monthly=IAP_MONTHLY_PRODUCT,
         annual=IAP_ANNUAL_PRODUCT,
-        error=request.query_params.get("error"),
+        error=sanitize_public_error(request.query_params.get("error") or ""),
     )
 
 
@@ -53,30 +57,41 @@ async def paywall(
 async def activate_plan(
     request: Request,
     session: Annotated[AsyncSession, Depends(db_session)],
-    product_id: Annotated[str, Form()],
-    transaction_id: Annotated[str, Form()],
+    product_id: Annotated[str, Form()] = "",
+    transaction_id: Annotated[str, Form()] = "",
+    signed_transaction: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
-    """StoreKit (o el simulador local) confirma el cobro y aquí se concede.
+    """StoreKit confirma el cobro con un JWS. Un id suelto no vale en prod.
 
-    En prod un `local-` no vale: sería regalarse semanas sin pasar por Apple.
+    En local, y solo ahí, un `local-…` sirve para el TestClient y Safari en el
+    Mac. El iPhone nativo nunca fabrica esa cadena: o hay JWS o no hay compra.
     """
+    failed = RedirectResponse("/plan?error=" + quote(PURCHASE_FAILED), status_code=303)
     container = container_of(request)
-    ref = transaction_id.strip()
-    if container.settings.env is Environment.PROD and ref.startswith("local-"):
-        return RedirectResponse(
-            "/plan?error=" + quote("Esta compra no se pudo verificar."),
-            status_code=303,
-        )
     account = await acting_account(request, session)
     if account is None:
         return RedirectResponse("/login", status_code=303)
+    signed = signed_transaction.strip()
+    memberships = container.membership_repo(session)
     try:
-        await grant_iap(
-            account=account,
-            memberships=container.membership_repo(session),
-            product_id=product_id,
-            transaction_id=ref,
-        )
-    except ValueError as exc:
-        return RedirectResponse("/plan?error=" + quote(str(exc)), status_code=303)
-    return RedirectResponse("/perfil", status_code=303)
+        if signed:
+            purchase = container.iap_verifier.verify_transaction(signed)
+            await activate_verified_purchase(
+                account=account,
+                memberships=memberships,
+                purchase=purchase,
+                now=datetime.now(UTC),
+            )
+            return RedirectResponse("/perfil", status_code=303)
+        ref = transaction_id.strip()
+        if container.settings.env is Environment.LOCAL and ref.startswith("local-"):
+            await grant_iap(
+                account=account,
+                memberships=memberships,
+                product_id=product_id,
+                transaction_id=ref,
+            )
+            return RedirectResponse("/perfil", status_code=303)
+    except (IAPError, ValueError):
+        return failed
+    return failed

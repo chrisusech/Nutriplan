@@ -2,7 +2,7 @@
 
 Una pantalla por tarea, un archivo por pantalla: el listado de usuarios, la
 ficha de uno, las métricas del producto, la biblioteca de recetas, los
-restaurantes de calle y el laboratorio para probar.
+restaurantes de calle, el catálogo de alimentos y el laboratorio para probar.
 
 El guard de `/admin` en `app.py` revalida el rol contra la base antes de que
 nada de esto se ejecute; ningún módulo de aquí vuelve a fiarse de la cookie.
@@ -11,6 +11,7 @@ nada de esto se ejecute; ningún módulo de aquí vuelve a fiarse de la cookie.
 from fastapi import APIRouter
 
 from nutriplan.ui.web.routes.admin import (
+    alimentos,
     laboratorio,
     metricas,
     recetas,
@@ -21,6 +22,7 @@ from nutriplan.ui.web.routes.admin import (
 
 router = APIRouter()
 router.include_router(usuarios.router)
+router.include_router(alimentos.router)
 router.include_router(usuario.router)
 router.include_router(metricas.router)
 router.include_router(recetas.router)

@@ -18,6 +18,7 @@ from nutriplan.domain.meal_template import (
     MealCatalogError,
     MealTemplate,
     expand,
+    is_inedible_title,
     pool_health,
     validate_catalog,
 )
@@ -388,3 +389,15 @@ def test_las_recetas_del_catalogo_no_llevan_cifras() -> None:
             assert not re.search(r"\d+\s*(g|gr|gramos|kcal|ml)\b", step, re.I), (
                 f"{template_id} mete cantidades en la receta: {step!r}"
             )
+
+
+def test_la_sopa_no_se_hace_con_atun_en_lata_ni_platano(catalog, foods) -> None:
+    """«Sopa de atún en agua» y «sopa de plátano» no son platos."""
+    sopas = [
+        dish
+        for dish in expand(catalog, list(foods.values()))[MealSlot.LUNCH]
+        if dish.template_id == "sopa_sustanciosa"
+    ]
+    assert sopas, "tiene que seguir habiendo sopas de pollo, carne o pescado fresco"
+    malas = [dish.name for dish in sopas if is_inedible_title(dish.name)]
+    assert not malas, f"sopa imposible: {malas}"

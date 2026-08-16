@@ -8,7 +8,8 @@ import { haptic } from './native.js';
 
 export const initStepper = () => {
   const stepper = document.querySelector('[data-stepper]');
-  if (!stepper) return;
+  if (!stepper || stepper.dataset.bound === '1') return;
+  stepper.dataset.bound = '1';
 
   const steps = [...stepper.querySelectorAll('.onb-step')];
   const next = stepper.querySelector('[data-next]');
@@ -34,16 +35,15 @@ export const initStepper = () => {
     if (submit) submit.disabled = !listo;
   };
 
-  const show = ({ mover = true } = {}) => {
+    const show = ({ mover = true } = {}) => {
     steps.forEach((step, i) => { step.hidden = i !== at; });
-    back.hidden = at === 0;
     next.hidden = at === steps.length - 1;
     submit.hidden = at !== steps.length - 1;
     fill.dataset.at = String(at + 1);
     count.textContent = `Paso ${at + 1} de ${steps.length}`;
     refrescaCta();
-    const title = steps[at].querySelector('h2');
-    if (title) { title.setAttribute('tabindex', '-1'); title.focus({ preventScroll: true }); }
+    // No se enfoca el título: en iOS un h2 con tabindex abre pelea con el
+    // teclado del campo y el WebView se queda congelado.
     if (mover) window.scrollTo(0, 0);
   };
 
@@ -57,8 +57,36 @@ export const initStepper = () => {
     show();
   };
 
-  next.addEventListener('click', avanza);
-  back.addEventListener('click', () => { at = Math.max(at - 1, 0); haptic(); show(); });
+  // Sin esto Continuar es un botón que se ve y no hace nada: el iPhone se
+  // queda en la primera pregunta y parece un crash.
+  next?.addEventListener('click', (event) => {
+    event.preventDefault();
+    avanza();
+  });
+
+  stepper.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-select-group]');
+    if (!btn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const group = btn.closest('.food-group');
+    const boxes = [...(group?.querySelectorAll('input[name=food_ids]') || [])];
+    if (!boxes.length) return;
+    const allOn = boxes.every((box) => box.checked);
+    boxes.forEach((box) => { box.checked = !allOn; });
+    btn.textContent = allOn ? 'Seleccionar todas' : 'Quitar todas';
+  }, true);
+  back.addEventListener('click', () => {
+    if (at === 0) {
+      // Salir del cuestionario, no de la cuenta: /login pintaba la bienvenida
+      // con la sesión todavía viva y parecía un cierre.
+      window.location.assign('/');
+      return;
+    }
+    at = Math.max(at - 1, 0);
+    haptic();
+    show();
+  });
   stepper.addEventListener('input', refrescaCta);
   stepper.addEventListener('change', () => {
     const ask = stepper.querySelector('[name=conoce_macros]:checked');

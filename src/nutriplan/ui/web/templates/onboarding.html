@@ -170,7 +170,8 @@
       <div class="chips">
         {% for m in MEAL_TOGGLES %}
         <label class="chip">
-          <input type="checkbox" name="meal_slots" value="{{ m.slot.value }}" checked> {{ m.label }}
+          <input type="checkbox" name="meal_slots" value="{{ m.slot.value }}"
+                 {% if f.get('meal_slots') is none or m.slot.value in f.get('meal_slots', []) %}checked{% endif %}> {{ m.label }}
         </label>
         {% endfor %}
       </div>
@@ -216,13 +217,16 @@
     <section class="onb-step">
       <span class="onb-badge"><span class="icon">favorite</span></span>
       <h2>Selecciona lo que te guste comer.</h2>
-      <p class="onb-hint">Los gramos del menú son del alimento ya cocido. Si no marcas nada, elegimos nosotros.</p>
+      <p class="onb-hint">Si no marcas nada, elegimos nosotros: puede salir pescado u otros platos que no comes. Si marcas, hace falta proteína, carbohidrato y grasa, no solo el primer grupo.</p>
       {% for group in groups %}
       <details class="food-group">
         <summary>
           <span class="food-group-name">
             <span class="icon">{{ group.icon }}</span>{{ group.label }}
           </span>
+          <button type="button" class="food-select-all" data-select-group>
+            Seleccionar todas
+          </button>
           <span class="food-count">{{ group['items'] | length }}</span>
         </summary>
         <div class="chips">

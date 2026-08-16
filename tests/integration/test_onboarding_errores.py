@@ -5,6 +5,8 @@ devuelva un mensaje entendible —y no pierda lo ya escrito— es la diferencia
 entre corregirlo y desinstalar.
 """
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -97,6 +99,9 @@ def test_sin_marcar_ninguna_comida_pide_al_menos_una(app) -> None:
     resp = _enviar(app, meal_slots=[])
     assert resp.status_code == 200
     assert "al menos una comida" in resp.text.lower()
+    desayuno = re.search(r'<input[^>]*name="meal_slots"[^>]*value="desayuno"[^>]*>', resp.text)
+    assert desayuno is not None
+    assert "checked" not in desayuno.group(0)
 
 
 def test_sin_desayuno_el_perfil_queda_con_almuerzo_y_cena(app, container) -> None:

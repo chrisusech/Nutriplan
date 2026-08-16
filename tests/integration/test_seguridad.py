@@ -62,7 +62,7 @@ def test_un_post_con_un_token_ajeno_se_rechaza(app) -> None:
 
 
 def test_el_formulario_trae_el_token_para_poder_enviarlo(app) -> None:
-    assert re.search(r'name="_csrf" value="[^"]+"', app.get("/login").text)
+    assert re.search(r'name="_csrf" value="[^"]+"', app.get("/entrar").text)
 
 
 def test_el_login_social_no_exige_csrf(app) -> None:
@@ -124,10 +124,10 @@ def test_adivinar_contrasenas_se_frena(app) -> None:
 
 def test_la_sesion_se_renueva_al_entrar(app) -> None:
     """Si alguien fija una sesión previa, entrar no puede heredarla."""
-    antes = app.get("/login")
+    antes = app.get("/entrar")
     token_antes = re.search(r'name="_csrf" value="([^"]+)"', antes.text).group(1)
     _registrar(app)
-    token_despues = re.search(r'name="_csrf" value="([^"]+)"', app.get("/login").text).group(1)
+    token_despues = re.search(r'name="_csrf" value="([^"]+)"', app.get("/entrar").text).group(1)
     assert token_antes != token_despues
 
 
@@ -136,6 +136,18 @@ def test_sin_sesion_toda_ruta_privada_lleva_al_login(app) -> None:
         resp = app.get(ruta, follow_redirects=False)
         assert resp.status_code == 303, ruta
         assert resp.headers["location"] == "/login"
+
+
+def test_la_sesion_caducada_no_habla_de_la_base_de_datos(app) -> None:
+    html = app.get("/login?sesion=expirada").text
+    assert "Tu sesión ya no es válida" in html
+    assert "base de datos" not in html.lower()
+
+
+def test_la_bienvenida_dice_en_pequeno_que_es_beta(app) -> None:
+    html = app.get("/login").text
+    assert 'class="welcome-beta"' in html
+    assert "Beta" in html
 
 
 # --- Errores ----------------------------------------------------------------
@@ -179,7 +191,7 @@ def test_un_formulario_normal_funciona_con_el_campo_oculto(app) -> None:
     manda cabeceras, y leer el formulario para sacar el token dejaba al
     endpoint sin cuerpo que parsear — todo POST respondía 422.
     """
-    token = re.search(r'name="_csrf" value="([^"]+)"', app.get("/login").text).group(1)
+    token = re.search(r'name="_csrf" value="([^"]+)"', app.get("/entrar").text).group(1)
     resp = app.post(
         "/registro",
         data={
@@ -221,3 +233,12 @@ def test_el_login_social_no_se_ofrece_en_un_navegador(app) -> None:
     html = app.get("/registro").text
     if "auth-social" in html:
         assert 'class="auth-social" hidden' in html
+
+
+def test_apple_puede_avisar_sin_sesion(app) -> None:
+    """El webhook de App Store no lleva cookie; CSRF no lo frena."""
+    resp = app.post("/internal/app-store", json={"signedPayload": "no.es.jws"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ignored"
+    vacio = app.post("/internal/app-store", json={})
+    assert vacio.status_code == 400

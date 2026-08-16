@@ -25,7 +25,8 @@
 # 2026.08.14: fruta opcional en huevos_carbo_grasa. Un desayuno de ~130 g de
 # carbo no cabe en arepa/pan solos; con fruta el plato sí entra al pool y deja
 # de ser solo bowls de avena.
-version: "2026.08.14"
+# 2026.08.16: la sopa usa carne/carbo de caldo, no lata ni plátano.
+version: "2026.08.16"
 
 templates:
   # ---------------------------------------------------------------- DESAYUNO --
@@ -278,8 +279,8 @@ templates:
     slots: [almuerzo, cena]
     free_salad: true
     components:
-      - {role: protein, sel: "@carne_magra"}
-      - {role: carb, sel: "@carbo_principal"}
+      - {role: protein, sel: "@carne_caldo"}
+      - {role: carb, sel: "@carbo_caldo"}
       - {role: fat, sel: "@grasa_cocina", optional: true}
 
   # Solo cena: los huevos del catálogo declaran desayuno y cena, así que en un

@@ -81,20 +81,10 @@ async def checkin_submit(
     if client is None:
         return RedirectResponse("/onboarding", status_code=303)
 
-    closure = await week_closure(
-        client=client,
-        weights=repos.weights,
-        ratings=repos.ratings,
+    plan = (
+        await repos.plans.get(client.active_plan_id) if client.active_plan_id is not None else None
     )
-    if not closure.is_first_week and not closure.ratings_done:
-        return await _form_with_error(
-            request,
-            session,
-            weight_kg,
-            comentario,
-            f"Califica al menos {closure.ratings_required} platos de esta semana "
-            "para poder cerrarla.",
-        )
+    meals_in_plan = sum(len(d.meals) for d in plan.days) if plan else 0
 
     try:
         result = await submit_weekly_checkin(
@@ -111,6 +101,24 @@ async def checkin_submit(
         )
     except ValidationError as exc:
         return await _form_with_error(request, session, weight_kg, comentario, str(exc))
+
+    # El peso se guarda aunque falten estrellas: week_gate ya bloquea por
+    # is_closed, y tirar lo tecleado era perder el dato que adapta las kcal.
+    closure = await week_closure(
+        client=result.client,
+        weights=repos.weights,
+        ratings=repos.ratings,
+        meals_in_plan=meals_in_plan,
+    )
+    if not closure.is_first_week and not closure.ratings_done:
+        return await _form_with_error(
+            request,
+            session,
+            weight_kg,
+            comentario,
+            f"Califica al menos {closure.ratings_required} platos de esta semana "
+            "para poder cerrarla.",
+        )
 
     # Traducir lo que escribió a alimentos concretos. Soft-fail: sin IA la
     # semana se cierra igual, solo que con menos matiz.
@@ -153,6 +161,17 @@ async def checkin_ready(
     week = iso_week_start()
     entry = await repos.weights.for_week(client.id, week)
     if entry is None:
+        return RedirectResponse("/check-in", status_code=303)
+    plan = (
+        await repos.plans.get(client.active_plan_id) if client.active_plan_id is not None else None
+    )
+    closure = await week_closure(
+        client=client,
+        weights=repos.weights,
+        ratings=repos.ratings,
+        meals_in_plan=sum(len(d.meals) for d in plan.days) if plan else 0,
+    )
+    if not closure.is_closed:
         return RedirectResponse("/check-in", status_code=303)
     targets = await repos.targets.latest_for_client(client.id)
     taste = await repos.taste.accumulated_for(client.id, weeks=1)
@@ -210,4 +229,5 @@ async def _form_with_error(
         closure=closure,
         recap=recap,
         error=error,
+        already=bool(closure and closure.has_weight),
     )

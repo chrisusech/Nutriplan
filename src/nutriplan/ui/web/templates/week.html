@@ -10,17 +10,23 @@
 {% endblock %}
 
 {% block head_action %}
-{% if plan %}
-<button type="button" class="btn-icon" data-share-day hidden
-        aria-label="Compartir menú" title="Compartir menú">
-  <span class="icon">send</span>
-</button>
-{% endif %}
 <a class="avatar" href="/perfil" aria-label="Mi perfil">{{ iniciales }}</a>
 {% endblock %}
 
 {% block content %}
 {% if not plan %}
+  {% if not perfil %}
+  {# El admin sin ficha: Semana tiene que abrirse, no rebotar a la consola. #}
+  <div class="ready">
+    <span class="ready-badge"><span class="icon">restaurant_menu</span></span>
+    <h2>Aún no tienes un menú</h2>
+    <p class="muted">Esta es tu semana. Para probar el flujo de quien usa la app,
+       créate una ficha.</p>
+    <a class="btn btn-primary btn-big btn-block" href="/onboarding">
+      <span class="icon">person_add</span>Crear mi ficha
+    </a>
+  </div>
+  {% else %}
   {# El "¡Todo listo!" del final del cuestionario: aquí es donde se aterriza
      después del alta, así que esta pantalla celebra en vez de disculparse. #}
   <div class="ready" id="menu-flow">
@@ -59,6 +65,7 @@
     </form>
     {% endif %}
   </div>
+  {% endif %}
 {% else %}
 
   <nav class="days" aria-label="Días de la semana">

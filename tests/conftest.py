@@ -78,8 +78,12 @@ def _csrf_para_tests() -> Iterator[None]:
     original = TestClient.post
 
     def fresh_token(client: TestClient) -> str:
-        # /login es pública y su formulario ya lleva el token.
-        match = re.search(r'name="_csrf" value="([^"]+)"', client.get("/login").text)
+        # El token está en el formulario de /entrar o, si ya hay sesión y esa
+        # pantalla rebota, en el meta de cualquier página logueada.
+        html = client.get("/entrar").text
+        match = re.search(r'name="_csrf" value="([^"]+)"', html) or re.search(
+            r'name="csrf-token" content="([^"]+)"', html
+        )
         token = match.group(1) if match else ""
         client._csrf_cache = token  # type: ignore[attr-defined]
         return token

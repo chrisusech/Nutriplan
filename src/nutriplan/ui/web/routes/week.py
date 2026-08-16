@@ -29,6 +29,7 @@ from nutriplan.ui.web.deps import (
     track_event,
 )
 from nutriplan.ui.web.gate import week_gate
+from nutriplan.ui.web.public_errors import sanitize_public_error
 
 router = APIRouter()
 
@@ -68,6 +69,19 @@ async def my_week(
     repos = repos_of(request, session)
     client = await repos.clients.get_by_user(account_id_of(request))
     if client is None:
+        if is_super_user(request):
+            # Sin ficha la pestaña Semana no puede rebotar a la consola: el tap
+            # parecería muerto. Quien usa la app sigue al cuestionario.
+            return render(
+                request,
+                "week.html",
+                active_tab="semana",
+                plan=None,
+                perfil=None,
+                needs_checkin=False,
+                membership=None,
+                en_casa_n=0,
+            )
         return RedirectResponse("/onboarding", status_code=303)
     client = await promote_current_week(client=client, plans=repos.plans, clients=repos.clients)
 
@@ -123,7 +137,7 @@ async def my_week(
         # verse y en el beta salieron 27 notas sin un solo comentario.
         abierta=request.query_params.get("nota", ""),
         aviso=request.query_params.get("aviso", ""),
-        error=request.query_params.get("error", ""),
+        error=sanitize_public_error(request.query_params.get("error", "")),
     )
 
 
@@ -312,4 +326,4 @@ async def rate_meal(
     # Sin HTMX se vuelve a la misma comida y abierta: la nota es media
     # respuesta, y la otra media —por qué— solo se escribe si la caja sigue
     # delante al recargar.
-    return RedirectResponse(f"/?dia={dia}&nota={slot}#nota-{slot}", status_code=303)
+    return RedirectResponse(f"/?dia={dia}&nota={slot}", status_code=303)

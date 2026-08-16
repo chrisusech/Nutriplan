@@ -1,56 +1,32 @@
-"""CLI de datos de alimentos: `nutriplan-food`.
+"""CLI `nutriplan-food`: import-usda → filter → name → validate.
 
-Cuatro comandos, en el orden en que se usan:
+Ningún paso llama a nadie: el nombre en español sale de un léxico (`traductor`),
+no de un modelo. USDA usa vocabulario controlado, así que un diccionario lo
+cubre en un segundo y da el mismo resultado siempre.
 
-    nutriplan-food import-usda ~/Downloads/FoodData_Central_csv_2026-04-30
-    nutriplan-food link                 # ancla cada alimento curado a su fdc_id
-    nutriplan-food audit                # compara los macros del CSV contra USDA
-    nutriplan-food scaffold 171287 --name-es "huevo entero"
-
-`link` pide confirmación humana a propósito. "chicken breast" devuelve una
-decena de entradas en USDA (cruda, asada, frita, con piel, precocinada) con
-macros muy distintos; elegir la primera automáticamente metería un fdc_id
-equivocado y `audit` reportaría deltas falsos para siempre.
+`curate` existe aparte para lo que el léxico no traduce, y es opcional: pide
+idioma a una IA y sigue sin tocar un solo número.
 """
 
+from __future__ import annotations
+
 import argparse
-import csv
+import asyncio
 import sqlite3
 import sys
+from collections import Counter
 from pathlib import Path
 
-from nutriplan.adapters.food import usda_fdc
+from nutriplan.adapters.food import catalog, curation, naming, usda_fdc
+from nutriplan.application.prompts import load_prompt
+from nutriplan.config.settings import Settings
+from nutriplan.container import Container
 
 DEFAULT_DB = Path("data/usda/usda.sqlite")
-DEFAULT_CSV = Path("data/foods/curated_foods.csv")
-
-# Las columnas que el humano decide; `scaffold` las deja vacías para que las
-# rellene a mano. El resto sale de USDA.
-_JUDGEMENT_COLUMNS = (
-    "category",
-    "tags",
-    "default_unit_g",
-    "unit_granularity",
-    "unit_name",
-    "portion_step_g",
-    "portion_min_g",
-    "portion_max_g",
-    "meal_slots",
-)
-_MACRO_FIELDS = ("kcal_100g", "protein_100g", "carb_100g", "fat_100g", "fiber_100g")
-
-
-def _read_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    with path.open(encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh)
-        return list(reader.fieldnames or []), list(reader)
-
-
-def _write_csv(path: Path, header: list[str], rows: list[dict[str, str]]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=header)
-        writer.writeheader()
-        writer.writerows(rows)
+DEFAULT_CANDIDATES = Path("data/foods/candidatos.jsonl")
+DEFAULT_CATALOG = Path("data/foods/catalogo.jsonl")
+DEFAULT_QUARANTINE = Path("data/foods/cuarentena.jsonl")
+DEFAULT_UNTRANSLATED = Path("data/foods/sin_traducir.jsonl")
 
 
 def cmd_import(args: argparse.Namespace) -> int:
@@ -60,152 +36,185 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_candidates(candidates: list[tuple[usda_fdc.UsdaFood, float]]) -> None:
-    for i, (food, score) in enumerate(candidates, start=1):
-        macros = (
-            f"{food.kcal_100g or 0:.0f} kcal · P {food.protein_100g or 0:.1f}"
-            f" · C {food.carb_100g or 0:.1f} · G {food.fat_100g or 0:.1f}"
-        )
-        print(f"  {i}) [{score:.2f}] {food.fdc_id:>8}  {food.description[:66]}")
-        print(f"                    {macros}")
-
-
-def cmd_link(args: argparse.Namespace) -> int:
-    header, rows = _read_csv(args.csv)
+def cmd_filter(args: argparse.Namespace) -> int:
+    """Del staging entero a los candidatos que merecen un nombre en español."""
     conn = usda_fdc.connect(args.db)
-    pending = [r for r in rows if not (r.get("source_ref") or "").strip()]
-    if not pending:
-        print("Todos los alimentos ya tienen fdc_id. Nada que enlazar.")
-        return 0
+    foods = list(usda_fdc.stream_all(conn))
+    keep = {f.fdc_id for f in foods}
+    portions: dict[int, list[usda_fdc.UsdaPortion]] = {}
+    for fdc_id in keep:
+        found = usda_fdc.portions_for(conn, fdc_id)
+        if found:
+            portions[fdc_id] = found
 
-    print(f"{len(pending)} alimentos sin fdc_id.\n")
-    linked = 0
-    for row in pending:
-        query = (row.get("name_en") or row["name_es"]).strip()
-        candidates = usda_fdc.search(conn, query, limit=args.limit)
-        if not candidates:
-            print(f"× {row['name_es']}: sin candidatos\n")
-            continue
+    candidates = curation.build_candidates(foods, portions)
+    _write_candidates(args.out, candidates)
 
-        cur = " · ".join(f"{f}={row.get(f) or '-'}" for f in _MACRO_FIELDS)
-        print(f"▸ {row['name_es']}  ({query})")
-        print(f"  CSV actual: {cur}")
-        _print_candidates(candidates)
+    by_state = Counter(c.state.value for c in candidates)
+    by_role = Counter(c.category.value for c in candidates)
+    con_factor = sum(1 for c in candidates if c.yield_factor)
+    print(f"{len(foods)} en staging → {len(candidates)} candidatos ({args.out})")
+    print(f"  estado: {dict(by_state)}")
+    print(f"  rol:    {dict(by_role)}")
+    print(f"  con factor de rendimiento crudo→cocido: {con_factor}")
+    return 0
 
-        choice = input("  elige [1-N] · s=saltar · <fdc_id> · q=salir: ").strip().lower()
-        print()
-        if choice == "q":
-            break
-        if choice in ("", "s"):
-            continue
-        if choice.isdigit() and 1 <= int(choice) <= len(candidates):
-            fdc_id = candidates[int(choice) - 1][0].fdc_id
-        elif choice.isdigit():
-            fdc_id = int(choice)
-            if usda_fdc.get(conn, fdc_id) is None:
-                print(f"  ! {fdc_id} no está en el staging; salto\n")
-                continue
+
+def _write_candidates(path: Path, candidates: list[curation.Candidate]) -> None:
+    """Los candidatos viajan como CatalogEntry a medio llenar (sin nombre)."""
+    catalog.write_jsonl(path, (naming.fallback_entry(c) for c in candidates))
+
+
+def _read_candidates(path: Path) -> list[curation.Candidate]:
+    return [
+        curation.Candidate(
+            fdc_id=e.fdc_id or 0,
+            description=e.name_en or e.name_es,
+            category=e.category,
+            usda_category="",
+            kcal_100g=e.kcal_100g,
+            protein_100g=e.protein_100g,
+            carb_100g=e.carb_100g,
+            fat_100g=e.fat_100g,
+            fiber_100g=e.fiber_100g,
+            sugar_100g=e.sugar_100g,
+            sodium_mg_100g=e.sodium_mg_100g,
+            water_100g=None,
+            state=e.state,
+            cooking_method=e.cooking_method,
+            pair_key=e.pair_key,
+            yield_factor=e.yield_factor,
+            default_unit_g=e.default_unit_g,
+            unit_hint=e.unit_name,
+            tags=list(e.tags),
+        )
+        for e in catalog.read_jsonl(path)
+    ]
+
+
+def cmd_name(args: argparse.Namespace) -> int:
+    """Nombra el catálogo con el léxico. Sin red, sin IA, sin coste."""
+    candidates = _read_candidates(args.candidates)
+    entries: list[catalog.CatalogEntry] = []
+    sin_traducir: list[catalog.CatalogEntry] = []
+    for candidate in candidates:
+        entry = naming.entry_traducida(candidate)
+        if entry is None:
+            sin_traducir.append(naming.fallback_entry(candidate))
         else:
-            continue
-        row["source_ref"] = str(fdc_id)
-        linked += 1
+            entries.append(entry)
 
-    _write_csv(args.csv, header, rows)
-    print(f"{linked} alimentos enlazados. Escrito {args.csv}")
-    print("Ahora: nutriplan-food audit")
+    written = catalog.write_jsonl(args.out, entries)
+    catalog.write_jsonl(args.untranslated, sin_traducir)
+    distintos = len({e.name_es for e in entries})
+    print(f"{len(candidates)} candidatos → {written} nombrados ({args.out})")
+    print(f"  nombres distintos: {distintos} (el resto son variantes del mismo alimento)")
+    if sin_traducir:
+        cabezas = Counter((e.name_en or "").split(",")[0].strip().lower() for e in sin_traducir)
+        faltan = ", ".join(k for k, _ in cabezas.most_common(8))
+        print(f"  sin traducir: {len(sin_traducir)} → {args.untranslated}")
+        print(f"    cabezas que faltan en el léxico: {faltan}")
     return 0
 
 
-def cmd_audit(args: argparse.Namespace) -> int:
-    _header, rows = _read_csv(args.csv)
-    conn = usda_fdc.connect(args.db)
-
-    unlinked = [r["name_es"] for r in rows if not (r.get("source_ref") or "").strip()]
-    deltas: list[tuple[str, str, float, float]] = []
-
-    for row in rows:
-        ref = (row.get("source_ref") or "").strip()
-        if not ref:
-            continue
-        food = usda_fdc.get(conn, int(ref))
-        if food is None:
-            print(f"! {row['name_es']}: fdc_id {ref} no existe en el staging")
-            continue
-        for field in _MACRO_FIELDS:
-            ours = float(row.get(field) or 0.0)
-            theirs = getattr(food, field)
-            if theirs is None:
-                continue
-            # Comparación relativa, con un piso absoluto: un macro que vale 0.4
-            # frente a 0.2 es un 100% de desvío y no le importa a nadie.
-            scale = max(abs(theirs), 1.0)
-            if abs(ours - theirs) / scale > args.tolerance:
-                deltas.append((row["name_es"], field, ours, theirs))
-
-    if unlinked:
+def cmd_curate(args: argparse.Namespace) -> int:
+    candidates = _read_candidates(args.candidates)
+    if args.limit:
+        candidates = candidates[: args.limit]
+    container = Container(Settings())
+    llm = container.llm_client
+    if llm is None:
         print(
-            f"{len(unlinked)} alimentos SIN fdc_id (no auditables): "
-            f"{', '.join(unlinked[:8])}{' …' if len(unlinked) > 8 else ''}\n"
+            "No hay proveedor de IA configurado (LLM_API_KEY). El catálogo se "
+            "quedaría con nombres en inglés, así que no se genera.",
+            file=sys.stderr,
         )
+        return 2
 
-    if not deltas:
-        print(f"Sin desviaciones por encima del {args.tolerance:.0%}.")
-        return 0
+    system = load_prompt(
+        container.settings.prompts_dir, "food_curation", naming.FOOD_CURATION_VERSION
+    ).text
+    model = container.settings.llm_model_generate
 
-    print(f"{len(deltas)} desviaciones por encima del {args.tolerance:.0%}:\n")
-    print(f"  {'alimento':<28} {'macro':<14} {'CSV':>9} {'USDA':>9}   desvío")
-    for name, field, ours, theirs in deltas:
-        pct = (ours - theirs) / max(abs(theirs), 1.0)
-        print(f"  {name:<28} {field:<14} {ours:>9.1f} {theirs:>9.1f}   {pct:+.0%}")
-    return 1
+    def progress(done: int, total: int, kept: int) -> None:
+        print(f"  lote {done}/{total} · {kept} nombrados", end="\r", flush=True)
 
-
-def cmd_scaffold(args: argparse.Namespace) -> int:
-    header, _rows = _read_csv(args.csv)
-    conn = usda_fdc.connect(args.db)
-    food = usda_fdc.get(conn, args.fdc_id)
-    if food is None:
-        print(f"fdc_id {args.fdc_id} no está en el staging", file=sys.stderr)
-        return 1
-
-    row = dict.fromkeys(header, "")
-    row["name_es"] = args.name_es
-    row["name_en"] = food.description
-    row["source"] = "USDA"
-    row["source_ref"] = str(food.fdc_id)
-    for field in _MACRO_FIELDS:
-        value = getattr(food, field)
-        row[field] = "" if value is None else f"{value:.10g}"
-
-    print(f"# {food.description}  (fdc_id {food.fdc_id}, {food.data_type})")
-    print(f"# rellena a mano: {', '.join(_JUDGEMENT_COLUMNS)}")
-    writer = csv.DictWriter(sys.stdout, fieldnames=header)
-    writer.writerow(row)
+    entries = asyncio.run(
+        naming.curate_all(
+            candidates,
+            llm=llm,
+            system=system,
+            model=model,
+            batch_size=args.batch_size,
+            on_progress=progress,
+        )
+    )
+    written = catalog.write_jsonl(args.out, entries)
+    nucleo = sum(1 for e in entries if e.engine_default)
+    print(f"\n{len(candidates)} candidatos → {written} curados ({args.out})")
+    print(f"  núcleo (se listan): {nucleo} · catálogo profundo: {written - nucleo}")
     return 0
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    """El código audita a la IA. Lo dudoso no entra a la base, se aparta."""
+    entries = list(catalog.read_jsonl(args.catalog))
+    ok, rejected = catalog.validate_entries(entries)
+
+    # Un nombre repetido no es un fallo: es la misma vaca despiezada de catorce
+    # maneras colapsando en el corte que la gente cocina. Se cuenta aparte para
+    # que un número enorme ahí no parezca un problema de datos.
+    variantes = [par for par in rejected if par[1].startswith("nombre repetido")]
+    problemas = [par for par in rejected if not par[1].startswith("nombre repetido")]
+
+    print(f"{len(entries)} revisados · {len(ok)} alimentos distintos")
+    print(f"  {len(variantes)} variantes del mismo alimento (colapsadas, no es un fallo)")
+    if problemas:
+        # El motivo lleva el dato concreto («desvío 28 %»); para el resumen se
+        # recorta a la frase, o cada fila sería su propio grupo.
+        reasons = Counter(reason.split(":")[0].split(" (")[0] for _, reason in problemas)
+        print(f"  {len(problemas)} en cuarentena → {args.quarantine}")
+        for reason, n in reasons.most_common():
+            print(f"    {n:>5}  {reason}")
+    catalog.write_jsonl(args.quarantine, (entry for entry, _ in problemas))
+    if args.write_back:
+        catalog.write_jsonl(args.catalog, ok)
+        print(f"  catálogo reescrito solo con lo apto: {args.catalog}")
+    return 1 if rejected and args.strict else 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="nutriplan-food", description=__doc__)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="staging SQLite de USDA")
-    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="catálogo curado")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_import = sub.add_parser("import-usda", help="construye el staging desde el bulk CSV")
     p_import.add_argument("csv_dir", type=Path, help="directorio FoodData_Central_csv_*")
     p_import.set_defaults(func=cmd_import)
 
-    p_link = sub.add_parser("link", help="ancla cada alimento curado a su fdc_id")
-    p_link.add_argument("--limit", type=int, default=5, help="candidatos a proponer")
-    p_link.set_defaults(func=cmd_link)
+    p_filter = sub.add_parser("filter", help="staging → candidatos limpios (sin IA)")
+    p_filter.add_argument("--out", type=Path, default=DEFAULT_CANDIDATES)
+    p_filter.set_defaults(func=cmd_filter)
 
-    p_audit = sub.add_parser("audit", help="compara los macros del CSV contra USDA")
-    p_audit.add_argument("--tolerance", type=float, default=0.05)
-    p_audit.set_defaults(func=cmd_audit)
+    p_name = sub.add_parser("name", help="nombre en español con el léxico (sin IA)")
+    p_name.add_argument("--candidates", type=Path, default=DEFAULT_CANDIDATES)
+    p_name.add_argument("--out", type=Path, default=DEFAULT_CATALOG)
+    p_name.add_argument("--untranslated", type=Path, default=DEFAULT_UNTRANSLATED)
+    p_name.set_defaults(func=cmd_name)
 
-    p_scaf = sub.add_parser("scaffold", help="emite una fila CSV con los macros de USDA")
-    p_scaf.add_argument("fdc_id", type=int)
-    p_scaf.add_argument("--name-es", required=True, dest="name_es")
-    p_scaf.set_defaults(func=cmd_scaffold)
+    p_curate = sub.add_parser("curate", help="opcional: la IA nombra lo que el léxico no cubre")
+    p_curate.add_argument("--candidates", type=Path, default=DEFAULT_CANDIDATES)
+    p_curate.add_argument("--out", type=Path, default=DEFAULT_CATALOG)
+    p_curate.add_argument("--limit", type=int, default=0, help="solo los primeros N (pruebas)")
+    p_curate.add_argument("--batch-size", type=int, default=naming.BATCH_SIZE, dest="batch_size")
+    p_curate.set_defaults(func=cmd_curate)
+
+    p_valid = sub.add_parser("validate", help="aparta lo que no puede entrar a la base")
+    p_valid.add_argument("catalog", type=Path, nargs="?", default=DEFAULT_CATALOG)
+    p_valid.add_argument("--quarantine", type=Path, default=DEFAULT_QUARANTINE)
+    p_valid.add_argument("--write-back", action="store_true", help="deja solo lo apto")
+    p_valid.add_argument("--strict", action="store_true", help="sale con error si hay rechazos")
+    p_valid.set_defaults(func=cmd_validate)
 
     args = parser.parse_args(argv)
     try:

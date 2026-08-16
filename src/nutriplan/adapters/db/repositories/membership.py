@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import MembershipGrantRow
@@ -31,6 +32,7 @@ class SqlMembershipRepository:
             source=GrantSource(row.source),
             granted_by=row.granted_by,
             external_ref=row.external_ref,
+            original_transaction_id=row.original_transaction_id,
             note=row.note,
         )
 
@@ -46,6 +48,7 @@ class SqlMembershipRepository:
                 source=grant.source.value,
                 granted_by=grant.granted_by,
                 external_ref=grant.external_ref,
+                original_transaction_id=grant.original_transaction_id,
                 note=grant.note,
             )
         )
@@ -86,3 +89,37 @@ class SqlMembershipRepository:
         )
         row = (await self._s.execute(stmt)).scalar_one_or_none()
         return self._to_domain(row) if row else None
+
+    async def find_user_by_original_transaction(self, original_transaction_id: str) -> UUID | None:
+        """Dueño de esa suscripción de Apple; el más reciente si hay varios."""
+        ref = original_transaction_id.strip()[:120]
+        if not ref:
+            return None
+        stmt = (
+            select(MembershipGrantRow.user_id)
+            .where(MembershipGrantRow.original_transaction_id == ref)
+            .order_by(MembershipGrantRow.granted_at.desc())
+            .limit(1)
+        )
+        return (await self._s.execute(stmt)).scalar_one_or_none()
+
+    async def expire_by_original_transaction(
+        self, original_transaction_id: str, *, now: datetime
+    ) -> int:
+        """Caduca las concesiones vivas de un reembolso o revocación de Apple."""
+        ref = original_transaction_id.strip()[:120]
+        if not ref:
+            return 0
+        stmt = (
+            update(MembershipGrantRow)
+            .where(
+                MembershipGrantRow.original_transaction_id == ref,
+                or_(
+                    MembershipGrantRow.expires_at.is_(None),
+                    MembershipGrantRow.expires_at > now,
+                ),
+            )
+            .values(expires_at=now)
+        )
+        result = await self._s.execute(stmt)
+        return int(getattr(result, "rowcount", 0) or 0)

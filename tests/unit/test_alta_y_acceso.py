@@ -225,3 +225,52 @@ async def test_apple_no_pisa_una_cuenta_que_nacio_en_google() -> None:
             auth_repo=repo,
             branding=_BrandingEnMemoria(),
         )
+
+
+@pytest.mark.asyncio
+async def test_apple_sin_correo_entra_si_el_sub_ya_existe() -> None:
+    from uuid import uuid4
+
+    from nutriplan.application.auth import sign_in_with_provider
+    from nutriplan.domain.models import Account
+
+    cuenta = Account(
+        id=uuid4(),
+        tenant_id=uuid4(),
+        name="Ana",
+        email="ana@correo.com",
+        role=Role.USER,
+        provider=AuthProvider.APPLE,
+    )
+    repo = AsyncMock()
+    repo.get_by_provider.return_value = cuenta
+    vuelta = await sign_in_with_provider(
+        provider=AuthProvider.APPLE,
+        subject="sub-apple",
+        email="",
+        name="",
+        email_verified=False,
+        auth_repo=repo,
+        branding=_BrandingEnMemoria(),
+    )
+    assert vuelta.id == cuenta.id
+    repo.create_account.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_apple_sin_correo_no_crea_una_cuenta_nueva() -> None:
+    from nutriplan.application.auth import sign_in_with_provider
+
+    repo = AsyncMock()
+    repo.get_by_provider.return_value = None
+    with pytest.raises(SignupError, match="no envió un correo"):
+        await sign_in_with_provider(
+            provider=AuthProvider.APPLE,
+            subject="sub-nuevo",
+            email="",
+            name="",
+            email_verified=False,
+            auth_repo=repo,
+            branding=_BrandingEnMemoria(),
+        )
+    repo.create_account.assert_not_called()

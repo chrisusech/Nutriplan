@@ -1,14 +1,10 @@
 """Afinidad por comida: qué alimento va bien en cada slot (calidad culinaria)."""
 
-from pathlib import Path
-
 import pytest
 from tests.fixtures.plan_builder import catalog_by_name
 
 from nutriplan.domain import meal_affinity
 from nutriplan.domain.models import DEFAULT_SLOT_WEIGHT, MealSlot
-
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
 
 
 @pytest.fixture(scope="module")

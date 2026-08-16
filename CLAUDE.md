@@ -25,7 +25,10 @@ uv run ruff check .             # lint
 uv run ruff format .            # format
 uv run mypy                     # strict type check (packages = ["nutriplan"])
 
-uv run nutriplan-food import-usda <dir>   # food catalog CLI (see data/foods/README.md)
+uv run nutriplan-food import-usda <dir>   # rebuild the catalog from USDA bulk CSV.
+uv run nutriplan-food filter              #   No step calls anything: Spanish names
+uv run nutriplan-food name                #   come from a lexicon (adapters/food/
+uv run nutriplan-food validate            #   traductor.py). See data/foods/README.md
 uv run alembic revision --autogenerate -m "msg"   # new migration
 uv run python scripts/fetch_fonts.py      # re-subset the self-hosted fonts
 ```
@@ -81,8 +84,19 @@ only in the composition root.
   client's actual meal slots (`.for_slots(...)`) — the one place that happens, so the
   whole plan comes out with the client's meals without any other component knowing.
 - **The meal engine is data too:** `data/meals/food_classes.yaml` and
-  `data/meals/meal_templates.yaml`; the food catalog is `data/foods/curated_foods.csv`
-  (anchored to USDA `fdc_id`). A malformed YAML fails fast at startup in the container.
+  `data/meals/meal_templates.yaml`. A malformed YAML fails fast at startup in the
+  container, and `validate_catalog` runs at boot so a selector pointing at a food name
+  that no longer exists fails loudly instead of silently dropping the template.
+- **The food catalog lives in the DB, not in a file.** The `foods` table is the source
+  of truth; it is edited at `/admin/alimentos` and startup never touches it. The JSONL
+  files under `data/foods/` are build artifacts produced by `nutriplan-food` and loaded
+  once by a data migration — never hand-edited, never read at runtime. Two flags split
+  it: `engine_default` marks the few hundred foods that are *listed* (profile chips,
+  "mis alimentos", the LLM shortlist), while the rest stay *alive but unlisted* and are
+  reached only by `search_deep` when someone names them. Never build a `Literal` schema
+  from the full catalog — see `application/swap_pool.py` for the retrieve-then-constrain
+  pattern. Foods carry `state` (crudo/cocido) and `yield_factor`, derived from USDA water
+  content, so the shopping list can talk in raw grams (see `domain/cocina.py`).
 - **Offline mode:** with no `ANTHROPIC_API_KEY`, `container.llm_client` is `None` and
   generation uses the deterministic `HeuristicSelector`. Only Word intake (which needs
   the LLM to understand a free document) is disabled; manual client creation still works.

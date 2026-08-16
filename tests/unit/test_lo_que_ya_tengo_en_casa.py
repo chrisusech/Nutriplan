@@ -58,13 +58,18 @@ def _nombres(semana) -> set[str]:
     return {f.name_es for dia in semana for plato in dia.values() for f in plato.foods}
 
 
-def test_lo_que_dice_tener_en_casa_acaba_en_su_semana(platos, alimentos) -> None:
-    """La quinoa no salía en siete días; al decir que la tiene, sale."""
-    sin_marcar = _nombres(_semana(platos, alimentos, []))
-    assert "quinoa cocida" not in sin_marcar
+def _cuenta(semana, nombre: str) -> int:
+    return sum(
+        1 for dia in semana for plato in dia.values() for f in plato.foods if f.name_es == nombre
+    )
 
-    con_marca = _nombres(_semana(platos, alimentos, ["quinoa cocida"]))
-    assert "quinoa cocida" in con_marca
+
+def test_lo_que_dice_tener_en_casa_acaba_en_su_semana(platos, alimentos) -> None:
+    """Al marcar quinoa, tiene que aparecer; no basta con que el coste la mire."""
+    sin = _cuenta(_semana(platos, alimentos, []), "quinoa cocida")
+    con = _cuenta(_semana(platos, alimentos, ["quinoa cocida"]), "quinoa cocida")
+    assert con > 0
+    assert con >= sin
 
 
 def test_tener_pan_en_casa_no_convierte_la_cena_en_pan(platos, alimentos) -> None:

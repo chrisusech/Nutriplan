@@ -30,6 +30,10 @@ class TenantIsolationError(NutriPlanError):
     """Acceso cruzado entre tenants — nunca debería pasar (HTTP 403)."""
 
 
+class FoodNotFoundError(NutriPlanError):
+    """Se pidió corregir un alimento que no está en la base (HTTP 404)."""
+
+
 class MembershipError(NutriPlanError):
     """La cuenta no tiene semanas para generar (HTTP 403).
 

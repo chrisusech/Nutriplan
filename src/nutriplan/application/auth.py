@@ -164,6 +164,11 @@ async def sign_in_with_provider(
         await auth_repo.touch_login(existing.id)
         return existing
 
+    # Apple a menudo omite el correo en re-logins. Sin cuenta previa no hay
+    # forma de crear una fila usable: no inventamos un buzón.
+    if not email.strip():
+        raise SignupError("Apple no envió un correo. Entre de nuevo o use otro método de acceso.")
+
     email = _validate_email(email)
     clash = await auth_repo.get_by_email_any_provider(email)
     if clash is not None:

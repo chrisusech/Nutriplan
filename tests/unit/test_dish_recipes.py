@@ -21,6 +21,7 @@ class _RepoEnMemoria:
     def __init__(self) -> None:
         self.almacen: dict[str, DishRecipe] = {}
         self.escrituras = 0
+        self.retiradas: list[str] = []
 
     async def get_many(self, keys: list[str]) -> dict[str, DishRecipe]:
         return {k: v for k, v in self.almacen.items() if k in keys}
@@ -28,6 +29,10 @@ class _RepoEnMemoria:
     async def add(self, recipe: DishRecipe, *, model: str, prompt_version: str) -> None:
         self.almacen[recipe.dish_key] = recipe
         self.escrituras += 1
+
+    async def retire(self, dish_key: str) -> None:
+        self.almacen.pop(dish_key, None)
+        self.retiradas.append(dish_key)
 
 
 class _LLMQueCuenta:
@@ -292,6 +297,26 @@ async def test_una_comida_libre_no_lleva_receta() -> None:
         model="m",
     )
     assert out == {}
+
+
+async def test_una_sopa_de_atun_en_lata_no_se_sirve_aunque_este_en_cache() -> None:
+    meals, foods = _semana_con_platos()
+    meal = meals[0]
+    repo, llm = _RepoEnMemoria(), _LLMQueCuenta()
+    repo.almacen[meal.dish_key] = DishRecipe(
+        dish_key=meal.dish_key,
+        template_id=meal.template_id,
+        name_es="Sopa de atún en agua con yuca",
+        ingredients=["1 lata"],
+        steps=["Hierve el atún."],
+        source="yaml",
+    )
+    out = await recipes_for_week(
+        meals=[meal], catalog=foods, repo=repo, llm=llm, prompts_dir=PROMPTS, model="m"
+    )
+    assert meal.dish_key in repo.retiradas
+    assert out[meal.dish_key].name_es != "Sopa de atún en agua con yuca"
+    assert llm.llamadas == 1
 
 
 # --- Los ingredientes los pone el plan, no la IA ----------------------------

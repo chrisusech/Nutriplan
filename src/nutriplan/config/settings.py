@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     # Identificadores de cliente OAuth. Sin ellos el login social queda apagado
     # (no falla el arranque: la app funciona con correo y contraseña).
     google_client_id: str = ""
-    apple_client_id: str = ""
+    apple_client_id: str = "app.nutriplan"
 
-    # SMTP. Vacío = adaptador de consola: el correo se ve en el log.
+    # SMTP. Vacío = adaptador de consola: en local el enlace sale por stderr.
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

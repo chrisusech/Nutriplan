@@ -106,7 +106,7 @@ def test_el_enlace_del_correo_confirma_la_direccion(app, mailer) -> None:
     link = re.search(r"/verificar/(\S+)", mailer.sent[0]["body"]).group(1)
     resp = app.get(f"/verificar/{link}", follow_redirects=False)
     assert resp.status_code == 303
-    assert "verificado=1" in resp.headers["location"]
+    assert resp.headers["location"] == "/entrar?verificado=1"
 
 
 def test_un_enlace_de_verificacion_inventado_no_confirma_nada(app) -> None:

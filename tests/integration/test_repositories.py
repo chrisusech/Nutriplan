@@ -1,14 +1,14 @@
 """Integración de repositorios: CRUD, seed idempotente y aislamiento de tenant."""
 
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from tests.fixtures.foods import seed_foods
 
 from nutriplan.adapters.db.migrate import upgrade_to_head_async
-from nutriplan.adapters.db.models import UserRow
+from nutriplan.adapters.db.models import FoodRow, UserRow
 from nutriplan.adapters.db.repositories import (
     SqlClientRepository,
     SqlFoodRepository,
@@ -16,7 +16,7 @@ from nutriplan.adapters.db.repositories import (
     SqlPlanRepository,
     SqlTargetsRepository,
 )
-from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID, seed_local
+from nutriplan.adapters.db.seed import DEFAULT_TENANT_ID
 from nutriplan.domain.errors import TenantIsolationError
 from nutriplan.domain.models import (
     ActivityLevel,
@@ -36,7 +36,6 @@ from nutriplan.domain.models import (
 )
 from nutriplan.ports.job_repository import Job, JobStatus
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
 OTHER_TENANT = uuid4()
 
 
@@ -90,15 +89,92 @@ def make_client(tenant_id=DEFAULT_TENANT_ID, **overrides) -> Client:
 
 
 async def test_seed_is_idempotent(session) -> None:
-    await seed_local(session, CSV_PATH)
-    await seed_local(session, CSV_PATH)  # segunda corrida no duplica
+    await seed_foods(session)
+    await seed_foods(session)  # segunda corrida no duplica
     foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
     assert len(foods) >= 60
     assert all(f.tenant_id is None for f in foods)
 
 
+async def test_retirar_un_alimento_lo_saca_del_picker_sin_romper_los_platos_viejos(
+    session,
+) -> None:
+    """Retirar es un UPDATE desde la consola, no un efecto de reiniciar.
+
+    Antes esto lo hacía el arranque: lo que no estuviera en el CSV se apagaba
+    solo. Ahora la base manda, así que retirar tiene que ser un acto explícito —
+    y la fila se queda, porque un plato generado hace tres semanas sigue
+    necesitando el nombre del alimento que sirvió.
+    """
+    from nutriplan.domain.food_matching import normalize
+
+    await seed_foods(session)
+    ghost_id = uuid4()
+    session.add(
+        FoodRow(
+            id=ghost_id,
+            tenant_id=None,
+            source="USDA",
+            name_es="tahini fantasma",
+            name_norm=normalize("tahini fantasma"),
+            category="protein",
+            kcal_100g=1,
+            protein_100g=1,
+            carb_100g=0,
+            fat_100g=0,
+            fiber_100g=0,
+        )
+    )
+    await session.flush()
+    repo = SqlFoodRepository(session, DEFAULT_TENANT_ID)
+
+    # Mientras nadie lo retire, se ve: reiniciar ya no lo esconde por su cuenta.
+    await seed_foods(session)
+    assert "tahini fantasma" in {f.name_es for f in await repo.list_universe()}
+
+    await repo.retire(ghost_id)
+    assert "tahini fantasma" not in {f.name_es for f in await repo.list_universe()}
+    kept = await repo.get_by_ids([ghost_id])
+    assert kept and kept[0].name_es == "tahini fantasma"
+
+
+async def test_el_catalogo_profundo_no_se_lista_pero_si_se_encuentra(session) -> None:
+    """Los miles de alimentos de USDA no se navegan: se buscan por nombre.
+
+    Es lo que permite tener un catálogo enorme sin que la pantalla de «qué te
+    gusta» se vuelva imposible de usar.
+    """
+    from nutriplan.domain.food_matching import normalize
+
+    await seed_foods(session)
+    hondo_id = uuid4()
+    session.add(
+        FoodRow(
+            id=hondo_id,
+            tenant_id=None,
+            source="USDA",
+            name_es="hígado de cordero",
+            name_norm=normalize("hígado de cordero"),
+            category="protein",
+            kcal_100g=139,
+            protein_100g=20.4,
+            carb_100g=1.8,
+            fat_100g=5.0,
+            fiber_100g=0,
+            engine_default=False,
+        )
+    )
+    await session.flush()
+    repo = SqlFoodRepository(session, DEFAULT_TENANT_ID)
+
+    assert "hígado de cordero" not in {f.name_es for f in await repo.list_universe()}
+    assert await repo.search("hígado de cordero") == []
+    encontrados = await repo.search_deep("hígado de cordero")
+    assert [f.name_es for f in encontrados] == ["hígado de cordero"]
+
+
 async def test_client_roundtrip_with_preferences(session) -> None:
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
     liked = [f.id for f in foods[:5]]
     client = make_client(liked_food_ids=liked)
@@ -124,7 +200,7 @@ async def test_el_sexo_y_la_altura_no_cambian_pero_el_peso_si(session) -> None:
     El nombre ya no se guarda aquí — vive en la cuenta —, así que editar el
     perfil no puede tocarlo ni por accidente.
     """
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     repo = SqlClientRepository(session, DEFAULT_TENANT_ID)
     client = make_client(sex=Sex.FEMALE, height_cm=165.0, weight_kg=62.0)
     await seed_account(session, client, name="Ana Original")
@@ -149,7 +225,7 @@ async def test_lo_que_tenia_en_casa_la_semana_pasada_no_cuenta_en_la_nueva(sessi
     """La despensa caduca sola. Nadie va a entrar a desmarcar el arroz del lunes
     pasado, así que la nevera se pregunta por semana y la semana nueva nace
     vacía."""
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
     client = make_client()
     await seed_account(session, client)
@@ -191,7 +267,7 @@ async def test_tenant_isolation_clients(session) -> None:
 
 
 async def test_food_custom_is_tenant_scoped(session) -> None:
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     repo_a = SqlFoodRepository(session, DEFAULT_TENANT_ID)
     repo_b = SqlFoodRepository(session, OTHER_TENANT)
 
@@ -219,7 +295,7 @@ async def test_food_custom_is_tenant_scoped(session) -> None:
 
 
 async def test_targets_and_plan_roundtrip(session) -> None:
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     client = make_client()
     await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
 
@@ -296,7 +372,7 @@ async def test_targets_and_plan_roundtrip(session) -> None:
 
 async def test_meal_items_persist_with_stable_ids(session) -> None:
     """Las porciones viven en meal_items, no solo en el JSON legacy."""
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     client = make_client()
     await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
 
@@ -355,7 +431,7 @@ async def test_meal_items_persist_with_stable_ids(session) -> None:
 
 async def test_update_day_preserves_matching_item_ids(session) -> None:
     """Cambiar gramos de un ítem no rota su id si el alimento es el mismo."""
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     client = make_client()
     await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
 
@@ -425,7 +501,7 @@ async def test_update_day_preserves_matching_item_ids(session) -> None:
 
 async def test_edited_plan_not_reused_by_input_hash(session) -> None:
     """Un plan tocado a mano no debe devolverse al regenerar con el mismo hash."""
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     client = make_client()
     await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
 
@@ -501,7 +577,7 @@ async def test_job_repository_idempotency_key(session) -> None:
 
 
 async def test_un_menu_va_y_vuelve_de_la_base_con_sus_siete_dias(session) -> None:
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
     macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
     meal = MealEntry(
@@ -536,7 +612,7 @@ async def test_only_one_plan_is_the_active_one_and_the_others_stay(session) -> N
     Archivar es repuntar. Los planes anteriores NO se borran ni se marcan: siguen
     ahí, con su versión y sus macros, y se puede volver a cualquiera.
     """
-    await seed_local(session, CSV_PATH)
+    await seed_foods(session)
     clients = SqlClientRepository(session, DEFAULT_TENANT_ID)
     client = make_client()
     await seed_account(session, client)
@@ -701,6 +777,43 @@ async def test_la_semana_de_regalo_solo_se_regala_una_vez(session) -> None:
     concesiones = await repo.list_for_user(user_id)
     assert [g.weeks for g in concesiones] == [1]
     assert concesiones[0].source is GrantSource.SIGNUP_FREE
+
+
+async def test_un_reembolso_caduca_las_filas_de_esa_compra(session) -> None:
+    from nutriplan.adapters.db.repositories import SqlMembershipRepository
+    from nutriplan.domain.membership import GrantSource, MembershipGrant
+
+    repo = SqlMembershipRepository(session)
+    user_id = uuid4()
+    session.add(
+        UserRow(
+            id=user_id,
+            tenant_id=DEFAULT_TENANT_ID,
+            name="Ana",
+            email=f"{user_id}@iap.local",
+            created_at=datetime.now(UTC),
+        )
+    )
+    await session.flush()
+    now = datetime.now(UTC)
+    await repo.add(
+        MembershipGrant(
+            id=uuid4(),
+            tenant_id=DEFAULT_TENANT_ID,
+            user_id=user_id,
+            weeks=4,
+            granted_at=now,
+            expires_at=now + timedelta(days=30),
+            source=GrantSource.PAYMENT,
+            external_ref="txn-1",
+            original_transaction_id="orig-1",
+        )
+    )
+    assert await repo.find_user_by_original_transaction("orig-1") == user_id
+    n = await repo.expire_by_original_transaction("orig-1", now=now)
+    assert n == 1
+    vivas = [g for g in await repo.list_for_user(user_id) if g.is_live(now)]
+    assert vivas == []
 
 
 async def test_lo_que_pidio_hace_semanas_sigue_contando(session) -> None:

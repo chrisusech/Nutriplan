@@ -12,7 +12,10 @@
 # cambie y los planes ya generados se regeneren en vez de servirse de caché.
 # 2026.08.13: nace `guarnicion_grasa` para que el plato del aguacate no dependa de
 # un solo alimento.
-version: "2026.08.13"
+# 2026.08.16: `carne_caldo` / `carbo_caldo` dejan fuera lata y plátano: la
+# plantilla «Sopa de {protein}» con atún en agua o plátano maduro salía
+# «Sopa de atún en agua» / «Sopa de plátano». Nadie pediría eso.
+version: "2026.08.16"
 
 classes:
   # --- Proteínas -------------------------------------------------------------
@@ -32,6 +35,26 @@ classes:
     min_per_100g: {protein_100g: 18.0}
     max_ratio:
       fat_100g: {of: protein_100g, value: 0.5}
+
+  # Lo que sí se cuece en una olla. El atún en lata y las sardinas siguen
+  # siendo carne magra para un almuerzo, pero no para un caldo.
+  carne_caldo:
+    label: carne o pescado para caldo
+    categories: [protein]
+    none_tags: [huevo, batido, conserva]
+    slots_any: [almuerzo, cena]
+    min_per_100g: {protein_100g: 18.0}
+    max_ratio:
+      fat_100g: {of: protein_100g, value: 0.5}
+
+  carbo_caldo:
+    label: carbohidrato para sopa
+    categories: [carb]
+    none_tags: [platano]
+    slots_any: [almuerzo, cena]
+    min_per_100g: {carb_100g: 20.0}
+    max_ratio:
+      protein_100g: {of: carb_100g, value: 0.3}
 
   # Lácteo con proteína de verdad y poca grasa. Deja fuera al yogur natural
   # (3.5 g de proteína) y al cheddar (34 g de grasa): el primero no sostiene un

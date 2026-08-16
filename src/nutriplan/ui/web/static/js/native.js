@@ -7,15 +7,12 @@ const cap = window.Capacitor;
 export const isNative = cap?.isNativePlatform?.() ?? false;
 
 const plugins = cap?.Plugins ?? {};
-const { Preferences: prefs, Haptics: haptics, Share: sharePlugin,
+const { Preferences: prefs,
         SocialLogin: social, SplashScreen: splash,
-        LocalNotifications: locals } = plugins;
+        LocalNotifications: locals, Keyboard: keyboard } = plugins;
 
-/** Un golpecito al confirmar algo. Sin plugin, no pasa nada. */
-export const haptic = (style = 'LIGHT') => {
-  if (!isNative || !haptics) return;
-  haptics.impact({ style }).catch(() => {});
-};
+/** Apagado: un golpe en cada toque se sentía como un fallo, no como una app. */
+export const haptic = (_style = 'LIGHT') => {};
 
 const initSocialLogin = () => {
   const boot = document.querySelector('script[data-google-client-id]');
@@ -75,31 +72,6 @@ const initOfflineCache = () => {
   });
 };
 
-const initShare = () => {
-  for (const shareBtn of document.querySelectorAll('[data-share-day]')) {
-    shareBtn.hidden = false;
-  }
-  document.addEventListener('click', async (event) => {
-    const btn = event.target.closest('[data-share-day]');
-    if (!btn || !sharePlugin) return;
-    event.preventDefault();
-    const title = document.querySelector('.day-macros')?.textContent
-      || document.querySelector('.day-title')?.textContent
-      || 'Mi menú NutriPlan';
-    try {
-      await sharePlugin.share({
-        title: 'NutriPlan',
-        text: `Mi día: ${title.trim()}`,
-        dialogTitle: 'Compartir menú',
-      });
-    } catch { /* cancelado */ }
-  });
-};
-
-/** launchAutoHide=false: si nadie lo oculta, la app se queda congelada en el
-    logo. Se espera al primer pintado y no al HTML parseado, porque entre una
-    cosa y otra hay un segundo de negro; el plazo es el seguro por si una imagen
-    nunca llega. */
 const hideSplash = () => {
   let hidden = false;
   const hide = () => {
@@ -113,41 +85,110 @@ const hideSplash = () => {
   setTimeout(hide, 4000);
 };
 
+/** Zoom a doble toque y teclado: que se sienta app, no Safari. */
+const initViewport = () => {
+  document.addEventListener('gesturestart', (event) => event.preventDefault());
+  document.addEventListener('dblclick', (event) => {
+    if (event.target.closest('input, textarea, select')) return;
+    event.preventDefault();
+  }, { capture: true });
+
+  const applyKb = () => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    document.documentElement.style.setProperty('--kb', `${kb}px`);
+  };
+  window.visualViewport?.addEventListener('resize', applyKb);
+  window.visualViewport?.addEventListener('scroll', applyKb);
+  applyKb();
+
+  if (!isNative || !keyboard) return;
+  keyboard.setResizeMode?.({ mode: 'native' }).catch(() => {});
+  keyboard.setAccessoryBarVisible?.({ isVisible: false }).catch(() => {});
+};
+
 export const initIap = () => {
+  const iap = plugins.NativePurchases;
+  const jwsOf = (result) => {
+    const txn = result?.transaction ?? result;
+    return (txn?.jwsRepresentation || '').trim();
+  };
+  const postJws = (form, jws) => {
+    const field = form?.querySelector('[data-iap-jws]');
+    if (!form || !field || !jws) return;
+    field.value = jws;
+    form.submit();
+  };
+
+  const paintPrices = async () => {
+    if (!isNative || !iap?.getProducts) return;
+    const ids = [...document.querySelectorAll('[data-iap]')]
+      .map((btn) => btn.dataset.iap)
+      .filter(Boolean);
+    if (!ids.length) return;
+    try {
+      const { products } = await iap.getProducts({
+        productIdentifiers: ids,
+        productType: 'subs',
+      });
+      (products || []).forEach((product) => {
+        const el = document.querySelector(`[data-iap-price="${product.identifier}"]`);
+        if (el && product.priceString) el.textContent = product.priceString;
+      });
+    } catch {
+      // Sin StoreKit el copy de la ficha se queda.
+    }
+  };
+  paintPrices();
+
   document.querySelectorAll('[data-iap]').forEach((btn) => {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
     btn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      if (!isNative || !iap?.purchaseProduct) return;
       const form = btn.closest('form');
-      const txn = form?.querySelector('[data-iap-txn]');
-      if (!form || !txn) return;
       const productId = btn.dataset.iap;
-      const iap = plugins.InAppPurchases || plugins.Purchases;
-      if (isNative && iap?.purchaseProduct) {
-        event.preventDefault();
-        try {
-          const result = await iap.purchaseProduct({ productIdentifier: productId, productId });
-          txn.value = result.transactionId
-            || result.transactionIdentifier
-            || result.transaction?.transactionId
-            || '';
-          if (!txn.value) return;
-          form.submit();
-        } catch {
-          // Cancelar la hoja de Apple no es un error que mostrar.
-        }
-        return;
+      try {
+        const result = await iap.purchaseProduct({
+          productIdentifier: productId,
+          productType: 'subs',
+        });
+        postJws(form, jwsOf(result));
+      } catch {
+        // Cancelar la hoja de Apple no es un error que mostrar.
       }
-      if (!txn.value) txn.value = `local-${Date.now()}`;
     });
+  });
+
+  const restoreBtn = document.querySelector('[data-iap-restore]');
+  if (restoreBtn?.dataset.bound === '1') return;
+  if (restoreBtn) restoreBtn.dataset.bound = '1';
+  restoreBtn?.addEventListener('click', async () => {
+    if (!isNative || !iap?.restorePurchases) return;
+    const form = restoreBtn.closest('form');
+    try {
+      await iap.restorePurchases();
+      const listed = iap.getPurchases
+        ? await iap.getPurchases({ onlyCurrentEntitlements: true })
+        : {};
+      const purchases = listed.purchases || listed.transactions || [];
+      const jws = purchases.map(jwsOf).find(Boolean) || '';
+      postJws(form, jws);
+    } catch {
+      // Sin compras que restaurar no hay nada que mostrar.
+    }
   });
 };
 
 export const initNative = () => {
+  initViewport();
   if (!isNative) return;
   document.documentElement.dataset.native = 'true';
   hideSplash();
   initSocialLogin();
   initOfflineCache();
-  initShare();
   if (document.body?.dataset?.loggedIn === '1') initReminders(locals);
   // Háptico al completar generación (HX-Redirect = menú listo).
   document.addEventListener('htmx:afterRequest', (event) => {

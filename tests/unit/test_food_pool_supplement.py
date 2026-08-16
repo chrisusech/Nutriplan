@@ -19,22 +19,25 @@ def _food(
     category: FoodCategory,
     carb: float,
     protein: float = 5,
+    fat: float = 1,
     slots: list[MealSlot],
     granularity: UnitGranularity = UnitGranularity.GRAMS,
     max_g: float | None = None,
+    tags: list[str] | None = None,
 ) -> FoodItem:
     return FoodItem(
         id=uuid4(),
         name_es=name,
         category=category,
-        kcal_100g=carb * 4 + protein * 4,
+        kcal_100g=carb * 4 + protein * 4 + fat * 9,
         protein_100g=protein,
         carb_100g=carb,
-        fat_100g=1,
+        fat_100g=fat,
         source="test",
         unit_granularity=granularity,
         portion_max_g=max_g,
         meal_slots=slots,
+        tags=tags or [],
     )
 
 
@@ -173,3 +176,128 @@ def test_no_suplementa_miel_como_parche_de_carbo(
     names = {f.name_es for f in out}
     assert "avena en hojuelas" in names
     assert "miel" not in names
+
+
+def test_si_solo_hay_proteina_se_anaden_dos_grasas_y_dos_carbos(
+    nutrition_config: NutritionConfig,
+) -> None:
+    """María: 22 carnes y nada más. Sin aceite el solver se queda corto de grasa."""
+    cfg = nutrition_config.for_slots(
+        [MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.SNACK_PM, MealSlot.DINNER]
+    )
+    pollo = _food(
+        "pechuga de pollo",
+        category=FoodCategory.PROTEIN,
+        carb=0,
+        protein=31,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    aceite = _food(
+        "aceite de oliva",
+        category=FoodCategory.FAT,
+        carb=0,
+        protein=0,
+        fat=100,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    aguacate = _food(
+        "aguacate",
+        category=FoodCategory.FAT,
+        carb=9,
+        protein=2,
+        fat=15,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    avena = _food(
+        "avena en hojuelas",
+        category=FoodCategory.CARB,
+        carb=60,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH],
+    )
+    arroz = _food(
+        "arroz blanco cocido",
+        category=FoodCategory.CARB,
+        carb=28,
+        slots=[MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    yogur = _food(
+        "yogur griego",
+        category=FoodCategory.DAIRY,
+        carb=4,
+        protein=10,
+        slots=[MealSlot.SNACK_PM, MealSlot.BREAKFAST],
+    )
+    banano = _food(
+        "banano",
+        category=FoodCategory.FRUIT,
+        carb=23,
+        protein=1,
+        slots=[MealSlot.SNACK_PM, MealSlot.BREAKFAST],
+    )
+    daily = MacroTargets(kcal=1450, protein_g=110, carb_g=145, fat_g=48)
+    out = supplement_pool_for_targets(
+        [pollo],
+        [pollo, aceite, aguacate, avena, arroz, yogur, banano],
+        daily=daily,
+        config=cfg,
+    )
+    names = {f.name_es for f in out}
+    grasas = [f for f in out if f.category is FoodCategory.FAT]
+    carbos = [f for f in out if f.category is FoodCategory.CARB]
+    assert len(grasas) >= 2
+    assert len(carbos) >= 2
+    assert "banano" in names
+    assert "yogur griego" not in names
+
+
+def test_catalina_sin_gluten_no_recibe_pasta_ni_crackers(
+    nutrition_config: NutritionConfig,
+) -> None:
+    cfg = nutrition_config.for_slots(
+        [MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.SNACK_PM, MealSlot.DINNER]
+    )
+    pollo = _food(
+        "pechuga de pollo",
+        category=FoodCategory.PROTEIN,
+        carb=0,
+        protein=31,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    pasta = _food(
+        "pasta cocida",
+        category=FoodCategory.CARB,
+        carb=31,
+        slots=[MealSlot.LUNCH, MealSlot.DINNER],
+        tags=["gluten"],
+    )
+    avena = _food(
+        "avena en hojuelas",
+        category=FoodCategory.CARB,
+        carb=60,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH],
+    )
+    yuca = _food(
+        "yuca cocida",
+        category=FoodCategory.CARB,
+        carb=38,
+        slots=[MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    aceite = _food(
+        "aceite de oliva",
+        category=FoodCategory.FAT,
+        carb=0,
+        protein=0,
+        fat=100,
+        slots=[MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER],
+    )
+    daily = MacroTargets(kcal=1450, protein_g=110, carb_g=145, fat_g=48)
+    out = supplement_pool_for_targets(
+        [pollo],
+        [pollo, pasta, avena, yuca, aceite],
+        daily=daily,
+        config=cfg,
+        restrictions=["no_gluten"],
+    )
+    names = {f.name_es for f in out}
+    assert "pasta cocida" not in names
+    assert "avena en hojuelas" in names or "yuca cocida" in names

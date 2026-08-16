@@ -7,7 +7,8 @@
 
 export const initMacros = () => {
   const macros = document.querySelector('[data-macros]');
-  if (!macros) return;
+  if (!macros || macros.dataset.bound === '1') return;
+  macros.dataset.bound = '1';
 
   const kcalField = macros.querySelector('[data-kcal]');
   const named = (key) => macros.querySelector(`[data-macro="${key}"]`);

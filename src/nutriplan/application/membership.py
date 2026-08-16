@@ -38,6 +38,12 @@ class MembershipRepository(Protocol):
     async def list_for_user(self, user_id: UUID) -> list[MembershipGrant]: ...
     async def has_source(self, user_id: UUID, source: GrantSource) -> bool: ...
     async def find_by_external_ref(self, external_ref: str) -> MembershipGrant | None: ...
+    async def expire_by_original_transaction(
+        self, original_transaction_id: str, *, now: datetime
+    ) -> int: ...
+    async def find_user_by_original_transaction(
+        self, original_transaction_id: str
+    ) -> UUID | None: ...
 
 
 class WeeksUsedSource(Protocol):
@@ -86,6 +92,7 @@ async def grant_weeks(
     granted_by: UUID | None = None,
     source: GrantSource = GrantSource.MANUAL,
     external_ref: str | None = None,
+    original_transaction_id: str | None = None,
     note: str | None = None,
     now: datetime | None = None,
 ) -> MembershipGrant:
@@ -105,6 +112,7 @@ async def grant_weeks(
         source=source,
         granted_by=granted_by,
         external_ref=external_ref,
+        original_transaction_id=original_transaction_id,
         note=note,
     )
     logger.info(
@@ -122,6 +130,7 @@ async def grant_iap(
     memberships: MembershipRepository,
     product_id: str,
     transaction_id: str,
+    original_transaction_id: str | None = None,
     now: datetime | None = None,
 ) -> MembershipGrant:
     """Apple (o Play) confirma el cobro: insertamos la concesión. Idempotente."""
@@ -135,6 +144,7 @@ async def grant_iap(
     if pair is None:
         raise ValueError(f"Producto desconocido: {product_id}")
     weeks, days = pair
+    original = (original_transaction_id or ref).strip()[:120] or None
     return await grant_weeks(
         account=account,
         memberships=memberships,
@@ -142,6 +152,7 @@ async def grant_iap(
         days_valid=days,
         source=GrantSource.PAYMENT,
         external_ref=ref,
+        original_transaction_id=original,
         note=product_id.strip(),
         now=now,
     )

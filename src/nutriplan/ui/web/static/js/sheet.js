@@ -68,5 +68,9 @@ export const initSheets = () => {
 
   // El servidor puede pedir que una hoja nazca abierta: es lo que pasa cuando
   // el login falla y hay que devolver el formulario con su error a la vista.
+  initAutoSheets();
+};
+
+export const initAutoSheets = () => {
   for (const sheet of document.querySelectorAll('dialog.sheet[data-autoopen]')) abrir(sheet);
 };

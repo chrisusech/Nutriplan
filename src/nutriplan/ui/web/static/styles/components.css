@@ -230,6 +230,9 @@ input, select, textarea {
   background: var(--card);
   color: var(--ink);
   font: 500 var(--t-md) Poppins, sans-serif;
+  /* iOS amplía la página si el campo mide menos de 16px y luego no se puede
+     deshacer: el pellizco está apagado. 1rem = 16px en el viewport. */
+  font-size: 1rem;
 }
 input::placeholder, textarea::placeholder { color: var(--faint); }
 /* Una casilla no es un campo de texto: sin esto hereda el ancho completo y el
@@ -278,3 +281,8 @@ textarea { resize: vertical; min-height: 8rem; line-height: 1.55; }
   font: 700 var(--t-sm) Poppins, sans-serif;
   letter-spacing: 0;
 }
+
+/* Paywall: el cobro solo existe en el iPhone. Safari ve la explicación. */
+.paywall-native { display: none; }
+html[data-native] .paywall-native { display: block; }
+html[data-native] .paywall-web { display: none; }

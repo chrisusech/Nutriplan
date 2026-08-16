@@ -162,6 +162,25 @@ def _pestanas(html: str) -> list[str]:
     return re.findall(r'<a href="([^"]+)"', barra)
 
 
+def test_el_admin_sin_ficha_entra_a_la_consola_no_al_cuestionario(app) -> None:
+    """El login aterriza en la consola; Semana se abre vacía, no rebota."""
+    app.post("/logout", follow_redirects=False)
+    resp = app.post(
+        "/login", data={"email": ADMIN, "password": CLAVE_ADMIN}, follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/admin/metricas"
+    home = app.get("/", follow_redirects=False)
+    assert home.status_code == 200
+    assert "Aún no tienes un menú" in home.text
+    assert 'href="/onboarding"' in home.text
+    assert 'id="shell"' in home.text
+    assert 'hx-boost="true"' in home.text
+    onb = app.get("/onboarding", follow_redirects=False)
+    assert onb.status_code == 200
+    assert "¿Cómo te llamas?" in onb.text
+
+
 def test_la_barra_de_abajo_no_se_llena_de_pestanas(app) -> None:
     """Cinco caben en un móvil; ocho se rompen unas encima de otras."""
     _como_admin(app)

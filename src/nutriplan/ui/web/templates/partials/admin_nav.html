@@ -10,6 +10,10 @@
      {% if active_tab == 'metricas' %}aria-current="page"{% endif %}>
     <span class="icon">insights</span>Métricas
   </a>
+  <a class="chip {{ 'on' if active_tab == 'alimentos' }}" href="/admin/alimentos"
+     {% if active_tab == 'alimentos' %}aria-current="page"{% endif %}>
+    <span class="icon">grocery</span>Alimentos
+  </a>
   <a class="chip {{ 'on' if active_tab == 'recetas' }}" href="/admin/recetas"
      {% if active_tab == 'recetas' %}aria-current="page"{% endif %}>
     <span class="icon">menu_book</span>Recetas

@@ -196,6 +196,8 @@ class TemplateSelector:
 
     def select_week(self, *, seed: int, ndays: int = 7) -> list[dict[MealSlot, Dish]]:
         used_template: Counter[str] = Counter()
+        used_dish: Counter[str] = Counter()
+        used_names: Counter[str] = Counter()
         used_food: Counter[str] = Counter()  # CRUZA SLOTS: aquí muere el yogur 14×
         used_in_slot: Counter[tuple[str, MealSlot]] = Counter()  # como cuenta el validador
         last_day: dict[str, int] = {}
@@ -226,6 +228,8 @@ class TemplateSelector:
                     total -= W_EN_CASA * len(ids & self._en_casa)
                     total += self._taste_cost(dish, ids)
                     key = dish_key(dish.template_id, list(dish.food_ids))
+                    total += W_RECENT_WEEK * used_dish[key] ** 2
+                    total += W_RECENT_WEEK * used_names[dish.name.lower()] ** 2
                     if key in self._recent_keys:
                         total += W_RECENT_WEEK
                     if dish.template_id in self._recent_templates:
@@ -284,6 +288,8 @@ class TemplateSelector:
                 chosen[slot] = best
                 today_fat += self._dish_fat.get(id(best), 0.0)
                 used_template[best.template_id] += 1
+                used_dish[dish_key(best.template_id, list(best.food_ids))] += 1
+                used_names[best.name.lower()] += 1
                 today_anchors.add(str(best.anchor.id))
                 for food in best.foods:
                     fid = str(food.id)

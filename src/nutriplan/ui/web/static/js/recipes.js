@@ -1,17 +1,13 @@
-/* Las recetas del día llegan una a una.
+/* Las recetas del día llegan una a una, al abrir el plato.
 
-   El cliente pide /menu/receta por cada plato (no un batch largo: Gemini y HTMX
-   cortaban la petición única y solo quedaban 1–2 recetas). De a dos, para no
-   tumbar la cuota. */
+   Los ingredientes ya están en la tarjeta: este hueco solo pinta los pasos.
+   No se cubre el plato. Si Gemini no responde, el servidor cae a YAML. */
 
-const CONCURRENCIA = 2;
-
-/* Cuánto se espera una receta antes de darla por perdida. El servidor se corta
-   solo antes de esto; el techo existe porque una petición ABORTADA no dispara
-   ningún evento de htmx: si la persona cambia de día a media carga, el hueco de
-   la receta se reemplaza, la promesa no se resolvía nunca y el bucle de abajo
-   se quedaba parado con las comidas restantes en «En cola…» para siempre. */
 const ESPERA_MAX_MS = 120000;
+
+const pendientes = new WeakMap();
+
+const MACRO_DS = { protein_g: 'proteinG', carb_g: 'carbG', fat_g: 'fatG' };
 
 const cargando = (estado) => {
   if (estado === 'fail') {
@@ -19,20 +15,10 @@ const cargando = (estado) => {
       '<div class="recipe-loading recipe-loading-fail" role="status">'
       + '<span class="icon">error</span>'
       + '<div class="recipe-loading-copy">'
-      + '<span class="recipe-loading-title">No se pudo generar la receta</span>'
-      + '<span class="recipe-loading-sub">Hubo un problema de cuota o red. Puedes reintentar.</span>'
+      + '<span class="recipe-loading-title">No fue posible cargar la receta</span>'
+      + '<span class="recipe-loading-sub">Puede reintentar cuando quiera.</span>'
       + '<button type="button" class="btn btn-ghost recipe-retry" data-recipe-retry>'
       + 'Reintentar</button>'
-      + '</div></div>'
-    );
-  }
-  if (estado === 'queued') {
-    return (
-      '<div class="recipe-loading is-queued" role="status" aria-live="polite">'
-      + '<span class="icon" aria-hidden="true">schedule</span>'
-      + '<div class="recipe-loading-copy">'
-      + '<span class="recipe-loading-title">En cola</span>'
-      + '<span class="recipe-loading-sub">Generaremos tu receta en un momento…</span>'
       + '</div></div>'
     );
   }
@@ -46,6 +32,22 @@ const cargando = (estado) => {
   );
 };
 
+const abortIfLoading = (slot) => {
+  if (!slot || slot.querySelector('.steps') || !window.htmx) return;
+  window.htmx.trigger(slot, 'htmx:abort');
+  const limpia = pendientes.get(slot);
+  if (limpia) limpia();
+  pendientes.delete(slot);
+  delete slot.dataset.loaded;
+  delete slot.dataset.loading;
+};
+
+const alInicio = (meal) => {
+  requestAnimationFrame(() => {
+    meal?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  });
+};
+
 const cargaSlot = (slot, { force = false } = {}) => {
   if (!slot || !window.htmx || !slot.dataset.recipeUrl) return Promise.resolve();
   if (!force && slot.dataset.loaded === '1') return Promise.resolve();
@@ -53,11 +55,16 @@ const cargaSlot = (slot, { force = false } = {}) => {
     slot.dataset.loaded = '1';
     return Promise.resolve();
   }
-  slot.dataset.loaded = '1';
+  if (!force && slot.dataset.loading === '1') return Promise.resolve();
+  abortIfLoading(slot);
+  slot.dataset.loading = '1';
+  delete slot.dataset.loaded;
   slot.innerHTML = cargando('active');
   return new Promise((resolve) => {
     const onSwap = (event) => {
       if (event.detail?.target !== slot) return;
+      slot.dataset.loaded = '1';
+      delete slot.dataset.loading;
       limpia();
       resolve();
     };
@@ -66,25 +73,30 @@ const cargaSlot = (slot, { force = false } = {}) => {
       if (!event.detail?.failed) return;
       falla();
     };
-    // Abortada: ni swap ni afterRequest. Sin esto la promesa quedaba colgada.
     const onAbort = (event) => {
       if (event.detail?.target !== slot && event.detail?.elt !== slot) return;
-      falla();
+      delete slot.dataset.loaded;
+      delete slot.dataset.loading;
+      limpia();
+      resolve();
     };
     const falla = () => {
       limpia();
-      // Si el hueco ya no está en la página, pintar en él no lo ve nadie.
+      delete slot.dataset.loaded;
+      delete slot.dataset.loading;
       if (slot.isConnected) slot.innerHTML = cargando('fail');
       resolve();
     };
     const limpia = () => {
       clearTimeout(reloj);
+      pendientes.delete(slot);
       document.body.removeEventListener('htmx:afterSwap', onSwap);
       document.body.removeEventListener('htmx:afterRequest', onFail);
       document.body.removeEventListener('htmx:abort', onAbort);
       document.body.removeEventListener('htmx:responseError', onAbort);
     };
     const reloj = setTimeout(falla, ESPERA_MAX_MS);
+    pendientes.set(slot, limpia);
     document.body.addEventListener('htmx:afterSwap', onSwap);
     document.body.addEventListener('htmx:afterRequest', onFail);
     document.body.addEventListener('htmx:abort', onAbort);
@@ -97,11 +109,14 @@ const cargaSlot = (slot, { force = false } = {}) => {
   });
 };
 
-const cargaSiAbierta = (meal, opts) => {
-  cargaSlot(meal?.querySelector?.('[data-recipe-url]'), opts);
-};
+const cargaSiAbierta = (meal, opts) => (
+  cargaSlot(meal?.querySelector?.('[data-recipe-url]'), opts)
+);
 
-/** Todas las comidas del día, de a pocas, para no tumbar la cuota ni HTMX. */
+const attrOf = (form, kebab, camel) => (
+  form.dataset[camel] ?? form.getAttribute(`data-${kebab}`)
+);
+
 const pintaHero = (form) => {
   const hero = document.getElementById('day-hero');
   if (!hero || form.dataset.pct == null) return;
@@ -116,9 +131,9 @@ const pintaHero = (form) => {
   if (copy && form.dataset.eatenN != null) {
     copy.textContent = `${form.dataset.eatenN} de ${form.dataset.mealsN} comidas · Quedan ${form.dataset.restante} kcal`;
   }
-  for (const key of ['protein_g', 'carb_g', 'fat_g']) {
+  for (const [key, camel] of Object.entries(MACRO_DS)) {
     const bar = hero.querySelector(`.bar-${key}`);
-    const n = form.dataset[key];
+    const n = attrOf(form, key.replace('_', '-'), camel);
     if (!bar || n == null) continue;
     bar.value = n;
     const bold = bar.closest('.macro')?.querySelector('.macro-val b');
@@ -152,38 +167,25 @@ const celebra = (racha) => {
   overlay.addEventListener('click', () => { overlay.hidden = true; }, { once: true });
 };
 
-const hidrataDia = async () => {
-  const slots = [...document.querySelectorAll('[data-recipe-url]')].filter(
-    (slot) => !slot.querySelector('.steps'),
-  );
-  if (!slots.length) return;
-  slots.forEach((slot) => { slot.innerHTML = cargando('queued'); });
-  let next = 0;
-  const workers = Array.from(
-    { length: Math.min(CONCURRENCIA, slots.length) },
-    async () => {
-      while (next < slots.length) {
-        const i = next;
-        next += 1;
-        // El día pudo cambiar a media hidratación: esos huecos ya no existen.
-        if (!slots[i].isConnected) continue;
-        delete slots[i].dataset.loaded;
-        await cargaSlot(slots[i], { force: true });
-      }
-    },
-  );
-  await Promise.all(workers);
+const abre = (meal) => {
+  cargaSiAbierta(meal).then(() => alInicio(meal));
 };
 
 export const initRecipes = () => {
   document.addEventListener('toggle', (event) => {
     const meal = event.target;
-    if (!meal.matches?.('details.meal') || !meal.open) return;
-    for (const other of document.querySelectorAll('details.meal[open]')) {
-      if (other !== meal) other.open = false;
+    if (!meal.matches?.('details.meal')) return;
+    if (!meal.open) {
+      abortIfLoading(meal.querySelector('[data-recipe-url]'));
+      return;
     }
-    cargaSiAbierta(meal);
-    meal.querySelector('summary')?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    for (const other of document.querySelectorAll('details.meal[open]')) {
+      if (other !== meal) {
+        other.open = false;
+        abortIfLoading(other.querySelector('[data-recipe-url]'));
+      }
+    }
+    abre(meal);
   }, true);
 
   document.body.addEventListener('click', (event) => {
@@ -191,12 +193,13 @@ export const initRecipes = () => {
     if (!retry) return;
     const meal = retry.closest('details.meal');
     const slot = meal?.querySelector('[data-recipe-url]');
-    if (slot) delete slot.dataset.loaded;
-    cargaSiAbierta(meal, { force: true });
+    if (slot) {
+      delete slot.dataset.loaded;
+      delete slot.dataset.loading;
+    }
+    cargaSiAbierta(meal, { force: true }).then(() => alInicio(meal));
   });
 
-  // El nombre culinario lo escribe la IA con la receta: hasta que llega, la
-  // tarjeta muestra el nombre de plantilla.
   document.body.addEventListener('htmx:afterSwap', (event) => {
     const target = event.detail?.target;
     const block = target?.matches?.('[data-culinary-title]')
@@ -208,19 +211,24 @@ export const initRecipes = () => {
     if (name) name.textContent = title;
   });
 
-  if (document.querySelector('[data-hydrate-day-recipes]')) hidrataDia();
   document.body.addEventListener('htmx:afterSettle', (event) => {
     const target = event.detail?.target;
+    if (target?.id === 'shell') {
+      for (const meal of document.querySelectorAll('details.meal[open]')) {
+        abre(meal);
+      }
+      return;
+    }
     const form = target?.matches?.('.meal-check')
       ? target
       : event.detail?.elt?.closest?.('.meal-check');
     if (form) {
       form.closest('details.meal')?.classList.toggle('eaten', !!form.querySelector('.btn.on'));
       pintaHero(form);
-      return;
-    }
-    if (target?.id === 'dia-track' || target?.querySelector?.('[data-hydrate-day-recipes]')) {
-      hidrataDia();
     }
   });
+
+  for (const meal of document.querySelectorAll('details.meal[open]')) {
+    abre(meal);
+  }
 };

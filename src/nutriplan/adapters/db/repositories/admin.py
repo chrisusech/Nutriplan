@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.adapters.db.models import (
     ClientRow,
+    DishRatingRow,
     NutritionTargetsRow,
     PlanCycleRow,
     UserRow,
@@ -23,7 +24,7 @@ from nutriplan.adapters.db.models import (
 )
 from nutriplan.adapters.db.repositories._shared import _aware
 from nutriplan.domain.models import Role
-from nutriplan.domain.week_close import MIN_COMMENT_CHARS
+from nutriplan.domain.week_close import RATINGS_REQUIRED
 
 
 @dataclass(frozen=True)
@@ -183,12 +184,22 @@ class SqlAdminRepository:
     async def closed_without_next_plan(
         self, *, closed_week: date, target_week: date
     ) -> list[AutoWeekCandidate]:
-        """Cerró (peso + frase) y no tiene menú del lunes objetivo."""
+        """Cerró (peso + estrellas) y no tiene menú del lunes objetivo."""
         ya_tiene = exists(
             select(PlanCycleRow.id).where(
                 PlanCycleRow.client_id == ClientRow.id,
                 PlanCycleRow.week_start == target_week,
             )
+        )
+        # El mismo contrato que `WeekClosure.is_closed`: pesaje de esa semana y
+        # al menos RATINGS_REQUIRED notas en el plan que vivió. El comentario
+        # alimenta al motor; no es puerta.
+        con_estrellas = (
+            select(PlanCycleRow.client_id)
+            .join(DishRatingRow, DishRatingRow.plan_cycle_id == PlanCycleRow.id)
+            .where(PlanCycleRow.week_start == closed_week)
+            .group_by(PlanCycleRow.client_id, PlanCycleRow.id)
+            .having(func.count() >= RATINGS_REQUIRED)
         )
         stmt = (
             select(ClientRow.id, ClientRow.tenant_id, ClientRow.user_id)
@@ -202,8 +213,7 @@ class SqlAdminRepository:
                 UserRow.role == Role.USER.value,
                 UserRow.deleted_at.is_(None),
                 UserRow.is_active.is_(True),
-                WeightEntryRow.client_comment.is_not(None),
-                func.length(func.trim(WeightEntryRow.client_comment)) >= MIN_COMMENT_CHARS,
+                ClientRow.id.in_(con_estrellas),
                 ~ya_tiene,
             )
         )

@@ -12,6 +12,7 @@ from nutriplan.ui.web.deps import (
     container_of,
     db_session,
     is_super_user,
+    landing_without_profile,
     render,
     repos_of,
     tenant_of,
@@ -74,7 +75,7 @@ async def give_consent(
     await container_of(request).auth_repo(session).grant_analytics_consent(account_id_of(request))
     # El primer evento que se puede registrar es, precisamente, el permiso.
     await track_event(request, session, Event.CONSENT_GIVEN)
-    return RedirectResponse("/onboarding", status_code=303)
+    return RedirectResponse(landing_without_profile(request), status_code=303)
 
 
 @router.get("/perfil", response_class=HTMLResponse)

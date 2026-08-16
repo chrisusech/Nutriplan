@@ -1,18 +1,18 @@
 """Invariantes del catálogo curado.
 
-El catálogo es la única fuente de verdad de los alimentos y ahora carga bastante
-más peso que antes: además de los macros, decide en qué comidas puede aparecer
-un alimento y a qué múltiplo redondea sus gramos. Un typo en una fila (una coma
-corrida, un slot mal escrito) deja de ser un dato feo y pasa a ser un plan roto
-para una clienta. Estos tests son la barrera.
+La fuente de verdad de los alimentos es la base de datos; lo que se audita aquí
+es el artefacto con el que se siembra, porque un typo que entre por ahí acaba en
+la base y ya nadie lo revisa. El catálogo no solo lleva macros: decide en qué
+comidas puede aparecer un alimento y a qué múltiplo redondea sus gramos, así que
+una coma corrida no es un dato feo, es un plan roto para una clienta.
 """
 
 from math import isclose
-from pathlib import Path
 
 import pytest
+from tests.fixtures.foods import catalog_foods
 
-from nutriplan.adapters.food.curated_loader import load_curated_foods
+from nutriplan.adapters.food.catalog import CatalogEntry, write_jsonl
 from nutriplan.domain.generation_rules import (
     CARB_GROUP,
     FAT_GROUP,
@@ -28,12 +28,10 @@ from nutriplan.domain.models import (
     UnitGranularity,
 )
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods" / "curated_foods.csv"
-
 
 @pytest.fixture(scope="module")
 def catalog() -> list[FoodItem]:
-    return load_curated_foods(CSV_PATH)
+    return catalog_foods()
 
 
 def test_every_food_belongs_to_at_least_one_meal(catalog) -> None:
@@ -144,19 +142,43 @@ def test_the_weight_of_a_slot_is_optional_and_bounded(tmp_path) -> None:
     Es lo que permite que las 172 filas del catálogo sigan valiendo sin tocarlas: el
     peso es opcional y su ausencia significa DEFAULT_SLOT_WEIGHT.
     """
-    header = (
-        "name_es,name_en,category,kcal_100g,protein_100g,carb_100g,fat_100g,fiber_100g,"
-        "tags,aliases,default_unit_g,unit_granularity,unit_name,portion_step_g,"
-        "portion_min_g,portion_max_g,meal_slots,is_free,free_text,source,source_ref\n"
-    )
-    rows = (
-        "con peso,x,carb,100,1,20,0,0,,,,,,,,,almuerzo:3;cena:1,,,USDA,1\n"
-        "sin peso,x,carb,100,1,20,0,0,,,,,,,,,almuerzo;cena,,,USDA,2\n"
-        "peso absurdo,x,carb,100,1,20,0,0,,,,,,,,,almuerzo:99,,,USDA,3\n"
-    )
-    csv_path = tmp_path / "foods.csv"
-    csv_path.write_text(header + rows, encoding="utf-8")
-    foods = {f.name_es: f for f in load_curated_foods(csv_path)}
+    entries = [
+        CatalogEntry(
+            fdc_id=1,
+            name_es="con peso",
+            category=FoodCategory.CARB,
+            kcal_100g=100,
+            protein_100g=1,
+            carb_100g=20,
+            fat_100g=0,
+            meal_slots=[MealSlot.LUNCH, MealSlot.DINNER],
+            slot_weights={MealSlot.LUNCH: 3, MealSlot.DINNER: 1},
+        ),
+        CatalogEntry(
+            fdc_id=2,
+            name_es="sin peso",
+            category=FoodCategory.CARB,
+            kcal_100g=100,
+            protein_100g=1,
+            carb_100g=20,
+            fat_100g=0,
+            meal_slots=[MealSlot.LUNCH, MealSlot.DINNER],
+        ),
+        CatalogEntry(
+            fdc_id=3,
+            name_es="peso absurdo",
+            category=FoodCategory.CARB,
+            kcal_100g=100,
+            protein_100g=1,
+            carb_100g=20,
+            fat_100g=0,
+            meal_slots=[MealSlot.LUNCH],
+            slot_weights={MealSlot.LUNCH: 99},
+        ),
+    ]
+    path = tmp_path / "catalogo.jsonl"
+    write_jsonl(path, entries)
+    foods = {f.name_es: f for f in catalog_foods(path)}
 
     assert foods["con peso"].weight_in(MealSlot.LUNCH) == 3
     assert foods["con peso"].weight_in(MealSlot.DINNER) == 1
@@ -203,6 +225,8 @@ def test_el_catalogo_habla_como_en_la_cocina(catalog) -> None:
     leche = by_name["leche deslactosada"]
     assert leche.category is FoodCategory.DAIRY
     assert "lacteo" in leche.tags
+    assert leche.source == "derived"
+    assert leche.source_ref == "171267"
     arepa = by_name["arepa Sarys extradélgada"]
     assert "arepa" in arepa.aliases
     assert "arepa de maíz" in arepa.aliases
@@ -222,3 +246,10 @@ def test_el_catalogo_habla_como_en_la_cocina(catalog) -> None:
         "huevo de codorniz",
     ):
         assert raro not in by_name, raro
+
+
+def test_cada_ancla_usda_es_de_un_solo_alimento(catalog) -> None:
+    """Dos filas no pueden reclamar el mismo fdc_id: el ancla deja de ser 1:1."""
+    refs = [f.source_ref for f in catalog if f.source == "USDA" and f.source_ref]
+    duplicados = [r for r in refs if refs.count(r) > 1]
+    assert duplicados == [], f"source_ref USDA repetido: {sorted(set(duplicados))}"

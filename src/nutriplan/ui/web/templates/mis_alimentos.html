@@ -75,4 +75,36 @@
   <p class="muted">Ya tienes todo el catálogo disponible.</p>
   {% endfor %}
 </section>
+
+<section class="food-section">
+  <h2 class="eyebrow">Buscar</h2>
+  <p class="muted">¿No está en la lista? Búscalo. Tenemos miles de alimentos
+     más, con sus macros.</p>
+  <form method="get" action="/mis-alimentos" class="food-search">
+    <input type="search" name="q" value="{{ busqueda }}" placeholder="salmón ahumado, quinoa…"
+           aria-label="Buscar un alimento">
+    <button class="btn-icon" type="submit" aria-label="Buscar">
+      <span class="icon">search</span>
+    </button>
+  </form>
+  {% if busqueda %}
+  <ul class="food-lines">
+    {% for item in hallazgos %}
+    <li>
+      <span>{{ item.name_es }}</span>
+      <form method="post" action="/mis-alimentos">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="food_id" value="{{ item.id }}">
+        <input type="hidden" name="accion" value="anadir">
+        <button class="btn-icon" type="submit" aria-label="Añadir {{ item.name_es }}">
+          <span class="icon">add</span>
+        </button>
+      </form>
+    </li>
+    {% else %}
+    <li class="muted">No encontramos «{{ busqueda }}» en el catálogo.</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
 {% endblock %}

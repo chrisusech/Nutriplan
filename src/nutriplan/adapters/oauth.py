@@ -47,7 +47,8 @@ async def verify_google_id_token(id_token: str, *, client_id: str) -> VerifiedId
         raise OAuthError("Falta GOOGLE_CLIENT_ID en la configuración")
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_S) as http:
-            response = await http.get(GOOGLE_TOKENINFO, params={"id_token": id_token})
+            # POST: el JWT no viaja en la query (httpx a INFO la imprimiría).
+            response = await http.post(GOOGLE_TOKENINFO, data={"id_token": id_token})
     except httpx.HTTPError as exc:
         raise OAuthError("No se pudo verificar el token con Google") from exc
     if response.status_code != 200:

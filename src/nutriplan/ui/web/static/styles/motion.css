@@ -4,12 +4,9 @@
    sobra. Y quien pidió menos movimiento en su sistema lo pidió en serio — al
    final de esta hoja se apaga todo. */
 
-/* Cambiar de día o entrar en una pantalla es una navegación completa: con esto
-   el navegador funde una con otra y deja de verse el parpadeo blanco. */
-@view-transition { navigation: auto; }
-
-::view-transition-old(root) { animation: fade-out var(--dur-2) var(--ease-out) both; }
-::view-transition-new(root) { animation: rise var(--dur-3) var(--ease-out) both; }
+/* En WKWebView el snapshot del root es el fondo nativo negro: Comenzar
+   parpadeaba a negro. Las animaciones in-page (hojas, tema, rise) siguen. */
+@view-transition { navigation: none; }
 
 @keyframes fade-out { to { opacity: 0; } }
 @keyframes rise {
@@ -44,12 +41,6 @@
 .stagger > *:nth-child(6) { animation-delay: 0.22s; }
 .stagger > *:nth-child(7) { animation-delay: 0.26s; }
 .stagger > *:nth-child(n + 8) { animation-delay: 0.3s; }
-
-/* Piezas con nombre propio: el navegador las lleva de una pantalla a la otra
-   en vez de fundirlas con el resto. */
-.app-head { view-transition-name: app-head; }
-.nav { view-transition-name: app-nav; }
-.day-hero { view-transition-name: day-hero; }
 
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }

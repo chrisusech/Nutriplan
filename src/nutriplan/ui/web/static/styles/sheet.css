@@ -14,6 +14,8 @@
   background: transparent;
   overflow: visible;
 }
+/* En iOS un <dialog> cerrado a veces sigue comiéndose los toques. */
+.sheet:not([open]) { display: none; pointer-events: none; }
 .sheet::backdrop {
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(0.125rem);
@@ -72,8 +74,8 @@
 /* La banda del centro dice cuál es el valor elegido sin escribirlo dos veces. */
 .wheel-band {
   position: absolute;
-  inset: calc(50% - 1.375rem) 0 auto 0;
-  height: 2.75rem;
+  inset: calc(50% - 1.625rem) 0 auto 0;
+  height: 3.25rem;
   border-radius: var(--r-md);
   background: var(--card-2);
   pointer-events: none;
@@ -81,7 +83,9 @@
 .wheel {
   position: relative;
   height: 13.75rem;      /* cinco filas de 2.75rem */
+  overflow-x: hidden;
   overflow-y: auto;
+  touch-action: pan-y;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -104,6 +108,7 @@
   height: 2.75rem;
   padding: 0 1.25rem;
   min-width: 100%;
+  touch-action: pan-y;
   scroll-snap-align: center;
   font: 600 var(--t-lg) Poppins, sans-serif;
   color: var(--faint);

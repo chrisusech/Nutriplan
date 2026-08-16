@@ -12,7 +12,11 @@
     {% elif membership and not membership.can_generate %}
     <a class="btn btn-primary btn-block" href="/plan">Activar mi plan</a>
     {% else %}
-    <a class="btn btn-primary btn-block" href="/perfil">Editar mi perfil</a>
+    <form method="post" action="/menu/generar">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <button class="btn btn-primary btn-block" type="submit">Volver a generar</button>
+    </form>
+    <a class="btn btn-outline btn-block" href="/perfil">Editar mi perfil</a>
     {% endif %}
     <a class="btn btn-outline btn-block" href="/">Volver</a>
   </div>

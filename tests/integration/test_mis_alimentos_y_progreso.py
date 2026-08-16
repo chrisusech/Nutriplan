@@ -44,7 +44,7 @@ def _con_perfil(app: TestClient) -> None:
             "weight_kg": "62",
             "goal": "lose_fat",
             "activity_level": "moderate",
-            "meal_slots": ["breakfast", "lunch", "dinner"],
+            "meal_slots": ["desayuno", "almuerzo", "cena"],
         },
         follow_redirects=False,
     )
@@ -72,6 +72,7 @@ def test_quien_no_marco_nada_ve_el_catalogo_entero_en_su_despensa(app) -> None:
     html = app.get("/mis-alimentos").text
     assert "Proteínas" in html
     assert "En tu menú" in html
+    assert "Ajo" in html
 
 
 def test_lo_que_quito_de_su_despensa_deja_de_estar(app) -> None:

@@ -1,7 +1,8 @@
 {% extends "shell_public.html" %}
 {% set signup = mode == 'signup' %}
+{% set signin = mode == 'signin' %}
 {% block title %}{{ 'Crear cuenta' if signup else 'Entrar' }}{% endblock %}
-{% block page_class %}{{ 'page-form' if signup else 'page-welcome' }}{% endblock %}
+{% block page_class %}{{ 'page-form' if signup or signin else 'page-welcome' }}{% endblock %}
 
 {% block body %}
 {% if signup %}
@@ -25,11 +26,15 @@
   <form method="post" action="/registro" class="form-stack">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <label class="field"><span>¿Cómo te llamas?</span>
-      <input name="name" required maxlength="200" placeholder="Ana Pérez"></label>
+      <input name="name" required maxlength="200" placeholder="Ana Pérez"
+             autocomplete="name" enterkeyhint="next"></label>
     <label class="field"><span>Correo</span>
-      <input name="email" type="email" required placeholder="tu@correo.com"></label>
+      <input name="email" type="email" required placeholder="tu@correo.com"
+             autocomplete="email" autocapitalize="off" autocorrect="off"
+             spellcheck="false" enterkeyhint="next"></label>
     <label class="field"><span>Contraseña</span>
-      <input name="password" type="password" required minlength="8" placeholder="••••••••"></label>
+      <input name="password" type="password" required minlength="8" placeholder="••••••••"
+             autocomplete="new-password" enterkeyhint="done"></label>
     {% if invite_required %}
     <label class="field"><span>Código de invitación</span>
       <input name="invite" required maxlength="64" autocomplete="off"
@@ -42,13 +47,50 @@
 
   {% include "partials/auth_social.html" %}
 
-  <p class="auth-foot">¿Ya tienes cuenta? <a href="/login">Entra</a></p>
+  <p class="auth-foot">¿Ya tienes cuenta? <a href="/entrar">Entra</a></p>
+</div>
+
+{% elif signin %}
+{# --- Entrar: una pantalla, no una hoja. En iOS el dialog + teclado cuelga. #}
+<div class="form-page">
+  <header class="form-head">
+    <a class="back" href="/login" aria-label="Volver"><span class="icon">arrow_back</span></a>
+    <button type="button" class="btn-icon" data-theme-toggle aria-label="Cambiar el tema">
+      <span class="icon">contrast</span>
+    </button>
+  </header>
+
+  <div class="form-intro">
+    <span class="logo-badge"><span class="icon">restaurant</span></span>
+    <h1>Hola de nuevo</h1>
+    <p class="muted">Entra con tu correo para seguir tu menú.</p>
+  </div>
+
+  {% include "partials/auth_flash.html" %}
+
+  <form method="post" action="/login" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label class="field"><span>Correo</span>
+      <input name="email" type="email" required placeholder="tu@correo.com"
+             autocomplete="username" autocapitalize="off" autocorrect="off"
+             spellcheck="false" enterkeyhint="next"></label>
+    <label class="field"><span>Contraseña</span>
+      <input name="password" type="password" required minlength="8" placeholder="••••••••"
+             autocomplete="current-password" enterkeyhint="go"></label>
+    <button class="btn btn-primary btn-big btn-block" type="submit">Entrar</button>
+  </form>
+
+  {% include "partials/auth_social.html" %}
+
+  <p class="auth-foot"><a href="/recuperar">¿Olvidaste tu contraseña?</a></p>
+  <p class="auth-foot">¿No tienes cuenta? <a href="/registro">Comenzar</a></p>
 </div>
 
 {% else %}
 {# --- Bienvenida: el platito girando y dos caminos ------------------------- #}
 <div class="welcome">
   <header class="welcome-head">
+    <span class="welcome-beta">Beta</span>
     <button type="button" class="btn-icon" data-theme-toggle aria-label="Cambiar el tema">
       <span class="icon">contrast</span>
     </button>
@@ -69,31 +111,9 @@
   <div class="welcome-cta">
     <a class="btn btn-primary btn-big btn-block" href="/registro">Comenzar</a>
     <p class="auth-foot">¿Ya tienes una cuenta?
-      <button type="button" class="link" data-sheet-open="sheet-login">Inicia sesión</button>
+      <a class="link" href="/entrar">Inicia sesión</a>
     </p>
   </div>
 </div>
-
-<dialog class="sheet" id="sheet-login" {% if error or request.query_params.get('verificado') %}data-autoopen{% endif %}>
-  <div class="sheet-panel">
-    <div class="sheet-grip"></div>
-    <div class="sheet-head">
-      <span class="sheet-title">Hola de nuevo</span>
-      <button type="button" class="btn-icon" data-sheet-close aria-label="Cerrar">
-        <span class="icon">close</span>
-      </button>
-    </div>
-    <form method="post" action="/login" class="form-stack">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <label class="field"><span>Correo</span>
-        <input name="email" type="email" required placeholder="tu@correo.com"></label>
-      <label class="field"><span>Contraseña</span>
-        <input name="password" type="password" required minlength="8" placeholder="••••••••"></label>
-      <button class="btn btn-primary btn-big btn-block" type="submit">Entrar</button>
-    </form>
-    {% include "partials/auth_social.html" %}
-    <p class="auth-foot"><a href="/recuperar">¿Olvidaste tu contraseña?</a></p>
-  </div>
-</dialog>
 {% endif %}
 {% endblock %}

@@ -23,11 +23,17 @@ registro → consentimiento → onboarding → generar menú → calificar → f
 
 ## Todavía humano (fuera del repo)
 
-- [ ] Rotar clave Groq en console.groq.com (la antigua se pegó en chat).
-- [ ] Crear proyecto Supabase prod + `fly launch` / secrets / DNS `app.nutriplan.co`
-      (ver `docs/ops.md`); incluir `BETA_INVITE_CODE`.
-- [ ] SMTP real (Resend/Postmark) con SPF/DKIM.
-- [ ] `brew install cocoapods` + `npx cap add ios` (Android: `cd mobile && npx cap sync`).
-- [ ] GoogleService-Info.plist / google-services.json; capturas; TestFlight /
-      Play Internal (ver `docs/store-listing.md`).
-- [ ] Invites 10–50 + canal de feedback; QA en iPhone y Android reales.
+- [ ] Cuenta Apple Developer (sin ella no se firma el iPhone).
+- [ ] Proyecto Supabase Pro + `fly deploy` / secrets / `/health`
+      (ver `docs/ops.md`). Dominio propio opcional: vale `*.fly.dev`.
+- [ ] SMTP real (Resend) con SPF/DKIM. Recomendado si se quiere correo serio.
+- [ ] `APPLE_CLIENT_ID=app.nutriplan` y webhook
+      `https://<host>/internal/app-store` en App Store Connect.
+- [ ] Productos IAP `nutriplan.monthly` / `nutriplan.annual`, banco, impuestos.
+- [ ] QA en iPhone físico iOS ≥15 con Sandbox (`docs/iphone-qa.md`). No se
+      prueba el cobro en Cloudflare.
+- [ ] Titular legal de la ficha, privacidad/términos vs datos reales
+      (`docs/store-listing.md`). **No declarar Push.**
+- [ ] `brew install cocoapods` + `npx cap add ios`.
+- [ ] GoogleService-Info.plist / google-services.json; capturas 6.7".
+- [ ] Invites 10–50 + canal de feedback.

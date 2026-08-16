@@ -12,6 +12,7 @@ from nutriplan.application.weekly_checkin import (
     needs_weekly_checkin,
     seed_weight_from_profile,
     submit_weekly_checkin,
+    week_closure,
 )
 from nutriplan.domain.dish_recipe import GeneratedRecipe
 from nutriplan.domain.errors import ValidationError
@@ -24,6 +25,7 @@ from nutriplan.domain.models import (
     MealSlot,
     Sex,
 )
+from nutriplan.domain.week_close import RATINGS_REQUIRED
 
 
 def test_el_lunes_de_la_semana_iso_es_el_inicio() -> None:
@@ -128,3 +130,42 @@ async def test_un_peso_fuera_de_rango_se_rechaza(nutrition_config) -> None:  # t
             targets_repo=Targets(),  # type: ignore[arg-type]
             config_provider=Cfg(),  # type: ignore[arg-type]
         )
+
+
+class _FakeRatings:
+    def __init__(self, n: int) -> None:
+        self.n = n
+
+    async def count_for_plan(self, plan_cycle_id) -> int:  # type: ignore[no-untyped-def]
+        _ = plan_cycle_id
+        return self.n
+
+
+@pytest.mark.asyncio
+async def test_un_plan_corto_cierra_con_tantas_notas_como_comidas() -> None:
+    """No pedimos cinco estrellas si la semana solo tuvo tres platos."""
+    weights = _FakeWeights()
+    client = _client(active_plan_id=uuid4())
+    await seed_weight_from_profile(client=client, weights=weights)
+    cierre = await week_closure(
+        client=client,
+        weights=weights,  # type: ignore[arg-type]
+        ratings=_FakeRatings(3),  # type: ignore[arg-type]
+        meals_in_plan=3,
+    )
+    assert cierre.ratings_required == 3
+    assert cierre.is_closed
+
+
+@pytest.mark.asyncio
+async def test_un_plan_largo_no_pide_mas_de_cinco_estrellas() -> None:
+    weights = _FakeWeights()
+    client = _client(active_plan_id=uuid4())
+    cierre = await week_closure(
+        client=client,
+        weights=weights,  # type: ignore[arg-type]
+        ratings=_FakeRatings(5),  # type: ignore[arg-type]
+        meals_in_plan=35,
+    )
+    assert cierre.ratings_required == RATINGS_REQUIRED
+    assert not cierre.is_closed  # falta el peso

@@ -8,7 +8,9 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
+from nutriplan.domain.cocina import convierte_a_crudo, gramos_en_crudo
 from nutriplan.domain.dish_recipe import DishRecipe
+from nutriplan.domain.meal_template import is_inedible_title, kitchen_name
 from nutriplan.domain.models import (
     DayPlan,
     FoodItem,
@@ -49,13 +51,27 @@ def day_chips(cycle: PlanCycle, selected: int, today: int | None = None) -> list
     ]
 
 
+def _redondo(grams: float) -> int | float:
+    return int(grams) if float(grams).is_integer() else round(grams, 1)
+
+
 def _portion_parts(grams: float, food: FoodItem) -> dict[str, str]:
-    """La porción en dos columnas: qué es y cuánto es."""
-    g = int(grams) if float(grams).is_integer() else round(grams, 1)
+    """La porción en dos columnas: qué es y cuánto es.
+
+    Se emiten las dos medidas —la del plato y la de la compra— para que la
+    pantalla pueda alternarlas sin volver al servidor. `qty` sigue siendo la
+    cocida: es la que cuadra con los macros de al lado.
+    """
     unidades = natural_units(grams, food)
+    cocido = _redondo(grams)
+    crudo = _redondo(gramos_en_crudo(food, grams))
     return {
         "name": food.name_es.capitalize(),
-        "qty": f"{unidades} · {g} g" if unidades else f"{g} g",
+        "qty": f"{unidades} · {cocido} g" if unidades else f"{cocido} g",
+        "qty_crudo": f"{unidades} · {crudo} g" if unidades else f"{crudo} g",
+        # Vacío cuando comprar y servir pesan lo mismo: el interruptor no tiene
+        # nada que enseñar y la línea no lo anuncia.
+        "convertible": "1" if convierte_a_crudo(food) else "",
     }
 
 
@@ -121,8 +137,12 @@ def _meal_title(meal: MealEntry, foods: dict[UUID, FoodItem]) -> str:
     Si la plantilla decía "Fruta con crema…" pero el solver solo dejó fruta
     (gramos 0 en la crema), el título guardado miente: se rehace con lo servido.
     """
-    names = [foods[i.food_id].name_es for i in meal.items if i.food_id and i.food_id in foods]
-    if meal.dish_name:
+    names = [
+        kitchen_name(foods[i.food_id].name_es)
+        for i in meal.items
+        if i.food_id and i.food_id in foods
+    ]
+    if meal.dish_name and not is_inedible_title(meal.dish_name):
         if " con " in meal.dish_name and len(names) == 1:
             return names[0].capitalize()
         return meal.dish_name
@@ -212,7 +232,12 @@ def meal_view(
             steps = list(recipe.steps)
 
     title = _meal_title(meal, foods)
-    if recipe and recipe.name_es and recipe.source == "ai":
+    if (
+        recipe
+        and recipe.name_es
+        and recipe.source == "ai"
+        and not is_inedible_title(recipe.name_es)
+    ):
         title = recipe.name_es
 
     return {

@@ -96,14 +96,17 @@ class PasswordResetTokenRow(Base):
 
 
 class MembershipGrantRow(Base):
-    """Semanas concedidas a una cuenta. Se inserta, nunca se edita.
+    """Semanas concedidas a una cuenta. Se inserta; no se borra.
 
-    Es el libro mayor del negocio: el saldo de cualquier cuenta se reconstruye
-    sumando sus filas vivas. Cuando exista pasarela, su webhook escribirá aquí
-    con `source='payment'` y `external_ref` = id de la transacción.
+    El saldo se reconstruye sumando filas vivas. Un reembolso de Apple es la
+    única mutación: `expires_at` pasa a ahora. `external_ref` es único para
+    que dos POST de la misma transacción no dupliquen semanas.
     """
 
     __tablename__ = "membership_grants"
+    # Index unique: SQLite refleja UNIQUE como índice; UniqueConstraint haría
+    # que Alembic quisiera recrearlo en cada compare_metadata.
+    __table_args__ = (Index("uq_membership_grants_external_ref", "external_ref", unique=True),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
@@ -114,6 +117,9 @@ class MembershipGrantRow(Base):
     source: Mapped[str] = mapped_column(String(20), index=True)
     granted_by: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     external_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    original_transaction_id: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
@@ -233,6 +239,35 @@ class FoodRow(Base):
     # Alimentos libres (ensalada, café, gelatina): el solver los ignora.
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     free_text: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # Fuera del picker y del pool si alguien lo retira desde la consola. Los
+    # platos viejos siguen resolviendo el nombre porque la fila no se borra.
+    catalog_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+
+    # Estado de los macros de la fila y cómo volver al crudo. Ver FoodState.
+    state: Mapped[str] = mapped_column(
+        String(12), index=True, default="no_aplica", server_default="no_aplica"
+    )
+    cooking_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    yield_factor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    raw_equivalent_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("foods.id"), nullable=True
+    )
+
+    # `catalog_active` dice si la fila está viva; `engine_default` dice si se
+    # LISTA. El catálogo profundo (miles de alimentos de USDA) está vivo pero no
+    # se lista: se alcanza buscándolo por nombre. Sin esta separación, el picker
+    # del perfil y el enum que ve la IA se vuelven inmanejables.
+    engine_default: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+
+    sugar_100g: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    sodium_mg_100g: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    # `source_ref` es texto y sirve para cualquier fuente; este es el ancla dura.
+    fdc_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+
+    # Auditoría de la consola: la base es la fuente de verdad, así que hace
+    # falta saber quién tocó un macro y cuándo.
+    curated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    curated_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class WeightEntryRow(Base):

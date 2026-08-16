@@ -1,14 +1,11 @@
-"""Lista de compra de la semana: gramos del plan, agregados por alimento.
-
-El código es dueño de las cantidades. Aquí no hay IA: se suman los `MealItem`
-del `PlanCycle` y se agrupan por categoría para la compra del súper.
-"""
+"""Lista de compra de la semana. Los gramos del plan son cocidos; aquí se piden crudos."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID
 
+from nutriplan.domain.cocina import convierte_a_crudo, gramos_en_crudo
 from nutriplan.domain.models import FoodCategory, FoodItem, PlanCycle, UnitGranularity
 from nutriplan.domain.restaurant import is_eating_out
 
@@ -39,11 +36,9 @@ class ShoppingLine:
     food_id: UUID
     name_es: str
     category: FoodCategory
-    grams: float
-    unit_label: str | None  # p. ej. "14 huevos" si es contable
-    # Lo marcó como "ya lo tengo en casa" antes de generar. La línea NO se borra:
-    # hay que poder ver que el arroz de la semana sale de tu bolsa, no que
-    # desapareció del menú.
+    grams: float  # crudo, lo que se compra
+    unit_label: str | None  # p. ej. "14 huevos"
+    grams_cocido: float | None = None  # None = se compra igual que se sirve
     ya_tengo: bool = False
 
 
@@ -60,11 +55,7 @@ def shopping_list_for_plan(
     *,
     en_casa: set[UUID] | frozenset[UUID] = frozenset(),
 ) -> list[ShoppingGroup]:
-    """Suma gramos de toda la semana, excluye libres y comidas libres.
-
-    `en_casa` son los alimentos que la persona dijo tener antes de generar: se
-    marcan y bajan al final de su grupo, pero siguen en la lista con sus gramos.
-    """
+    """Suma gramos de la semana. `en_casa` se marca y baja al final del grupo."""
     totals: dict[UUID, float] = {}
     for day in plan.days:
         for meal in day.meals:
@@ -81,13 +72,15 @@ def shopping_list_for_plan(
     by_cat: dict[FoodCategory, list[ShoppingLine]] = {}
     for food_id, grams in totals.items():
         food = catalog[food_id]
+        crudo = gramos_en_crudo(food, grams)
         line = ShoppingLine(
             food_id=food_id,
             name_es=food.name_es,
             category=food.category,
-            grams=round(grams, 1),
-            unit_label=_unit_label(grams, food),
+            grams=round(crudo, 1),
+            unit_label=_unit_label(crudo, food),
             ya_tengo=food_id in en_casa,
+            grams_cocido=round(grams, 1) if convierte_a_crudo(food) else None,
         )
         by_cat.setdefault(food.category, []).append(line)
 
@@ -96,8 +89,6 @@ def shopping_list_for_plan(
         lines = by_cat.get(category)
         if not lines:
             continue
-        # Lo que ya tiene, al final de su grupo: lo que se lee primero es lo que
-        # hay que echar al carrito.
         lines.sort(key=lambda ln: (ln.ya_tengo, ln.name_es.lower()))
         groups.append(
             ShoppingGroup(

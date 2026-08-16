@@ -10,7 +10,7 @@
       data-restante="{{ progreso.restante }}"
       data-racha="{{ racha or 0 }}"
       {% for m in progreso.macros %}
-      data-{{ m.key }}="{{ m.value }}"
+      data-{{ m.key | replace('_', '-') }}="{{ m.value }}"
       {% endfor %}
       {% endif %}>
   <input type="hidden" name="_csrf" value="{{ csrf_token }}">

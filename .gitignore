@@ -18,9 +18,15 @@ data/*.db
 data/*.db-journal
 data/exports/
 # Staging de USDA FoodData Central: se reconstruye con `nutriplan-food
-# import-usda` desde el bulk CSV. Lo que se versiona es el resultado (el fdc_id
-# y los macros) dentro de data/foods/curated_foods.csv.
+# import-usda` desde el bulk CSV. Lo que se versiona es el resultado, ya curado,
+# en data/foods/catalogo*.jsonl.
 data/usda/
+# Pasos intermedios del catálogo: `candidatos` es lo que aún no tiene nombre en
+# español y `cuarentena` lo que el control de calidad rechazó. Los dos se
+# regeneran; ninguno se carga a la base.
+data/foods/candidatos.jsonl
+data/foods/cuarentena.jsonl
+data/foods/sin_traducir.jsonl
 config/branding/
 
 # macOS

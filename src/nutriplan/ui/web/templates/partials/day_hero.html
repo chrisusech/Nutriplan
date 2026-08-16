@@ -47,13 +47,14 @@
       </li>
       {% endfor %}
     {% else %}
-      {% for key, valor in [('protein_g', day.protein_g), ('carb_g', day.carb_g), ('fat_g', day.fat_g)] %}
+      {% for m in MACRO_META if m.key != 'kcal' %}
       <li class="macro">
-        <span class="macro-name">{{ MACRO_COLORS[key].label }}</span>
-        <span class="macro-val"><b>{{ valor }}</b> g</span>
+        <span class="macro-name">{{ m.label }}</span>
+        <span class="macro-val"><b>{{ day[m.key] }}</b> g</span>
       </li>
       {% endfor %}
     {% endif %}
   </ul>
-  <p class="muted">Los gramos son del alimento ya cocido.</p>
+  <p class="muted">Los gramos son del alimento ya cocido. En cada plato puedes
+     verlos en crudo, que es como se compra y se pesa antes de cocinar.</p>
 </section>

@@ -26,7 +26,7 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 # Rutas que un tercero SÍ puede invocar: el ID token de Google llega desde el
 # cliente nativo, que no tiene cookie de sesión ni de dónde sacar el token CSRF.
-CSRF_EXEMPT = ("/auth/oauth/", "/internal/tick")
+CSRF_EXEMPT = ("/auth/oauth/", "/internal/")
 
 
 def csrf_token(request: Request) -> str:

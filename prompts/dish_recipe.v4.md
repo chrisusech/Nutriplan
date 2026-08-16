@@ -11,6 +11,8 @@ Valora el combo y el horario:
 - ¿Es coherente para esa comida (desayuno vs cena)?
 - ¿Es una combinación que alguien cocinaría de verdad?
 - ¿Pide demasiada elaboración para un snack o para quien va con prisa?
+- Rechaza (`reject`) sopa o caldo cuyo protagonista sea atún de lata, sardinas
+  o plátano. Nadie pediría «sopa de atún en agua» ni «sopa de plátano».
 
 Pon `adequacy`:
 - `pass` — sí, escribe la receta.

@@ -95,7 +95,8 @@ W_LOVED = 90.0
 W_PREFER_FOOD = 50.0
 # El mismo plato (o la misma plantilla) la semana pasada. Fuerte para que
 # gane otra receta, por debajo de W_OFF_MEAL: si el pool es chico, aún
-# puede cuadrar macros con un repetido.
+# puede cuadrar macros con un repetido. El mismo peso se cobra *dentro*
+# de la semana: dos almuerzos que se llaman igual se leen como un fallo.
 W_RECENT_WEEK = 2_400.0
 W_RECENT_TEMPLATE = 400.0
 
