@@ -499,6 +499,105 @@ async def test_update_day_preserves_matching_item_ids(session) -> None:
     assert after.edit_count == 1
 
 
+async def test_update_day_dos_veces_no_choca_los_ids(session) -> None:
+    """Cambiar almuerzo y luego desayuno: el segundo save no revienta UNIQUE."""
+    await seed_foods(session)
+    client = make_client()
+    await seed_account(session, client)
+    await SqlClientRepository(session, DEFAULT_TENANT_ID).add(client)
+
+    from tests.conftest import PROJECT_ROOT
+
+    from nutriplan.adapters.config_yaml import YamlConfigProvider
+    from nutriplan.domain.calculation import compute_targets
+
+    config = YamlConfigProvider(
+        PROJECT_ROOT / "config" / "nutrition.default.yaml"
+    ).get_nutrition_config()
+    targets = compute_targets(client, config)
+    await SqlTargetsRepository(session, DEFAULT_TENANT_ID).add(targets)
+
+    foods = await SqlFoodRepository(session, DEFAULT_TENANT_ID).list_universe()
+    food_a, food_b, food_c = foods[0], foods[1], foods[2]
+    macro = MacroTargets(kcal=500, protein_g=40, carb_g=50, fat_g=15)
+
+    def _day(*meals: MealEntry) -> DayPlan:
+        return DayPlan(day_index=0, meals=list(meals), totals=macro)
+
+    plan = PlanCycle(
+        id=uuid4(),
+        tenant_id=DEFAULT_TENANT_ID,
+        client_id=client.id,
+        targets_id=targets.id,
+        days=[
+            _day(
+                MealEntry(
+                    slot=MealSlot.BREAKFAST,
+                    items=[MealItem(food_id=food_a.id, grams=120, position=0)],
+                    computed=macro,
+                ),
+                MealEntry(
+                    slot=MealSlot.LUNCH,
+                    items=[MealItem(food_id=food_b.id, grams=180, position=0)],
+                    computed=macro,
+                ),
+            )
+        ],
+        config_version=config.version,
+        prompt_version="plan_generation.v1",
+        model="claude-sonnet-5",
+        input_hash="hash-update-day-twice",
+        created_at=datetime.now(UTC),
+    )
+    plan_repo = SqlPlanRepository(session, DEFAULT_TENANT_ID)
+    await plan_repo.add(plan)
+    await session.commit()
+
+    await plan_repo.update_day(
+        plan.id,
+        0,
+        _day(
+            MealEntry(
+                slot=MealSlot.BREAKFAST,
+                items=[MealItem(food_id=food_a.id, grams=120, position=0)],
+                computed=macro,
+            ),
+            MealEntry(
+                slot=MealSlot.LUNCH,
+                items=[MealItem(food_id=food_c.id, grams=200, position=0)],
+                computed=macro,
+            ),
+        ),
+        mark_edited=True,
+    )
+    await session.commit()
+
+    await plan_repo.update_day(
+        plan.id,
+        0,
+        _day(
+            MealEntry(
+                slot=MealSlot.BREAKFAST,
+                items=[MealItem(food_id=food_c.id, grams=140, position=0)],
+                computed=macro,
+            ),
+            MealEntry(
+                slot=MealSlot.LUNCH,
+                items=[MealItem(food_id=food_c.id, grams=200, position=0)],
+                computed=macro,
+            ),
+        ),
+        mark_edited=True,
+    )
+    await session.commit()
+
+    after = await plan_repo.get(plan.id)
+    assert after is not None
+    slots = {m.slot: m for m in after.days[0].meals}
+    assert slots[MealSlot.BREAKFAST].items[0].food_id == food_c.id
+    assert slots[MealSlot.LUNCH].items[0].food_id == food_c.id
+
+
 async def test_edited_plan_not_reused_by_input_hash(session) -> None:
     """Un plan tocado a mano no debe devolverse al regenerar con el mismo hash."""
     await seed_foods(session)

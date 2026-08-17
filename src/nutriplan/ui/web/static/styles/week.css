@@ -363,20 +363,19 @@ body.page-week {
 .membership-text { display: flex; flex-direction: column; gap: 0.1rem; font-size: var(--t-sm); }
 .membership-title { font-weight: 600; color: var(--ink-2); }
 .membership-cta { color: var(--brand); font-weight: 700; }
-.membership-out .membership-icon { background: var(--warn-soft); color: var(--warn); }
 
 .regen { margin-top: var(--s-6); }
-.checkin-banner {
+.recap-nudge {
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
   gap: var(--s-3);
   margin-top: var(--s-5);
+  padding: var(--s-5);
   text-align: center;
 }
-.checkin-banner .btn { align-self: center; }
+.recap-nudge p { margin: 0; font: 600 var(--t-md) Poppins, sans-serif; }
+.recap-nudge .muted { font-weight: 500; }
 .alert { margin-top: var(--s-5); }
 
 /* --- Todo listo (sin plan todavía) ------------------------------------------ */

@@ -66,13 +66,13 @@ def test_a_quien_le_falta_todo_se_le_enumera() -> None:
         "registrar tu peso de esta semana",
         f"calificar al menos {RATINGS_REQUIRED} platos",
     ]
-    assert cierre.hint.startswith("Para tu semana siguiente te falta:")
+    assert cierre.hint.startswith("Para el resumen te falta:")
 
 
 def test_cuando_falta_una_sola_cosa_la_frase_no_lleva_lista() -> None:
     cierre = _cierre(notas=0)
     assert cierre.hint == (
-        f"Para tu semana siguiente te falta calificar al menos {RATINGS_REQUIRED} platos."
+        f"Para el resumen te falta calificar al menos {RATINGS_REQUIRED} platos."
     )
 
 

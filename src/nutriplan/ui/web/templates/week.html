@@ -40,7 +40,7 @@
     </a>
     {% elif membership and not membership.can_generate %}
     <p class="muted">{{ membership.hint }}</p>
-    <a class="btn btn-primary btn-big btn-block" href="/soporte">
+    <a class="btn btn-primary btn-big btn-block" href="/plan">
       <span class="icon">confirmation_number</span>Activar mi plan
     </a>
     {% else %}
@@ -68,7 +68,13 @@
   {% endif %}
 {% else %}
 
-  <nav class="days" aria-label="Días de la semana">
+  {# La tira no recarga el documento: en el iPhone eso pinta el fondo nativo
+     negro entre un día y el siguiente. #}
+  <div id="week-day">
+  <nav class="days" aria-label="Días de la semana"
+       hx-boost="true" hx-target="#week-day" hx-select="#week-day"
+       hx-swap="outerHTML show:none settle:0s" hx-push-url="true"
+       hx-sync="#week-day:replace">
     {% for d in days %}
     <a class="day {% if d.index == dia %}on{% endif %} {% if d.is_today %}today{% endif %}"
        href="/?dia={{ d.index }}"
@@ -82,15 +88,17 @@
   <div id="dia-track">
   {% include "partials/dia_track.html" %}
   </div>
+  </div>
 
   {% include "partials/membership.html" %}
 
   {% if needs_checkin %}
-  {# La frase la arma el dominio (`closure.hint`): rehacerla aquí es como se
-     acaba diciendo dos cosas distintas en dos pantallas. #}
-  <div class="alert checkin-banner">
-    <span>{{ closure.hint if closure and closure.hint else 'Es momento de cerrar tu semana.' }}</span>
-    <a class="btn btn-primary" href="/check-in">Cerrar mi semana</a>
+  <div class="card recap-nudge">
+    <p>¿Terminaste tu semana?</p>
+    {% if membership and membership.can_generate and closure and closure.hint %}
+    <p class="muted">{{ closure.hint }}</p>
+    {% endif %}
+    <a class="btn btn-primary" href="/check-in">Ver resumen</a>
   </div>
   {% elif can_regenerate %}
   {% with n=en_casa_n %}{% include "partials/pantry_link.html" %}{% endwith %}
@@ -101,10 +109,10 @@
       <span class="icon">refresh</span>Generar otra semana
     </button>
   </form>
-  {% elif waiting_sunday %}
+  {% elif waiting_next_week %}
   {% with n=en_casa_n %}{% include "partials/pantry_link.html" %}{% endwith %}
-  <p class="alert">El domingo preparamos tu siguiente menú.</p>
-  {% elif unlock_hint %}
+  <p class="alert">Al terminar tu semana preparamos el siguiente menú.</p>
+  {% elif unlock_hint and (not membership or membership.can_generate) %}
   <p class="alert">{{ unlock_hint }}</p>
   {% endif %}
 

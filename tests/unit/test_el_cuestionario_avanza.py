@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 STEPPER = (ROOT / "src/nutriplan/ui/web/static/js/stepper.js").read_text(encoding="utf-8")
+ONB = (ROOT / "src/nutriplan/ui/web/templates/onboarding.html").read_text(encoding="utf-8")
 SHELL = (ROOT / "src/nutriplan/ui/web/static/styles/shell.css").read_text(encoding="utf-8")
 
 
@@ -18,10 +19,18 @@ def test_continuar_escucha_el_clic() -> None:
     assert "avanza()" in STEPPER
 
 
-def test_en_el_primer_paso_la_flecha_no_cierra_la_sesion() -> None:
-    """Volver sale del cuestionario, no de la cuenta."""
-    assert "window.location.assign('/')" in STEPPER
-    assert "assign('/login')" not in STEPPER
+def test_en_el_primer_paso_la_flecha_vuelve_al_inicio() -> None:
+    """Sin cerrar sesión, /login rebota al cuestionario."""
+    assert 'action="/logout"' in ONB
+    assert "data-leave" in ONB
+    assert "[data-leave]" in STEPPER
+    assert "assign('/')" not in STEPPER
+
+
+def test_un_error_abre_el_ultimo_paso() -> None:
+    """Crear mi menú falló: no devolver a ¿cómo te llamas?."""
+    assert "querySelector('.alert')" in STEPPER
+    assert "steps.length - 1" in STEPPER
 
 
 def test_la_flecha_de_volver_no_se_pinta_si_esta_oculta() -> None:

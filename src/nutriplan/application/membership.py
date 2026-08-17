@@ -28,7 +28,7 @@ from nutriplan.domain.membership import (
     unlimited_membership,
 )
 from nutriplan.domain.models import Account, Role
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import plan_is_live, today_bogota
 
 logger = structlog.get_logger(__name__)
 
@@ -216,14 +216,14 @@ async def can_generate_week(
     if account.role is Role.SUPER_USER:
         return True, ""
 
-    week = week_start or iso_week_start()
+    week = week_start or today_bogota(now)
     already = await generations.count_generations(client_id, week)
-    if already > 0:
+    if already > 0 and plan_is_live(week, now):
         if can_regenerate_week(generations_this_week=already):
             return True, ""
         return False, (
             "Ya rehiciste el menú de esta semana un par de veces. Vívela unos "
-            "días y el lunes generamos la siguiente."
+            "días y al terminar preparamos la siguiente."
         )
 
     state = await membership_of(

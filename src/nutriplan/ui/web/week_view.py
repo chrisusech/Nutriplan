@@ -5,6 +5,7 @@ palabras, iconos y el orden en que se leen.
 """
 
 from collections.abc import Mapping
+from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -21,7 +22,7 @@ from nutriplan.domain.models import (
 )
 from nutriplan.domain.portion_label import natural_units, portion_text
 from nutriplan.domain.restaurant import is_eating_out
-from nutriplan.domain.week import today_weekday
+from nutriplan.domain.week import plan_day_index, today_bogota
 from nutriplan.ui.web.format import DAY_LABELS, DAY_SHORT, MACRO_COLORS
 
 SLOT_META: dict[MealSlot, dict[str, str]] = {
@@ -35,17 +36,25 @@ SLOT_META: dict[MealSlot, dict[str, str]] = {
 _SLOT_ORDER = list(MealSlot)
 
 
-def day_chips(cycle: PlanCycle, selected: int, today: int | None = None) -> list[dict[str, Any]]:
-    """Los siete días. `today` se resalta para no tener que buscarlo."""
-    if today is None:
-        today = today_weekday()
+def day_chips(
+    cycle: PlanCycle, selected: int, today: date | int | None = None
+) -> list[dict[str, Any]]:
+    """Los siete días. `today` se resalta para no tener que buscarlo.
+
+    Un `int` es el índice de la tira (tests). Una `date` es el calendario:
+    el chip lleva el nombre del día real (sábado, domingo…) según week_start.
+    """
+    if isinstance(today, int):
+        today_idx: int | None = today
+    else:
+        today_idx = plan_day_index(cycle.week_start, today or today_bogota())
     return [
         {
             "index": day.day_index,
-            "short": DAY_SHORT[day.day_index],
-            "label": DAY_LABELS[day.day_index],
+            "short": DAY_SHORT[(cycle.week_start + timedelta(days=day.day_index)).weekday()],
+            "label": DAY_LABELS[(cycle.week_start + timedelta(days=day.day_index)).weekday()],
             "on": day.day_index == selected,
-            "is_today": day.day_index == today,
+            "is_today": today_idx is not None and day.day_index == today_idx,
         }
         for day in sorted(cycle.days, key=lambda d: d.day_index)
     ]
@@ -299,6 +308,7 @@ def day_view(
     foods: dict[UUID, FoodItem],
     recipes: dict[str, DishRecipe] | None = None,
     ratings: Mapping[str, Mapping[str, object] | int] | None = None,
+    week_start: date | None = None,
 ) -> dict[str, Any]:
     recipes = recipes or {}
     ratings = ratings or {}
@@ -319,9 +329,14 @@ def day_view(
 
     pending = [m for m in meals if not m.eaten]
     ancla = pending[0] if pending else (meals[-1] if meals else None)
+    weekday = (
+        (week_start + timedelta(days=day.day_index)).weekday()
+        if week_start is not None
+        else day.day_index
+    )
     return {
         "index": day.day_index,
-        "label": DAY_LABELS[day.day_index],
+        "label": DAY_LABELS[weekday],
         "kcal": round(day.totals.kcal),
         "protein_g": round(day.totals.protein_g),
         "carb_g": round(day.totals.carb_g),

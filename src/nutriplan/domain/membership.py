@@ -99,8 +99,8 @@ class MembershipState(BaseModel):
         if self.can_generate:
             return ""
         if self.has_expired_grants:
-            return "Tu plan venció. Actívalo otra vez para seguir generando tus semanas."
-        return "Ya usaste las semanas que tenías. Activa tu plan mensual o anual para seguir."
+            return "Tu plan venció. Actívalo otra vez y accede a semanas ilimitadas."
+        return "Accede a semanas ilimitadas. Activa tu plan."
 
 
 def unlimited_membership() -> MembershipState:

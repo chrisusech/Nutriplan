@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Tu plan{% endblock %}
-{% block page_class %}page-profile{% endblock %}
+{% block page_class %}page-plan{% endblock %}
 
 {% block head_lead %}
 <a class="back" href="/perfil" aria-label="Volver">
@@ -11,56 +11,70 @@
 
 {% block content %}
 {% if error %}<p class="alert">{{ error }}</p>{% endif %}
+<p class="alert" hidden data-iap-error></p>
 
-<p class="muted">La semana de prueba se acabó. Elige mensual o anual. En el
-  iPhone el cobro lo hace Apple (Apple Pay, tarjeta o saldo); nosotros solo
-  activamos tus semanas cuando la tienda confirma.</p>
+<section class="paywall">
+  <header class="paywall-hero">
+    <span class="logo-badge"><span class="icon">restaurant</span></span>
+    <h2>Tu menú de la semana, sin pensar qué cocinar</h2>
+    <p class="muted">Siete días con tus gramos, las recetas y la lista de compra.</p>
+  </header>
 
-{% if membership and membership.can_generate %}
-<p class="alert">Todavía te quedan {{ membership.weeks_left }} semana{{ '' if membership.weeks_left == 1 else 's' }}.</p>
-{% endif %}
+  <ul class="paywall-facts">
+    <li><span class="icon">calendar_month</span>7 días, tus comidas</li>
+    <li><span class="icon">monitor_weight</span>Gramos y macros de cada plato</li>
+    <li><span class="icon">shopping_cart</span>Lista de compra de la semana</li>
+  </ul>
 
-<div class="paywall-web">
-  <p>El cobro se hace en el iPhone, con Apple. Abra NutriPlan en su teléfono
-    para activar el plan.</p>
-</div>
+  {% if membership and membership.can_generate %}
+  <p class="alert">Todavía te quedan {{ membership.weeks_left }} semana{{ '' if membership.weeks_left == 1 else 's' }}.</p>
+  {% endif %}
 
-<div class="paywall-native">
-<div class="card">
-  <h2>Mensual</h2>
-  <p class="muted"><span data-iap-price="{{ monthly }}">El precio lo muestra Apple.</span></p>
-  <form method="post" action="/plan/activar">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <input type="hidden" name="product_id" value="{{ monthly }}">
-    <input type="hidden" name="signed_transaction" value="" data-iap-jws>
-    <button class="btn btn-primary btn-block" type="submit" data-iap="{{ monthly }}">
-      Continuar con Apple
-    </button>
-  </form>
-</div>
+  <div class="paywall-web">
+    <p>El cobro se hace en el iPhone. Abre NutriPlan en tu teléfono para activar el plan.</p>
+  </div>
 
-<div class="card">
-  <h2>Anual</h2>
-  <p class="muted"><span data-iap-price="{{ annual }}">El precio lo muestra Apple.</span></p>
-  <form method="post" action="/plan/activar">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-    <input type="hidden" name="product_id" value="{{ annual }}">
-    <input type="hidden" name="signed_transaction" value="" data-iap-jws>
-    <button class="btn btn-primary btn-block" type="submit" data-iap="{{ annual }}">
-      Continuar con Apple
-    </button>
-  </form>
-</div>
+  <div class="paywall-native">
+    <article class="card paywall-sku">
+      <h3>Mensual</h3>
+      <p class="paywall-price"><span data-iap-price="{{ monthly }}" data-iap-fallback="$5 USD">$5 USD</span></p>
+      <p class="muted">al mes</p>
+      <form method="post" action="/plan/activar" data-iap-form>
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="product_id" value="{{ monthly }}">
+        <input type="hidden" name="signed_transaction" value="" data-iap-jws>
+        <button class="btn btn-primary btn-block" type="button" data-iap="{{ monthly }}">
+          Suscribirme
+        </button>
+      </form>
+    </article>
 
-<form method="post" action="/plan/activar" data-iap-restore-form>
-  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-  <input type="hidden" name="signed_transaction" value="" data-iap-jws>
-  <button class="btn btn-outline btn-block" type="button" data-iap-restore>
-    Restaurar compras
-  </button>
-</form>
-</div>
+    <article class="card paywall-sku paywall-sku-featured">
+      <p class="paywall-badge">El que conviene</p>
+      <h3>Anual</h3>
+      <p class="paywall-price"><span data-iap-price="{{ annual }}" data-iap-fallback="$30 USD">$30 USD</span></p>
+      <p class="muted">al año</p>
+      <form method="post" action="/plan/activar" data-iap-form>
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="product_id" value="{{ annual }}">
+        <input type="hidden" name="signed_transaction" value="" data-iap-jws>
+        <button class="btn btn-primary btn-block" type="button" data-iap="{{ annual }}">
+          Suscribirme
+        </button>
+      </form>
+    </article>
 
-<p class="muted">Si ya pagó en otro iPhone, restaure la compra. Los términos
-  están en <a href="/terminos">/terminos</a>.</p>
+    <form method="post" action="/plan/activar" data-iap-restore-form>
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="signed_transaction" value="" data-iap-jws>
+      <button class="link paywall-restore" type="button" data-iap-restore>
+        Restaurar compras
+      </button>
+    </form>
+  </div>
+
+  <p class="muted paywall-legal">Al suscribirte aceptas los
+    <a href="/terminos">términos</a> y la
+    <a href="/privacidad">privacidad</a>.</p>
+</section>
 {% endblock %}

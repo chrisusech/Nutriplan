@@ -49,10 +49,23 @@ contra producción, que es lo que va a la store.
 
 Tres cosas que hay que rehacer si se regenera `ios/` (está fuera de git):
 
-1. `NSAppTransportSecurity` → `NSAllowsLocalNetworking` en `App/App/Info.plist`;
-   sin eso iOS bloquea el `http` del Mac y la pantalla sale en blanco.
-2. Para un iPhone físico: firma con tu Apple ID en Xcode, `NUTRIPLAN_URL` con la
-   IP del Mac y el servidor escuchando en `0.0.0.0`, no en loopback.
+1. `NSAppTransportSecurity` en `App/App/Info.plist`: `NSAllowsLocalNetworking`
+   **y** `NSAllowsArbitraryLoadsInWebContent`. Lo primero no basta: el WebView
+   sigue exigiendo HTTPS contra la IP del Mac (`NSURLErrorDomain -1022`) y la
+   pantalla se queda en el splash. Solo para el binario de desarrollo; el de la
+   Store carga `https://` y no necesita la excepción de WebContent.
+2. Para un iPhone físico: firma con tu Apple ID en Xcode. El servidor tiene que
+   escuchar en `0.0.0.0` (no en loopback) y `NUTRIPLAN_URL` tiene que ser la IP
+   **real** del Mac, no un placeholder:
+
+   ```bash
+   IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+   NUTRIPLAN_URL=http://$IP:8000 npx cap copy ios
+   ```
+
+   `http://192.168.x.x:8000` no es un host: iOS responde `-1003` (hostname
+   could not be found) y el splash no arranca. `localhost` solo sirve en el
+   simulador del mismo Mac.
 3. `IPHONEOS_DEPLOYMENT_TARGET = 15.0` en el proyecto y el target App (Debug y
    Release). Capacitor 7 deja 14.0; `@capgo/native-purchases` exige 15. El
    Podfile ya dice `platform :ios, '15.0'`. Sin esto Xcode avisa al enlazar el

@@ -11,7 +11,7 @@ from nutriplan.ports.iap import IAPError
 
 GEN_FAILED = (
     "No fue posible armar el menú con los alimentos seleccionados. "
-    "Añada carbohidratos y grasas, o deje el catálogo vacío para que elijamos nosotros."
+    "Añada carbohidratos y grasas, o deje el catálogo vacío para que la app elija."
 )
 UNHANDLED = "No pudimos completar la solicitud. Inténtelo de nuevo en unos minutos."
 SWAP_UNAVAILABLE = "Ese plato no está en el menú."

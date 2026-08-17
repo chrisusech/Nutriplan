@@ -1,8 +1,9 @@
 """Check-in semanal de peso + adaptación de kcal.
 
-Una pesada por semana ISO (lunes). Al guardar: actualiza el perfil, decide el
-ajuste de kcal con reglas del dominio, persiste targets nuevos y (opcional)
-pide a la IA una nota corta que narra el resultado — sin inventar números.
+Una pesada por tira de 7 días (el `week_start` del menú). Al guardar: actualiza
+el perfil, decide el ajuste de kcal con reglas del dominio, persiste targets
+nuevos y (opcional) pide a la IA una nota corta que narra el resultado — sin
+inventar números.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from nutriplan.application.prompts import load_prompt
 from nutriplan.domain.adapt_targets import AdaptationDecision, decision_from_targets
 from nutriplan.domain.errors import LLMError, ValidationError
 from nutriplan.domain.models import Client, NutritionTargets, WeightEntry
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import client_week_start
 from nutriplan.domain.week_close import RATINGS_REQUIRED, WeekClosure, is_valid_comment
 from nutriplan.ports.config_provider import ConfigProvider
 from nutriplan.ports.llm_client import LLMClient
@@ -60,10 +61,15 @@ class CheckinResult:
 
 
 async def needs_weekly_checkin(
-    *, client: Client, weights: WeightRepository, today: date | None = None
+    *,
+    client: Client,
+    weights: WeightRepository,
+    today: date | None = None,
+    week_start: date | None = None,
 ) -> bool:
     """True si falta el pesaje de la semana en curso."""
-    return await weights.for_week(client.id, iso_week_start(today)) is None
+    week = client_week_start(week_start, today)
+    return await weights.for_week(client.id, week) is None
 
 
 async def week_closure(
@@ -73,6 +79,7 @@ async def week_closure(
     ratings: RatingCounter,
     meals_in_plan: int = 0,
     today: date | None = None,
+    week_start: date | None = None,
 ) -> WeekClosure:
     """El estado del cierre: peso y estrellas de la semana vivida.
 
@@ -80,7 +87,8 @@ async def week_closure(
     Si el plan tiene menos platos que el tope, no pedimos más notas que comidas.
     """
     required = min(RATINGS_REQUIRED, meals_in_plan) if meals_in_plan > 0 else RATINGS_REQUIRED
-    entry = await weights.for_week(client.id, iso_week_start(today))
+    week = client_week_start(week_start, today)
+    entry = await weights.for_week(client.id, week)
     if client.active_plan_id is None:
         return WeekClosure(
             has_weight=entry is not None,
@@ -109,7 +117,7 @@ async def seed_weight_from_profile(
         tenant_id=client.tenant_id,
         client_id=client.id,
         weight_kg=client.weight_kg,
-        week_start=iso_week_start(today),
+        week_start=client_week_start(None, today),
         logged_at=datetime.now(UTC),
         note=None,
     )
@@ -129,6 +137,7 @@ async def submit_weekly_checkin(
     prompts_dir: Path | None = None,
     model: str = "",
     today: date | None = None,
+    week_start: date | None = None,
 ) -> CheckinResult:
     """Guarda el peso, adapta kcal si hay historial, y escribe nota opcional."""
     if not WEIGHT_MIN_KG <= weight_kg <= WEIGHT_MAX_KG:
@@ -136,7 +145,7 @@ async def submit_weekly_checkin(
             f"El peso debe estar entre {WEIGHT_MIN_KG:.0f} y {WEIGHT_MAX_KG:.0f} kg."
         )
 
-    week = iso_week_start(today)
+    week = client_week_start(week_start, today)
     previous_entry = await weights.previous_before(client.id, week)
     # Si re-envía la misma semana, el “anterior” sigue siendo el de antes.
     this_week = await weights.for_week(client.id, week)

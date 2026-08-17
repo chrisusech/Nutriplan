@@ -109,7 +109,7 @@ async def profile(
         aviso=request.query_params.get("aviso", ""),
         error=request.query_params.get("error", ""),
         can_regenerate=bool(gate and gate.allowed and is_super_user(request)),
-        waiting_sunday=bool(gate and gate.reason.startswith("El domingo")),
+        waiting_next_week=bool(gate and gate.waiting_next_week),
         unlock_hint=gate.reason if gate else "",
         needs_checkin=gate.needs_checkin if gate else False,
         membership=gate.membership if gate else None,

@@ -10,8 +10,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from nutriplan.domain.food_matching import match_food_names
-from nutriplan.domain.meal_template import Dish
+from nutriplan.domain.food_matching import match_food_names, normalize
+from nutriplan.domain.generation_rules import CARB_GROUP
+from nutriplan.domain.meal_template import Dish, _name_from_foods
 from nutriplan.domain.models import FoodItem, MealSlot
 
 _STOP = frozenset(
@@ -147,27 +148,57 @@ def _fix_typos(words: list[str]) -> list[str]:
     return out
 
 
+def _food_hay(food: FoodItem) -> str:
+    return " ".join([food.name_es.lower(), *food.aliases])
+
+
+def _is_fries(food: FoodItem) -> bool:
+    hay = _food_hay(food)
+    return "francesa" in hay or re.search(r"papa\w*.*frit|frit\w*.*papa", hay) is not None
+
+
+def _is_potato(food: FoodItem) -> bool:
+    hay = _food_hay(food)
+    return food.category in CARB_GROUP and _token_hit("papa", hay) and not _is_fries(food)
+
+
 def _catalog_has_fries(catalog: list[FoodItem]) -> bool:
-    for food in catalog:
-        hay = " ".join([food.name_es.lower(), *food.aliases])
-        if "francesa" in hay:
-            return True
-        if re.search(r"papa\w*.*frit|frit\w*.*papa", hay):
-            return True
-    return False
+    return any(_is_fries(food) for food in catalog)
 
 
-def asks_missing_fries(note: str, catalog: list[FoodItem]) -> bool:
-    """Papas a la francesa / fritas: si no están en el CSV, no se sustituye papa cocida."""
+def asks_for_fries(note: str) -> bool:
+    """Papas a la francesa / fritas: la persona pidió ese plato, no papa cocida."""
     blob = note.lower()
     words = set(_words(note))
     francesa = bool(words & _FRIES_WORDS) or "francesa" in blob
     papas_fritas = bool(words & {"papa", "papas"}) and bool(
         words & {"frita", "fritas", "frito", "fritos"}
     )
-    if not francesa and not papas_fritas:
-        return False
-    return not _catalog_has_fries(catalog)
+    return francesa or papas_fritas
+
+
+def asks_missing_fries(note: str, catalog: list[FoodItem]) -> bool:
+    """True si pidió fritas y el catálogo no las tiene. Ya no es un veto."""
+    return asks_for_fries(note) and not _catalog_has_fries(catalog)
+
+
+def closest_fries_or_potato(catalog: list[FoodItem]) -> FoodItem | None:
+    """Frita si está en el pool; si no, una papa. Prefiere lo listable."""
+    fries = [food for food in catalog if _is_fries(food)]
+    if fries:
+        fries.sort(key=lambda food: (not food.engine_default, food.name_es))
+        return fries[0]
+    papas = [food for food in catalog if _is_potato(food)]
+    if not papas:
+        return None
+    papas.sort(
+        key=lambda food: (
+            not food.engine_default,
+            "cocid" not in food.name_es.lower(),
+            food.name_es,
+        )
+    )
+    return papas[0]
 
 
 def parse_swap_note(note: str, catalog: list[FoodItem]) -> SwapIntent:
@@ -221,17 +252,22 @@ def has_technique(note: str) -> bool:
 
 
 def food_needles(note: str) -> list[str]:
-    """Alimentos que la nota pide, sin stopwords ni técnicas de cocina."""
+    """Alimentos que la nota pide, sin stopwords ni técnicas de cocina.
+
+    `papas` se singulariza a `papa` para que el matcher y la búsqueda profunda
+    peguen el alimento del catálogo, no un token que no existe.
+    """
     words = note.lower().replace(",", " ").replace(".", " ").split()
     out: list[str] = []
     seen: set[str] = set()
     for word in words:
-        if len(word) <= 2 or word in _STOP or word in _TECHNIQUE or word == "sin":
+        if word in _STOP or word in _TECHNIQUE or word == "sin":
             continue
-        if word in seen:
+        stem = normalize(word)
+        if len(stem) <= 2 or stem in _TECHNIQUE or stem in seen:
             continue
-        seen.add(word)
-        out.append(word)
+        seen.add(stem)
+        out.append(stem)
     return out
 
 
@@ -244,8 +280,11 @@ def _haystack(dish: Dish) -> str:
 
 
 def _token_hit(needle: str, hay: str) -> bool:
-    """`papa` pega papa/papas, no papaya."""
-    return re.search(rf"(?<!\w){re.escape(needle)}s?(?!\w)", hay) is not None
+    """`papa` pega papa/papas, no papaya. `papas` también pega papa."""
+    stem = normalize(needle)
+    if not stem:
+        return False
+    return re.search(rf"(?<!\w){re.escape(stem)}s?(?!\w)", hay) is not None
 
 
 def food_hits_needles(food: FoodItem, needles: list[str]) -> bool:
@@ -274,7 +313,11 @@ def foods_from_note(note: str, catalog: list[FoodItem]) -> list[FoodItem]:
     for size in (3, 2, 1):
         for i in range(len(words) - size + 1):
             phrases.append(" ".join(words[i : i + size]))
-    found = match_food_names(phrases, catalog)
+    listed = [food for food in catalog if food.engine_default]
+    found = match_food_names(phrases, listed or catalog)
+    if found.unrecognized:
+        extra = match_food_names(found.unrecognized, catalog)
+        found.matched.update(extra.matched)
     seen: set[object] = set()
     out: list[FoodItem] = []
     for food in found.matched.values():
@@ -282,7 +325,21 @@ def foods_from_note(note: str, catalog: list[FoodItem]) -> list[FoodItem]:
             continue
         seen.add(food.id)
         out.append(food)
-    return out
+    return with_fries_or_potato(note, out, catalog)
+
+
+def with_fries_or_potato(
+    note: str, mapped: list[FoodItem], catalog: list[FoodItem]
+) -> list[FoodItem]:
+    """Una papa (o frita), no dos. Si pidió francesa y no hay frita, papa."""
+    potatoes = [food for food in mapped if _is_potato(food) or _is_fries(food)]
+    if not asks_for_fries(note) and len(potatoes) <= 1:
+        return list(mapped)
+    keep = closest_fries_or_potato(catalog) or (potatoes[0] if potatoes else None)
+    rest = [food for food in mapped if not _is_potato(food) and not _is_fries(food)]
+    if keep is None:
+        return rest
+    return rest + [keep]
 
 
 def dish_from_foods(slot: MealSlot, foods: list[FoodItem], *, name: str = "") -> Dish | None:
@@ -290,7 +347,7 @@ def dish_from_foods(slot: MealSlot, foods: list[FoodItem], *, name: str = "") ->
     picked = foods[:4]
     if not picked:
         return None
-    title = name.strip()[:80] or " con ".join(f.name_es for f in picked)
+    title = name.strip()[:80] or _name_from_foods(tuple(picked))
     return Dish(
         template_id="wish",
         name=title,

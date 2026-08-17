@@ -109,35 +109,61 @@ const initViewport = () => {
 };
 
 export const initIap = () => {
-  const iap = plugins.NativePurchases;
+  const iap = plugins.NativePurchases
+    || (typeof cap?.registerPlugin === 'function' ? cap.registerPlugin('NativePurchases') : null);
   const jwsOf = (result) => {
-    const txn = result?.transaction ?? result;
-    return (txn?.jwsRepresentation || '').trim();
+    const raw = result?.jwsRepresentation
+      || result?.transaction?.jwsRepresentation
+      || result?.purchase?.jwsRepresentation
+      || '';
+    return String(raw).trim();
+  };
+  const purchasesOf = (listed) => {
+    if (!listed) return [];
+    if (Array.isArray(listed)) return listed;
+    return listed.purchases || listed.transactions || listed.results || [];
   };
   const postJws = (form, jws) => {
     const field = form?.querySelector('[data-iap-jws]');
-    if (!form || !field || !jws) return;
+    if (!form || !field || !jws) return false;
     field.value = jws;
     form.submit();
+    return true;
+  };
+  const showError = (text) => {
+    const box = document.querySelector('[data-iap-error]');
+    if (!box) return;
+    box.hidden = false;
+    box.textContent = text;
+  };
+  const cancelled = (err) => {
+    const code = String(err?.code || err?.errorCode || '');
+    const msg = String(err?.message || err || '').toLowerCase();
+    return /cancel|cancelled|canceled|user.?denied/i.test(`${code} ${msg}`);
   };
 
   const paintPrices = async () => {
+    const nodes = [...document.querySelectorAll('[data-iap-price]')];
+    if (!nodes.length) return;
+    const fallback = (el) => el.getAttribute('data-iap-fallback') || el.textContent;
     if (!isNative || !iap?.getProducts) return;
-    const ids = [...document.querySelectorAll('[data-iap]')]
-      .map((btn) => btn.dataset.iap)
-      .filter(Boolean);
-    if (!ids.length) return;
     try {
+      const ids = [...document.querySelectorAll('[data-iap]')]
+        .map((btn) => btn.dataset.iap)
+        .filter(Boolean);
       const { products } = await iap.getProducts({
         productIdentifiers: ids,
         productType: 'subs',
       });
-      (products || []).forEach((product) => {
-        const el = document.querySelector(`[data-iap-price="${product.identifier}"]`);
-        if (el && product.priceString) el.textContent = product.priceString;
+      const byId = Object.fromEntries(
+        (products || []).map((product) => [product.identifier, product]),
+      );
+      nodes.forEach((el) => {
+        const product = byId[el.getAttribute('data-iap-price') || ''];
+        el.textContent = product?.priceString || fallback(el);
       });
     } catch {
-      // Sin StoreKit el copy de la ficha se queda.
+      nodes.forEach((el) => { el.textContent = fallback(el); });
     }
   };
   paintPrices();
@@ -145,19 +171,32 @@ export const initIap = () => {
   document.querySelectorAll('[data-iap]').forEach((btn) => {
     if (btn.dataset.bound === '1') return;
     btn.dataset.bound = '1';
-    btn.addEventListener('click', async (event) => {
-      event.preventDefault();
-      if (!isNative || !iap?.purchaseProduct) return;
+    btn.addEventListener('click', async () => {
       const form = btn.closest('form');
       const productId = btn.dataset.iap;
+      if (!isNative || !iap?.purchaseProduct) {
+        showError('El cobro se abre en el iPhone, con Apple.');
+        return;
+      }
+      btn.disabled = true;
       try {
         const result = await iap.purchaseProduct({
           productIdentifier: productId,
           productType: 'subs',
+          quantity: 1,
         });
-        postJws(form, jwsOf(result));
-      } catch {
-        // Cancelar la hoja de Apple no es un error que mostrar.
+        if (!postJws(form, jwsOf(result))) {
+          showError('El pago se confirmó, pero no se pudo activar. Prueba Restaurar compras.');
+        }
+      } catch (err) {
+        if (!cancelled(err)) {
+          const detail = String(err?.message || err?.code || '').trim();
+          showError(detail
+            ? `No se pudo abrir el pago. ${detail}`
+            : 'No se pudo abrir el pago. Vuelve a intentarlo.');
+        }
+      } finally {
+        btn.disabled = false;
       }
     });
   });
@@ -166,18 +205,29 @@ export const initIap = () => {
   if (restoreBtn?.dataset.bound === '1') return;
   if (restoreBtn) restoreBtn.dataset.bound = '1';
   restoreBtn?.addEventListener('click', async () => {
-    if (!isNative || !iap?.restorePurchases) return;
-    const form = restoreBtn.closest('form');
+    if (!isNative || !iap?.restorePurchases) {
+      showError('Restaurar compras solo funciona en el iPhone.');
+      return;
+    }
+    restoreBtn.disabled = true;
     try {
-      await iap.restorePurchases();
+      const restored = await iap.restorePurchases();
       const listed = iap.getPurchases
         ? await iap.getPurchases({ onlyCurrentEntitlements: true })
-        : {};
-      const purchases = listed.purchases || listed.transactions || [];
-      const jws = purchases.map(jwsOf).find(Boolean) || '';
-      postJws(form, jws);
-    } catch {
-      // Sin compras que restaurar no hay nada que mostrar.
+        : restored;
+      const jws = purchasesOf(listed).map(jwsOf).find(Boolean)
+        || jwsOf(restored)
+        || '';
+      const form = restoreBtn.closest('form');
+      if (!postJws(form, jws)) {
+        showError('No hay una compra de Apple para restaurar en este iPhone.');
+      }
+    } catch (err) {
+      if (!cancelled(err)) {
+        showError('No se pudo restaurar la compra. Vuelve a intentarlo.');
+      }
+    } finally {
+      restoreBtn.disabled = false;
     }
   });
 };

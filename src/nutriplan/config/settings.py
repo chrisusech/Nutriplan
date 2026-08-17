@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     # se siembra al arrancar. Es la única cuenta que no sale del alta pública.
     admin_email: str = ""
     admin_password: str = ""
-    # El tick del domingo. En prod corre solo; en local hay que encenderlo.
+    # El tick que arma la siguiente tira. En prod corre solo; en local hay que encenderlo.
     auto_week_tick: bool = False
     # POST /internal/tick. Vacío = la ruta no existe.
     internal_tick_secret: str = ""

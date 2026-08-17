@@ -20,7 +20,9 @@ export const initStepper = () => {
   const fill = document.querySelector('[data-progress]');
   const count = document.querySelector('[data-count]');
   fill.dataset.of = String(steps.length);
-  let at = 0;
+  // Un error de guardado o de validación: el aviso ya está arriba; abrir el
+  // último paso (Crear mi menú) y no devolver a ¿cómo te llamas?.
+  let at = stepper.querySelector('.alert') ? steps.length - 1 : 0;
 
   /** Un paso está listo cuando sus campos obligatorios tienen algo dentro. */
   const completo = () => [...steps[at].querySelectorAll('input, select, textarea')]
@@ -78,9 +80,8 @@ export const initStepper = () => {
   }, true);
   back.addEventListener('click', () => {
     if (at === 0) {
-      // Salir del cuestionario, no de la cuenta: /login pintaba la bienvenida
-      // con la sesión todavía viva y parecía un cierre.
-      window.location.assign('/');
+      // /login con sesión viva rebota a / y / sin perfil vuelve aquí.
+      document.querySelector('[data-leave]')?.submit();
       return;
     }
     at = Math.max(at - 1, 0);

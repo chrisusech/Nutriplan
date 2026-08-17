@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Cierra tu semana{% endblock %}
+{% block title %}{% if membership and not membership.can_generate %}Tu resumen{% else %}Cierra tu semana{% endif %}{% endblock %}
 {% block page_class %}page-checkin{% endblock %}
 
 {% block head_lead %}
 <a class="back" href="/" aria-label="Volver"><span class="icon">arrow_back</span></a>
-<h1 class="app-title">{% if already %}Actualiza tu cierre{% else %}Cierra tu semana{% endif %}</h1>
+<h1 class="app-title">{% if membership and not membership.can_generate %}Tu resumen{% elif already %}Actualiza tu cierre{% else %}Cierra tu semana{% endif %}</h1>
 {% endblock %}
 
 {% block content %}
@@ -48,11 +48,11 @@
       <textarea id="comentario" name="comentario" rows="4" maxlength="1200"
                 placeholder="Qué te gustó, qué no volverías a comer, si te faltó tiempo para cocinar…">{{ last_comment or '' }}</textarea>
     </label>
-    <p class="muted">Opcional. Si lo escribes, lo leemos para la semana siguiente.</p>
+    <p class="muted">{% if membership and not membership.can_generate %}Opcional.{% else %}Opcional. Si lo escribes, lo leemos para la semana siguiente.{% endif %}</p>
     {% endif %}
 
     <button class="btn btn-primary btn-big btn-block" type="submit">
-      <span class="icon">check</span>Guardar y adaptar
+      <span class="icon">check</span>{% if membership and not membership.can_generate %}Guardar resumen{% else %}Guardar y adaptar{% endif %}
     </button>
   </form>
 

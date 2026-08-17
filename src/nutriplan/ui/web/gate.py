@@ -19,9 +19,12 @@ from nutriplan.application.membership import can_generate_week, membership_of
 from nutriplan.application.weekly_checkin import week_closure
 from nutriplan.domain.membership import MembershipState, unlimited_membership
 from nutriplan.domain.models import Client, PlanCycle
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import plan_is_live, today_bogota
 from nutriplan.domain.week_close import WeekClosure
 from nutriplan.ui.web.deps import acting_account, container_of, repos_of
+
+WAITING_NEXT_WEEK = "Al terminar tu semana preparamos el siguiente menú."
+PLAN_LOCKED = "Tu semana ya terminó. Activa tu plan para cambiar platos."
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,15 @@ class WeekGate:
     def needs_checkin(self) -> bool:
         return not self.closure.is_closed
 
+    @property
+    def waiting_next_week(self) -> bool:
+        return self.reason == WAITING_NEXT_WEEK
+
+
+def plan_mutable(plan: PlanCycle | None, today: date | None = None) -> bool:
+    """Cambiar plato o restaurante: solo mientras la tira de 7 días sigue viva."""
+    return plan is not None and plan_is_live(plan.week_start, today)
+
 
 async def week_gate(
     request: Request,
@@ -51,6 +63,7 @@ async def week_gate(
     Ese orden importa: a quien le falta cerrar la semana hay que pedirle que la
     cierre, no venderle un plan que aún no necesita.
     """
+    day = today or today_bogota()
     repos = repos_of(request, session)
     account = await acting_account(request, session)
     if account is None:
@@ -75,7 +88,8 @@ async def week_gate(
         weights=repos.weights,
         ratings=repos.ratings,
         meals_in_plan=meals,
-        today=today,
+        today=day,
+        week_start=plan.week_start if plan is not None else None,
     )
     membership = await membership_of(
         account=account,
@@ -86,21 +100,24 @@ async def week_gate(
     if not membership.unlimited and not closure.is_closed:
         return WeekGate(membership=membership, closure=closure, allowed=False, reason=closure.hint)
 
-    # Quien ya vive ESTA semana no regenera a mano: el domingo arma la siguiente.
-    if not membership.unlimited and plan is not None and plan.week_start == iso_week_start(today):
+    # Quien ya vive ESTA tira no regenera a mano: al terminar se arma la siguiente.
+    # Sin saldo esa frase miente: el tick no le genera nada.
+    live = plan is not None and plan_is_live(plan.week_start, day)
+    if membership.can_generate and not membership.unlimited and live:
         return WeekGate(
             membership=membership,
             closure=closure,
             allowed=False,
-            reason="El domingo preparamos tu siguiente menú.",
+            reason=WAITING_NEXT_WEEK,
         )
 
+    target = plan.week_start if live and plan is not None else day
     allowed, reason = await can_generate_week(
         account=account,
         client_id=client.id,
         memberships=container_of(request).membership_repo(session),
         plans=repos.plans,
         generations=JobWeekGenerations(repos.jobs),
-        week_start=iso_week_start(today),
+        week_start=target,
     )
     return WeekGate(membership=membership, closure=closure, allowed=allowed, reason=reason)

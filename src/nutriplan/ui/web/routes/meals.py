@@ -11,21 +11,13 @@ from nutriplan.adapters.llm.offline_engine import build_offline_engine
 from nutriplan.adapters.llm.template_selector import TemplateSelector
 from nutriplan.application.eating_out import apply_eating_out, resolve_dish
 from nutriplan.application.my_foods import add_food
-from nutriplan.application.swap_meal import swap_slot
-from nutriplan.application.swap_pool import pool_for_note, promoted_ids
-from nutriplan.application.swap_wish import interpret_swap_wish
+from nutriplan.application.swap_pool import promoted_ids
+from nutriplan.application.swap_resolve import resolve_swap
 from nutriplan.application.taste_profile import taste_profile_for
 from nutriplan.container import Repos
 from nutriplan.domain.errors import GenerationError, ValidationError
-from nutriplan.domain.models import Client, DayPlan, FoodItem, MealEntry, MealSlot, PlanCycle
+from nutriplan.domain.models import Client, DayPlan, MealEntry, MealSlot, PlanCycle
 from nutriplan.domain.restaurant import is_eating_out
-from nutriplan.domain.swap_note import (
-    dish_avoids_needles,
-    dish_from_foods,
-    foods_from_note,
-    parse_swap_note,
-    without_excluded,
-)
 from nutriplan.ui.web.deps import (
     account_id_of,
     container_of,
@@ -33,7 +25,8 @@ from nutriplan.ui.web.deps import (
     render,
     repos_of,
 )
-from nutriplan.ui.web.public_errors import SWAP_FAILED, SWAP_UNAVAILABLE, public_message
+from nutriplan.ui.web.gate import PLAN_LOCKED, plan_mutable
+from nutriplan.ui.web.public_errors import SWAP_FAILED, public_message
 
 router = APIRouter()
 
@@ -80,6 +73,8 @@ async def _day_context(
     meal = next((m for m in day.meals if m.slot is slot), None)
     if meal is None:
         raise ValidationError("Esa comida no está en tu día.")
+    if not plan_mutable(plan):
+        raise ValidationError(PLAN_LOCKED)
     return client, plan, day, meal, repos
 
 
@@ -212,8 +207,6 @@ async def swap_save(
             raise ValidationError("Todavía no tienes calorías calculadas.")
         wish = nota.strip()[:400]
         foods = await repos.foods.list_universe()
-        del_fondo: list[FoodItem] = []
-        foods_by_id = {f.id: f for f in foods}
         container = container_of(request)
         taste = await taste_profile_for(client=client, ratings=repos.ratings, signals=repos.taste)
         engine = build_offline_engine(
@@ -226,92 +219,32 @@ async def swap_save(
         )
         if not isinstance(engine, TemplateSelector):
             raise ValidationError("No hay otro plato que encaje en esa comida.")
-        today_ids = frozenset(
-            str(i.food_id) for m in day.meals if m.slot is not chosen for i in m.items if i.food_id
-        )
-        exclude = frozenset(filter(None, [meal.dish_key]))
-        pick = None
-        intent = parse_swap_note(wish, foods) if wish else None
-        if intent is not None and intent.missing_dish:
-            raise ValidationError(SWAP_UNAVAILABLE)
-        if intent is not None and intent.keep_same:
-            current = [
-                foods_by_id[item.food_id]
-                for item in meal.items
-                if item.food_id and item.food_id in foods_by_id
-            ]
-            kept = without_excluded(current, intent.exclude)
-            if intent.include_note.strip():
-                extra = foods_from_note(intent.include_note, foods)
-                seen = {food.id for food in kept}
-                kept.extend(food for food in extra if food.id not in seen)
-            if kept and {food.id for food in kept} != {food.id for food in current}:
-                pick = dish_from_foods(chosen, kept)
-        rank_note = wish
-        if intent is not None:
-            rank_note = "" if intent.keep_same else intent.include_note
-        if pick is None:
-            ranked = engine.rank_slot(
-                chosen, exclude_keys=exclude, today_ids=today_ids, note=rank_note
-            )
-            if intent is not None and intent.exclude:
-                ranked = [dish for dish in ranked if dish_avoids_needles(dish, intent.exclude)]
-            pick = ranked[0] if ranked else None
-        if pick is None and wish:
-            found = foods_from_note(rank_note, foods)
-            if intent is not None:
-                found = without_excluded(found, intent.exclude)
-            pick = dish_from_foods(chosen, found)
-        if pick is None and wish:
-            # Último recurso, y solo aquí: nada de lo que la persona ya come
-            # sirvió, así que se busca en el catálogo profundo lo que pidió.
-            # Ampliar el pool ANTES desequilibraría la resolución de una nota
-            # que el catálogo corto sí sabía resolver.
-            ancho = await pool_for_note(
-                note=rank_note or wish,
-                base=foods,
-                food_repo=repos.foods,
-                restrictions=client.restrictions,
-                banned=set(await repos.clients.list_banned_food_ids(client.id)),
-            )
-            del_fondo = ancho[len(foods) :]
-            if del_fondo:
-                foods = ancho
-                foods_by_id = {f.id: f for f in foods}
-                hallados = foods_from_note(rank_note or wish, foods)
-                if intent is not None:
-                    hallados = without_excluded(hallados, intent.exclude)
-                pick = dish_from_foods(chosen, hallados)
-        if pick is None and wish:
-            pick = await interpret_swap_wish(
-                note=wish,
-                slot=chosen,
-                allowed=foods,
-                llm=container.llm_client,
-                prompts_dir=container.settings.prompts_dir,
-                model=container.settings.llm_model_generate,
-            )
-        if pick is None:
-            raise ValidationError(
-                SWAP_FAILED if wish else "No hay otro plato que encaje en esa comida."
-            )
-        new_day = swap_slot(
-            day,
+        result = await resolve_swap(
+            day=day,
             slot=chosen,
-            pick=pick,
-            foods_by_id=foods_by_id,
+            meal=meal,
+            wish=wish,
+            foods=foods,
             daily=targets.daily,
             config=container.nutrition_config(client),
+            engine=engine,
+            food_repo=repos.foods,
+            restrictions=client.restrictions,
+            banned=set(await repos.clients.list_banned_food_ids(client.id)),
+            llm=container.llm_client,
+            prompts_dir=container.settings.prompts_dir,
+            model=container.settings.llm_model_generate,
         )
-        await repos.plans.update_day(plan.id, dia, new_day, mark_edited=True)
+        await repos.plans.update_day(plan.id, dia, result.day, mark_edited=True)
         # Lo que se trajo del fondo y acabó en el plato pasa a ser suyo: la
         # próxima vez el motor cuenta con ello sin que lo tenga que volver a
         # pedir. Solo a SU perfil — un cambio de plato no toca el catálogo.
-        usados = {food.id for food in pick.foods}
-        for food_id in promoted_ids(del_fondo, usados):
-            await add_food(client=client, food=foods_by_id[food_id], client_repo=repos.clients)
+        known = {food.id: food for food in (*foods, *result.extra_foods)}
+        usados = {food.id for food in result.pick.foods}
+        for food_id in promoted_ids(list(result.extra_foods), usados):
+            await add_food(client=client, food=known[food_id], client_repo=repos.clients)
     except ValidationError as exc:
         return _back_to_meal(dia, slot, error=str(exc))
-    except GenerationError as exc:
-        return _back_to_meal(dia, slot, error=public_message(exc))
+    except GenerationError:
+        return _back_to_meal(dia, slot, error=SWAP_FAILED)
     return _back_to_meal(dia, chosen.value)

@@ -35,6 +35,7 @@ document.addEventListener('htmx:afterSettle', (event) => {
     bootPage();
     return;
   }
+  if (target?.id === 'week-day') bootPage();
   if (savedY !== undefined) window.scrollTo(0, savedY);
 });
 

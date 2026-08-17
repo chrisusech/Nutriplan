@@ -66,7 +66,9 @@ async def interpret_swap_wish(
     model: str,
 ) -> Dish | None:
     """Traduce la nota a un plato. None si no hay IA o no se pudo leer."""
-    usable = [f for f in allowed if slot in f.meal_slots] or allowed
+    # El pool ya viene recortado (universo + búsqueda profunda). Filtrar por
+    # slot aquí tiraba las fritas del catálogo profundo antes de nombrarlas.
+    usable = allowed
     if llm is None or not model or not usable or not note.strip():
         return None
     try:

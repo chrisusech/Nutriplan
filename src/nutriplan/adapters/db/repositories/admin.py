@@ -8,7 +8,7 @@ datos de personas concretas, así que la ruta que lo usa está detrás del guard
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import exists, func, or_, select
@@ -57,6 +57,7 @@ class AutoWeekCandidate:
     client_id: UUID
     tenant_id: UUID
     user_id: UUID
+    closed_week: date
 
 
 class SqlAdminRepository:
@@ -181,10 +182,29 @@ class SqlAdminRepository:
             out.setdefault(r.client_id, []).append((_aware(r.created_at), r.week_start))
         return out
 
-    async def closed_without_next_plan(
+    async def closed_without_next_plan(self, *, today: date) -> list[AutoWeekCandidate]:
+        """Cerró (peso + estrellas) su tira y no tiene el menú de los 7 días siguientes.
+
+        Mira dos anclas: quien vive el último día de su tira (today = start+6)
+        y quien ya amaneció en el día 8 (today = start+7) y cerró tarde.
+        """
+        last_day_start = today - timedelta(days=6)
+        day_after_start = today - timedelta(days=7)
+        found: list[AutoWeekCandidate] = []
+        seen: set[UUID] = set()
+        for closed in (last_day_start, day_after_start):
+            for cand in await self._closed_missing(
+                closed_week=closed, target_week=closed + timedelta(days=7)
+            ):
+                if cand.client_id not in seen:
+                    seen.add(cand.client_id)
+                    found.append(cand)
+        return found
+
+    async def _closed_missing(
         self, *, closed_week: date, target_week: date
     ) -> list[AutoWeekCandidate]:
-        """Cerró (peso + estrellas) y no tiene menú del lunes objetivo."""
+        """Cerró esa tira y no tiene menú del `target_week`."""
         ya_tiene = exists(
             select(PlanCycleRow.id).where(
                 PlanCycleRow.client_id == ClientRow.id,
@@ -219,6 +239,11 @@ class SqlAdminRepository:
         )
         rows = (await self._s.execute(stmt)).all()
         return [
-            AutoWeekCandidate(client_id=r.id, tenant_id=r.tenant_id, user_id=r.user_id)
+            AutoWeekCandidate(
+                client_id=r.id,
+                tenant_id=r.tenant_id,
+                user_id=r.user_id,
+                closed_week=closed_week,
+            )
             for r in rows
         ]

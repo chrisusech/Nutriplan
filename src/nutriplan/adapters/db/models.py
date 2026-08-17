@@ -352,8 +352,7 @@ class PlanCycleRow(Base):
     tenant_id: Mapped[UUID] = mapped_column(Uuid, index=True)
     client_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("clients.id"), index=True)
     targets_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("nutrition_targets.id"))
-    # El lunes ISO al que pertenece este menú. Es la misma llave que usa
-    # weight_entries, así que el pesaje y el plan de una semana se encuentran.
+    # Primer día de la tira de 7. El pesaje y el plan de una semana se encuentran.
     week_start: Mapped[date] = mapped_column(Date, index=True)
     variant: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # El numero humano del plan: "Plan nutricional v3". `variant` es su gemelo tecnico

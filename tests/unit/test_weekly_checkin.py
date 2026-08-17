@@ -1,4 +1,4 @@
-"""Check-in semanal: gate, semana ISO y semilla de onboarding."""
+"""Check-in semanal: gate, tira de 7 días y semilla de onboarding."""
 
 from datetime import date, datetime
 from uuid import uuid4
@@ -8,7 +8,6 @@ import pytest
 from nutriplan.application.dish_recipes import RECIPE_PROMPT_VERSION, _prompt_for
 from nutriplan.application.weekly_checkin import (
     WEIGHT_MAX_KG,
-    iso_week_start,
     needs_weekly_checkin,
     seed_weight_from_profile,
     submit_weekly_checkin,
@@ -25,6 +24,7 @@ from nutriplan.domain.models import (
     MealSlot,
     Sex,
 )
+from nutriplan.domain.week import iso_week_start
 from nutriplan.domain.week_close import RATINGS_REQUIRED
 
 

@@ -33,7 +33,7 @@ from nutriplan.container import Container
 from nutriplan.domain.models import Client
 from nutriplan.domain.restaurant import is_eating_out
 from nutriplan.domain.taste import TasteProfile
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import plan_is_live, today_bogota
 from nutriplan.ports.job_repository import Job, JobStatus
 from nutriplan.ui.web.deps import (
     account_id_of,
@@ -230,7 +230,12 @@ async def start_generation(
     # congelado → mismo input_hash → mismo job DONE → la semana se «repite».
     previous = await repos.plans.list_for_client(client.id)
     variant = max((p.variant for p in previous), default=-1) + 1
-    week = iso_week_start()
+    actual = await repos.plans.get(client.active_plan_id) if client.active_plan_id else None
+    week = (
+        actual.week_start
+        if actual is not None and plan_is_live(actual.week_start)
+        else today_bogota()
+    )
     taste = await taste_profile_for(client=client, ratings=repos.ratings, signals=repos.taste)
     # La despensa entra en la clave del job por lo mismo que entra en la del plan:
     # marcar la nevera y volver a generar es OTRA generación, no la de antes.
@@ -319,7 +324,9 @@ async def meal_recipe(
     recipe = cached.get(meal.dish_key)
 
     # Al abrir el plato: si solo hay plantilla yaml, pedimos IA (prefer_ai).
-    if recipe is None or (container.llm_client is not None and recipe.source == "yaml"):
+    # Fuera de la tira no se gasta el modelo: se sirve lo ya guardado.
+    live = plan_is_live(plan.week_start)
+    if recipe is None or (live and container.llm_client is not None and recipe.source == "yaml"):
         ids = [i.food_id for i in meal.items if i.food_id]
         foods = {f.id: f for f in await repos.foods.get_by_ids(ids)}
         # Suelta el lock ANTES de hablar con el modelo: dos HTMX en paralelo
@@ -332,12 +339,12 @@ async def meal_recipe(
             meals=[meal],
             catalog=foods,
             repo=recipe_repo,
-            llm=container.llm_client,
+            llm=container.llm_client if live else None,
             prompts_dir=container.settings.prompts_dir,
             model=container.settings.llm_model_generate,
             static=static_recipes(container.meal_catalog),
             curated=list(container.recipe_catalog.recipes),
-            prefer_ai=True,
+            prefer_ai=live,
         )
         recipe = generated.get(meal.dish_key)
         await session.commit()

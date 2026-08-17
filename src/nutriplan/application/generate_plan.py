@@ -53,7 +53,7 @@ from nutriplan.domain.selection_schema import (
     resolve_selection_aliases,
 )
 from nutriplan.domain.taste import TasteProfile
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import today_bogota
 from nutriplan.ports.food_repository import FoodRepository
 from nutriplan.ports.llm_client import LLMClient
 from nutriplan.ports.plan_selector import OfflineEngineFactory
@@ -253,7 +253,7 @@ async def generate_cycle(
     recent_keys: frozenset[str] = frozenset(),
     recent_templates: frozenset[str] = frozenset(),
 ) -> PlanCycle:
-    week = week_start or iso_week_start()
+    week = week_start or today_bogota()
 
     feedback: str | None = None
     failures: list[str] = []
@@ -422,7 +422,7 @@ async def generate_plan_for_client(
     activate: bool = True,
 ) -> PlanCycle:
     """Orquesta el menú de la semana, de punta a punta."""
-    week = week_start or iso_week_start()
+    week = week_start or today_bogota()
     allowed = await resolve_allowed_foods(client, food_repo=food_repo, client_repo=client_repo)
     if not allowed:
         raise GenerationError(
@@ -460,8 +460,18 @@ async def generate_plan_for_client(
     # Lo que dice tener en casa ESTA semana. Sí entra en el input_hash: marcar la
     # nevera y regenerar tiene que dar otro menú, no el de la caché.
     on_hand = frozenset(await client_repo.list_pantry_food_ids(client.id, week))
-    recent_keys, recent_templates = dishes_of_previous_week(
-        await plan_repo.list_for_client(client.id), week
+    previous = await plan_repo.list_for_client(client.id)
+    recent_keys, recent_templates = dishes_of_previous_week(previous, week)
+    # El hash no incluye los platos de ESTA tira: si no, el primer menú
+    # invalidaría su propia caché y "regenerar con la misma variant" nunca
+    # devolvería el mismo plan. El selector sí los ve (recent_keys).
+    hash_keys = frozenset(
+        m.dish_key
+        for p in previous
+        if p.week_start < week
+        for d in p.days
+        for m in d.meals
+        if m.dish_key
     )
 
     input_hash = plan_cache_key(
@@ -477,7 +487,7 @@ async def generate_plan_for_client(
         select_foods=select_foods,
         refine_names=refine_names,
         on_hand=on_hand,
-        recent_keys=recent_keys,
+        recent_keys=hash_keys,
     )
     existing = await plan_repo.find_by_input_hash(input_hash)
     if existing:
@@ -521,8 +531,8 @@ async def generate_plan_for_client(
     # deja intactas las anteriores, que son el historial del seguimiento.
     await plan_repo.delete_draft_for_client(client.id, week_start=week)
     await plan_repo.add(cycle)
-    # El plan recién hecho es EL plan, salvo el tick del domingo: ese menú
-    # espera al lunes para no tapar el que todavía se come.
+    # El plan recién hecho es EL plan, salvo el tick del último día: ese menú
+    # espera al día 8 para no tapar el que todavía se come.
     if activate:
         await client_repo.set_active_plan(client.id, cycle.id)
     return cycle

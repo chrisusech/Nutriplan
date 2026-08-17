@@ -30,9 +30,11 @@
       {% endif %}
       <div class="day-hero-pills">
         <a class="pill" href="/compra"><span class="icon">shopping_cart</span>Lista de compra</a>
+        {% if plan_mutable %}
         <a class="pill" href="/menu/fuera?dia={{ dia }}&slot={{ day.fuera_slot }}">
           <span class="icon">restaurant</span>Voy a comer fuera
         </a>
+        {% endif %}
       </div>
     </div>
   </div>

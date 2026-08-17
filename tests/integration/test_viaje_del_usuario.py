@@ -136,16 +136,15 @@ def test_quien_ya_tiene_perfil_no_vuelve_a_pasar_por_el_onboarding(app) -> None:
 
 
 def test_sin_elegir_dia_abre_el_de_hoy(app) -> None:
-    from datetime import date
-
     _registrar(app)
     _onboarding(app)
     _generar(app)
     html = app.get("/").text
     assert 'data-habit-remind="1"' in html
     assert "day on today" in html
-    hoy = date.today().weekday()
-    assert f'href="/?dia={hoy}"' in html
+    assert 'href="/?dia=0"' in html
+    assert 'id="week-day"' in html
+    assert 'hx-target="#week-day"' in html
 
 
 def test_se_puede_mirar_cualquier_dia_de_la_semana(app) -> None:
@@ -522,6 +521,8 @@ def test_cambiar_un_plato_desde_la_semana(app) -> None:
     pagina = app.get("/menu/cambiar", params={"dia": 0, "slot": "cena"})
     assert pagina.status_code == 200
     assert "Cambiar este plato" in pagina.text
+    assert "cuadran" not in pagina.text
+    assert "las porciones del resto del día" in pagina.text
     antes = app.get("/", params={"dia": 0}).text
     resp = app.post(
         "/menu/cambiar",
@@ -553,6 +554,11 @@ def test_el_paywall_concede_semanas_con_una_compra_local(app) -> None:
     assert "nutriplan.monthly" in pagina.text
     assert "El cobro se hace en el iPhone" in pagina.text
     assert "Restaurar compras" in pagina.text
+    assert "Suscribirme" in pagina.text
+    assert "$5 USD" in pagina.text
+    assert "$30 USD" in pagina.text
+    assert "Continuar con Apple" not in pagina.text
+    assert "Tu menú de la semana" in pagina.text
     resp = app.post(
         "/plan/activar",
         data={
@@ -676,3 +682,79 @@ def test_sin_menu_comer_fuera_vuelve_a_casa(app) -> None:
     resp = app.get("/menu/fuera", follow_redirects=False)
     assert resp.status_code == 303
     assert "error=" in resp.headers["location"]
+
+
+def test_durante_la_semana_de_prueba_si_puede_cambiar_un_plato(app) -> None:
+    """Gastó el saldo al generar, pero la tira de 7 días sigue viva."""
+    _registrar(app)
+    _onboarding(app)
+    _generar(app)
+    semana = app.get("/").text
+    assert "Cambiar este plato" in semana
+    assert "Voy a comer fuera" in semana
+    pagina = app.get("/menu/cambiar", params={"dia": 0, "slot": "cena"})
+    assert pagina.status_code == 200
+
+
+def _vencer_tira(container: Container) -> None:
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from nutriplan.adapters.db.models import PlanCycleRow
+    from nutriplan.domain.week import today_bogota
+
+    async def _mover() -> None:
+        async with container.session_factory() as session:
+            row = (await session.execute(select(PlanCycleRow))).scalar_one()
+            row.week_start = today_bogota() - timedelta(days=8)
+            await session.commit()
+
+    asyncio.run(_mover())
+
+
+def test_al_acabar_la_semana_de_prueba_no_cambia_platos(app, container) -> None:
+    """El menú se queda para leer y marcar comido; plato y restaurante se cierran."""
+    from urllib.parse import unquote
+
+    from nutriplan.ui.web.gate import PLAN_LOCKED
+
+    _registrar(app)
+    _onboarding(app)
+    _generar(app)
+    _vencer_tira(container)
+
+    semana = app.get("/").text
+    assert "Cambiar este plato" not in semana
+    assert "Voy a comer fuera" not in semana
+    assert 'hx-post="/menu/comi"' in semana
+
+    cambiar = app.post(
+        "/menu/cambiar",
+        data={"dia": 0, "slot": "cena", "nota": "pollo"},
+        follow_redirects=False,
+    )
+    assert cambiar.status_code == 303
+    assert PLAN_LOCKED in unquote(cambiar.headers.get("location") or "")
+
+    fuera = app.post(
+        "/menu/fuera",
+        data={
+            "dia": 0,
+            "slot": "cena",
+            "restaurant_id": "dominos",
+            "dish_id": "pepperoni",
+            "servings": "1",
+        },
+        follow_redirects=False,
+    )
+    assert fuera.status_code == 303
+    assert PLAN_LOCKED in unquote(fuera.headers.get("location") or "")
+
+    comi = app.post(
+        "/menu/comi",
+        data={"dia": "0", "slot": "desayuno", "eaten": "1"},
+        follow_redirects=False,
+    )
+    assert comi.status_code == 303
+    assert PLAN_LOCKED not in unquote(comi.headers.get("location") or "")

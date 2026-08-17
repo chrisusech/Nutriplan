@@ -131,12 +131,11 @@ def test_si_el_catalogo_no_tiene_el_plato_la_ia_nombra_alimentos() -> None:
     from nutriplan.domain.critique import food_aliases
 
     foods = list(catalog_by_name().values())
-    usable = [f for f in foods if MealSlot.LUNCH in f.meal_slots] or foods
-    aliases = food_aliases(usable)
+    aliases = food_aliases(foods)
     by_id = {fid: alias for alias, fid in aliases.items()}
     picked = []
     for name in ("pechuga de pollo", "aguacate", "papa cocida"):
-        food = next(f for f in usable if f.name_es.lower() == name)
+        food = next(f for f in foods if f.name_es.lower() == name)
         picked.append(by_id[food.id])
 
     class _LLM:
@@ -282,9 +281,164 @@ def test_lo_mismo_sin_pan_entiende_la_negacion_y_el_typo() -> None:
     assert intent.missing_dish is False
 
 
+class _EmptyDeep:
+    async def search_deep(self, query: str, category: object = None, limit: int = 30) -> list:
+        return []
+
+
+def _almuerzo(wish: str, *, llm: object | None = None, engine: object | None = None):
+    import asyncio
+
+    from nutriplan.application.swap_resolve import resolve_swap
+
+    plan, _foods, _ = build_fixed_plan()
+    lunes = next(d for d in plan.days if d.day_index == 0)
+    meal = next(m for m in lunes.meals if m.slot is MealSlot.LUNCH)
+    foods = list(catalog_by_name().values())
+    return asyncio.run(
+        resolve_swap(
+            day=lunes,
+            slot=MealSlot.LUNCH,
+            meal=meal,
+            wish=wish,
+            foods=foods,
+            daily=DAILY,
+            config=_config().for_slots([m.slot for m in lunes.meals]),
+            engine=engine or _selector(),
+            food_repo=_EmptyDeep(),  # type: ignore[arg-type]
+            restrictions=[],
+            llm=llm,  # type: ignore[arg-type]
+            prompts_dir=ROOT / "prompts",
+            model="test" if llm is not None else "",
+        )
+    )
+
+
 def test_papas_a_la_francesa_no_estan_en_el_catalogo() -> None:
+    """Sin fritas en el CSV: missing_dish es un dato, no un veto."""
     from nutriplan.domain.swap_note import parse_swap_note
+    from nutriplan.ui.web.public_errors import SWAP_UNAVAILABLE
 
     foods = list(catalog_by_name().values())
     intent = parse_swap_note("Carne con papas a la francesa", foods)
     assert intent.missing_dish is True
+    result = _almuerzo("Carne con papas a la francesa")
+    lunch = next(m for m in result.day.meals if m.slot is MealSlot.LUNCH)
+    hay = " ".join([lunch.dish_name or "", *[f.name_es.lower() for f in result.pick.foods]])
+    assert "papa" in hay.lower()
+    assert SWAP_UNAVAILABLE not in hay
+
+
+def test_pollo_con_papas_a_la_francesa_sale_un_almuerzo() -> None:
+    """Sin LLM: pollo + una papa, título de menú, el día se reporciona."""
+    from nutriplan.ui.web.public_errors import GEN_FAILED, SWAP_UNAVAILABLE
+
+    result = _almuerzo("pollo con papas a la francesa")
+    lunch = next(m for m in result.day.meals if m.slot is MealSlot.LUNCH)
+    hay = " ".join(f.name_es.lower() for f in result.pick.foods)
+    assert "pollo" in hay
+    assert hay.count("papa") == 1
+    title = (lunch.dish_name or "").lower()
+    assert title.count("papa") == 1
+    assert "cocida" not in title
+    assert lunch.items
+    assert SWAP_UNAVAILABLE not in title
+    assert "añada carbohidratos" not in title
+    assert GEN_FAILED not in title
+    assert len(result.day.meals) == len(
+        next(d for d in build_fixed_plan()[0].days if d.day_index == 0).meals
+    )
+
+
+def test_la_nota_no_busca_un_plato_de_plantilla() -> None:
+    """Lo que escribe la persona se porciona; no se busca un plato del YAML."""
+    order: list[str] = []
+
+    class _Rank:
+        def rank_slot(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            order.append("rank")
+            return []
+
+    class _LLM:
+        async def extract(self, *, system: str, text: str, schema: type, model: str):  # type: ignore[no-untyped-def]
+            order.append("ia")
+            raise AssertionError("el código ya mapeó la frase; no hace falta la IA")
+
+        async def select_plan(self, **kwargs: object):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+        def pop_usage(self) -> dict[str, int]:
+            return {}
+
+    result = _almuerzo("Quisiera papas a la francesa con carne", llm=_LLM(), engine=_Rank())
+    assert order == []
+    hay = " ".join(f.name_es.lower() for f in result.pick.foods)
+    assert "carne" in hay or "res" in hay
+    assert hay.count("papa") == 1
+    title = (result.pick.name or "").lower()
+    assert "papa con" not in title
+    assert title.count("papa") == 1
+
+
+def test_la_ia_entra_si_el_codigo_no_nombra_alimentos() -> None:
+    """Sin coincidencia en el catálogo, la IA elige alias. Sin plantilla."""
+    from nutriplan.domain.critique import food_aliases
+
+    foods = list(catalog_by_name().values())
+    aliases = food_aliases(foods)
+    by_id = {fid: alias for alias, fid in aliases.items()}
+    picked = []
+    for name in ("pechuga de pollo", "papa cocida"):
+        food = next(f for f in foods if f.name_es.lower() == name)
+        picked.append(by_id[food.id])
+    order: list[str] = []
+
+    class _Rank:
+        def rank_slot(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            order.append("rank")
+            return []
+
+    class _LLM:
+        async def extract(self, *, system: str, text: str, schema: type, model: str):  # type: ignore[no-untyped-def]
+            order.append("ia")
+            return schema.model_validate(
+                {
+                    "food_ids": picked,
+                    "dish_name": "Pollo con papa",
+                    "free_salad": True,
+                }
+            )
+
+        async def select_plan(self, **kwargs: object):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+        def pop_usage(self) -> dict[str, int]:
+            return {}
+
+    result = _almuerzo("unicornio azul", llm=_LLM(), engine=_Rank())
+    assert order == ["ia"]
+    hay = " ".join(f.name_es.lower() for f in result.pick.foods)
+    assert "pollo" in hay
+    assert "papa" in hay
+
+
+def test_si_el_solver_falla_no_se_cita_el_catalogo_del_admin() -> None:
+    from unittest.mock import patch
+
+    import pytest
+
+    from nutriplan.domain.errors import GenerationError, ValidationError
+    from nutriplan.ui.web.public_errors import GEN_FAILED, SWAP_FAILED
+
+    with (
+        patch(
+            "nutriplan.application.swap_resolve.swap_slot",
+            side_effect=GenerationError("Slot almuerzo: sin fuente de carbohidrato"),
+        ),
+        pytest.raises(ValidationError) as caught,
+    ):
+        _almuerzo("pollo con papa")
+    assert str(caught.value) == SWAP_FAILED
+    assert "catálogo" not in str(caught.value).lower()
+    assert "añada" not in str(caught.value).lower()
+    assert GEN_FAILED != str(caught.value)

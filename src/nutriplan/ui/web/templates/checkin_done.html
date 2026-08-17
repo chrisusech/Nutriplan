@@ -11,7 +11,9 @@
   <span class="ready-badge"><span class="icon">check_circle</span></span>
   <h2>Listo — {{ perfil.weight_kg }} kg</h2>
 
-  {% if decision %}
+  {% if membership and not membership.can_generate %}
+  <p class="muted">Guardamos tu peso y tus notas. Activa tu plan y accede a semanas ilimitadas.</p>
+  {% elif decision %}
   <p class="muted">
     {% if decision.action.value == "lower" %}
       Bajamos tu plan a <strong>{{ decision.new_kcal|int }} kcal</strong>
@@ -31,11 +33,13 @@
   {% if note %}<p class="muted checkin-note">{{ note }}</p>{% endif %}
 
   {% if interpreted %}
-  <p class="muted">Leímos tus comentarios: la semana siguiente los tiene en cuenta.</p>
+  <p class="muted">{% if membership and membership.can_generate %}Leímos tus comentarios: la semana siguiente los tiene en cuenta.{% else %}Leímos tus comentarios.{% endif %}</p>
   {% endif %}
 
   {% with n=en_casa_n, volver=pantry_volver|default('/listo') %}{% include "partials/pantry_link.html" %}{% endwith %}
-  {% if not perfil.active_plan_id or role == 'super_user' %}
+  {% if membership and not membership.can_generate %}
+  <a class="btn btn-primary btn-big btn-block" href="/plan">Activar mi plan</a>
+  {% elif not perfil.active_plan_id or role == 'super_user' %}
   <form method="post" action="/menu/generar" hx-post="/menu/generar"
         hx-target="this" hx-swap="outerHTML">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
@@ -44,7 +48,7 @@
     </button>
   </form>
   {% else %}
-  <p class="muted">El domingo preparamos tu siguiente menú.</p>
+  <p class="muted">Al terminar tu semana preparamos el siguiente menú.</p>
   {% endif %}
   <a class="btn btn-ghost" href="/">Volver a mi semana</a>
 </section>

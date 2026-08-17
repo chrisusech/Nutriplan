@@ -219,13 +219,13 @@ export const initRecipes = () => {
       }
       return;
     }
-    const form = target?.matches?.('.meal-check')
-      ? target
-      : event.detail?.elt?.closest?.('.meal-check');
-    if (form) {
-      form.closest('details.meal')?.classList.toggle('eaten', !!form.querySelector('.btn.on'));
-      pintaHero(form);
-    }
+    // detail.target es el form que se envió (kcal=0). El nodo que se acabó de
+    // asentar es event.target: el form nuevo, o el anillo OOB. Pintar el viejo
+    // dejaba "0 de X kcal" hasta cambiar de día.
+    const form = event.target;
+    if (!form?.matches?.('.meal-check')) return;
+    form.closest('details.meal')?.classList.toggle('eaten', !!form.querySelector('.btn.on'));
+    pintaHero(form);
   });
 
   for (const meal of document.querySelectorAll('details.meal[open]')) {

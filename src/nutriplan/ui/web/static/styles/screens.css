@@ -416,3 +416,55 @@ fieldset.field legend {
   color: var(--ink-2);
   text-transform: none; letter-spacing: normal;
 }
+
+/* --- Paywall --------------------------------------------------------------- */
+
+.paywall { display: flex; flex-direction: column; gap: var(--s-5); }
+.paywall-hero { text-align: center; padding-top: var(--s-2); }
+.paywall-hero h2 {
+  margin: var(--s-4) 0 var(--s-3);
+  font: 800 var(--t-xl) Poppins, sans-serif;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.paywall-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+.paywall-facts li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--card);
+  font: 600 var(--t-sm) Poppins, sans-serif;
+}
+.paywall-facts .icon { color: var(--brand); }
+.paywall-sku { display: flex; flex-direction: column; gap: var(--s-3); }
+.paywall-sku h3 { margin: 0; font: 700 var(--t-lg) Poppins, sans-serif; }
+.paywall-price { margin: 0; font: 700 var(--t-md) Poppins, sans-serif; color: var(--ink); }
+.paywall-sku-featured { border: 1.5px solid var(--brand-line); }
+.paywall-badge {
+  margin: 0;
+  align-self: flex-start;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: var(--on-brand);
+  font: 700 var(--t-xs) Poppins, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.paywall-legal { font-size: var(--t-sm); line-height: 1.5; }
+.paywall-restore {
+  display: block;
+  margin: var(--s-2) auto 0;
+  color: var(--muted);
+  font: 600 var(--t-sm) Poppins, sans-serif;
+}
+.paywall-native { flex-direction: column; gap: var(--s-4); }
+html[data-native] .paywall-native { display: flex; }

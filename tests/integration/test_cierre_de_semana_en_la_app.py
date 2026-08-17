@@ -68,6 +68,22 @@ def _generar(client: TestClient) -> None:
     pytest.fail("la generación no terminó dentro del timeout")
 
 
+def _saldo(container: Container) -> None:
+    import asyncio
+
+    from nutriplan.application.membership import grant_weeks
+
+    async def _grant() -> None:
+        async with container.session_factory() as session:
+            auth = container.auth_repo(session)
+            account = await auth.get_by_email_any_provider("ana@correo.com")
+            assert account is not None
+            await grant_weeks(account=account, memberships=container.membership_repo(session))
+            await session.commit()
+
+    asyncio.run(_grant())
+
+
 def _calificar(client: TestClient, n: int = 5) -> None:
     slots = ["desayuno", "snack_am", "almuerzo", "snack_pm", "cena"]
     for slot in slots[:n]:
@@ -139,9 +155,34 @@ def test_un_peso_imposible_no_cierra_la_semana(app) -> None:
     assert "peso" in resp.text.lower()
 
 
-def test_al_cerrar_la_semana_espera_al_domingo(app) -> None:
-    """Cerrar no regenera: el domingo arma la siguiente."""
+def test_sin_semanas_no_promete_la_siguiente(app) -> None:
+    """Gastó la de prueba: ni 'al terminar' ni cerrar-para-generar."""
     _generar(app)
+    semana = app.get("/").text
+    assert "Activar mi plan" in semana
+    assert "Ver resumen" in semana
+    assert "Cerrar mi semana" not in semana
+    assert "Al terminar tu semana preparamos el siguiente menú" not in semana
+    assert "Para tu semana siguiente" not in semana
+    assert "checkin-banner" not in semana
+    _calificar(app)
+    app.post(
+        "/check-in",
+        data={"weight_kg": "61.4", "comentario": ""},
+        follow_redirects=False,
+    )
+    listo = app.get("/listo").text
+    assert "Guardamos tu peso y tus notas" in listo
+    assert "Activa tu plan" in listo
+    assert 'href="/plan"' in listo
+    assert "Al terminar tu semana preparamos el siguiente menú" not in listo
+    assert "Genera tu menú cuando quieras" not in listo
+
+
+def test_al_cerrar_la_semana_espera_al_siguiente_menu(app, container) -> None:
+    """Cerrar no regenera: al terminar la tira se arma la siguiente."""
+    _generar(app)
+    _saldo(container)
     _calificar(app)
 
     cerrada = app.post(
@@ -155,11 +196,11 @@ def test_al_cerrar_la_semana_espera_al_domingo(app) -> None:
     assert cerrada.status_code == 303
     assert cerrada.headers["location"] == "/listo"
     listo = app.get("/listo").text
-    assert "El domingo preparamos tu siguiente menú" in listo
+    assert "Al terminar tu semana preparamos el siguiente menú" in listo
     assert "Generar mi plan" not in listo
     semana = app.get("/").text
     assert "Generar otra semana" not in semana
-    assert "El domingo preparamos tu siguiente menú" in semana
+    assert "Al terminar tu semana preparamos el siguiente menú" in semana
 
 
 def test_lo_que_escribio_queda_guardado_para_la_semana_siguiente(app) -> None:
@@ -173,24 +214,24 @@ def test_lo_que_escribio_queda_guardado_para_la_semana_siguiente(app) -> None:
     assert "El pescado no lo repetiría" in app.get("/progreso").text
 
 
-def test_cerrar_no_deja_regenerar_esta_semana_a_mano(app) -> None:
+def test_cerrar_no_deja_regenerar_esta_semana_a_mano(app, container) -> None:
     """El botón era una trampa: rehace el menú que todavía se come."""
     _generar(app)
+    _saldo(container)
     _calificar(app)
     app.post("/check-in", data={"weight_kg": "61.4", "comentario": "Todo bien esta semana"})
     bloqueada = app.post("/menu/generar")
-    assert "domingo" in bloqueada.text.lower()
+    assert "terminar tu semana" in bloqueada.text.lower()
 
 
-def test_el_tick_del_domingo_arma_la_siguiente_si_ya_cerro(app, container) -> None:
-    """Cerró, tiene saldo, y el domingo no toca el menú que todavía come."""
+def test_el_tick_del_ultimo_dia_arma_la_siguiente_si_ya_cerro(app, container) -> None:
+    """Cerró, tiene saldo, y el último día no toca el menú que todavía come."""
     import asyncio
     from datetime import datetime, timedelta
 
     from nutriplan.application.auto_week import run_auto_week
     from nutriplan.application.membership import grant_weeks
     from nutriplan.domain.auto_week import BOGOTA
-    from nutriplan.domain.week import iso_week_start
 
     _generar(app)
     _calificar(app)
@@ -203,13 +244,16 @@ def test_el_tick_del_domingo_arma_la_siguiente_si_ya_cerro(app, container) -> No
             assert account is not None
             await grant_weeks(account=account, memberships=container.membership_repo(session))
             await session.commit()
-        today = datetime.now(BOGOTA).date()
-        sunday = today + timedelta(days=(6 - today.weekday()))
-        when = datetime(sunday.year, sunday.month, sunday.day, 19, 0, tzinfo=BOGOTA)
+            repos = container.repos(session, account.tenant_id)
+            client = await repos.clients.get_by_user(account.id)
+            assert client is not None
+            activo = await repos.plans.get(client.active_plan_id)
+            assert activo is not None
+            start = activo.week_start
+        last = start + timedelta(days=6)
+        when = datetime(last.year, last.month, last.day, 19, 0, tzinfo=BOGOTA)
         n = await run_auto_week(container, when=when, force=True)
-        cerrada = iso_week_start(today)
-        objetivo = cerrada + timedelta(days=7)
-        return n, cerrada, objetivo
+        return n, start, start + timedelta(days=7)
 
     n, esta, siguiente = asyncio.run(_saldo_y_tick())
     assert n == 1
@@ -238,14 +282,25 @@ def test_sin_cerrar_el_tick_no_inventa_un_menu(app, container) -> None:
     from nutriplan.domain.auto_week import BOGOTA
 
     _generar(app)
-    today = datetime.now(BOGOTA).date()
-    sunday = today + timedelta(days=(6 - today.weekday()))
-    when = datetime(sunday.year, sunday.month, sunday.day, 19, 0, tzinfo=BOGOTA)
-    assert asyncio.run(run_auto_week(container, when=when, force=True)) == 0
+
+    async def _tick() -> int:
+        async with container.session_factory() as session:
+            account = await container.auth_repo(session).get_by_email_any_provider("ana@correo.com")
+            assert account is not None
+            repos = container.repos(session, account.tenant_id)
+            client = await repos.clients.get_by_user(account.id)
+            assert client is not None
+            activo = await repos.plans.get(client.active_plan_id)
+            assert activo is not None
+            last = activo.week_start + timedelta(days=6)
+        when = datetime(last.year, last.month, last.day, 19, 0, tzinfo=BOGOTA)
+        return await run_auto_week(container, when=when, force=True)
+
+    assert asyncio.run(_tick()) == 0
 
 
 def test_el_comentario_sin_estrellas_no_arma_la_semana(app, container) -> None:
-    """El domingo mira el mismo cierre que la UI: peso no basta, ni la frase."""
+    """El tick mira el mismo cierre que la UI: peso no basta, ni la frase."""
     import asyncio
     from datetime import datetime, timedelta
 
@@ -266,9 +321,13 @@ def test_el_comentario_sin_estrellas_no_arma_la_semana(app, container) -> None:
             assert account is not None
             await grant_weeks(account=account, memberships=container.membership_repo(session))
             await session.commit()
-        today = datetime.now(BOGOTA).date()
-        sunday = today + timedelta(days=(6 - today.weekday()))
-        when = datetime(sunday.year, sunday.month, sunday.day, 19, 0, tzinfo=BOGOTA)
+            repos = container.repos(session, account.tenant_id)
+            client = await repos.clients.get_by_user(account.id)
+            assert client is not None
+            activo = await repos.plans.get(client.active_plan_id)
+            assert activo is not None
+            last = activo.week_start + timedelta(days=6)
+        when = datetime(last.year, last.month, last.day, 19, 0, tzinfo=BOGOTA)
         return await run_auto_week(container, when=when, force=True)
 
     assert asyncio.run(_saldo_y_tick()) == 0

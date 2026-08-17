@@ -10,13 +10,13 @@
 {% endblock %}
 
 {% block content %}
-<p class="muted">Hoy te toca {{ plato or 'este plato' }}. Dinos qué quieres
-  distinto y elegimos entre platos que sí cuadran.</p>
+<p class="muted">Hoy te toca {{ plato or 'este plato' }}. Escribe lo que te
+  gustaría: ajustamos este plato y las porciones del resto del día.</p>
 
 <form method="post" action="/menu/cambiar" class="onb-form"
       data-wait-plate
-      data-wait-title="Buscando tu plato…"
-      data-wait-msg="Interpretamos lo que pediste y recuadramos el día.">
+      data-wait-title="Acomodando tu plato…"
+      data-wait-msg="Lo que pediste entra en esta comida y el resto del día se reajusta.">
   <input type="hidden" name="_csrf" value="{{ csrf_token }}">
   <input type="hidden" name="dia" value="{{ dia }}">
   <input type="hidden" name="slot" value="{{ slot }}">

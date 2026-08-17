@@ -18,7 +18,7 @@ from nutriplan.config.settings import Settings
 from nutriplan.container import Container
 from nutriplan.domain.membership import MAX_REGENERATIONS_PER_WEEK
 from nutriplan.domain.models import MealSlot
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import today_bogota
 from nutriplan.ui.web.app import create_app
 from nutriplan.ui.web.routes import menu as menu_mod
 
@@ -162,7 +162,7 @@ def test_rehacer_la_semana_sin_parar_acaba_pidiendo_esperar(app, container, lanz
     queda uno. Los intentos viven en los jobs.
     """
     client_id, tenant_id = _perfil(container)
-    semana = iso_week_start()
+    semana = today_bogota()
 
     async def _sembrar(session):
         ahora = datetime.now(UTC)
@@ -189,7 +189,7 @@ def test_rehacer_la_semana_sin_parar_acaba_pidiendo_esperar(app, container, lanz
 def test_los_intentos_de_otra_semana_no_gastan_los_de_esta(app, container, lanzamientos) -> None:
     """La semana va dentro de la clave justamente para esto."""
     client_id, tenant_id = _perfil(container)
-    otra = iso_week_start() - timedelta(days=7)
+    otra = today_bogota() - timedelta(days=7)
 
     async def _sembrar(session):
         ahora = datetime.now(UTC)
@@ -216,5 +216,5 @@ def test_la_clave_del_job_lleva_la_semana_dentro(app, container) -> None:
     """Sin la semana en la clave no habría de dónde contar los intentos."""
     app.post("/menu/generar")
     fila = _unico_job(container)
-    esperado = f"gen:{_client_id(container)}:{iso_week_start().isoformat()}:"
+    esperado = f"gen:{_client_id(container)}:{today_bogota().isoformat()}:"
     assert fila.idempotency_key.startswith(esperado)

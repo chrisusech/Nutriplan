@@ -67,8 +67,8 @@ class WeekClosure:
         if not pending:
             return ""
         if len(pending) == 1:
-            return f"Para tu semana siguiente te falta {pending[0]}."
-        return "Para tu semana siguiente te falta: " + "; ".join(pending) + "."
+            return f"Para el resumen te falta {pending[0]}."
+        return "Para el resumen te falta: " + "; ".join(pending) + "."
 
 
 def is_valid_comment(text: str | None) -> bool:

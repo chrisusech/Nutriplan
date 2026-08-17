@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import object_session
 
 from nutriplan.adapters.db.models import (
     DayPlanRow,
@@ -71,14 +72,20 @@ class SqlPlanRepository:
         *,
         preserve_ids: dict[UUID | None, int] | None = None,
         meal_entry_id: int | None = None,
+        taken_ids: set[int] | None = None,
     ) -> list[MealItemRow]:
         preserve_ids = preserve_ids or {}
+        taken_ids = taken_ids if taken_ids is not None else set()
         rows: list[MealItemRow] = []
         for item in items:
             key = item.food_id
             item_id = item.id
             if item_id is None and key in preserve_ids:
                 item_id = preserve_ids[key]
+            if item_id is not None and item_id in taken_ids:
+                item_id = None
+            if item_id is not None:
+                taken_ids.add(item_id)
             row_kwargs: dict[str, Any] = {
                 "tenant_id": self._tenant,
                 "position": item.position,
@@ -223,7 +230,10 @@ class SqlPlanRepository:
         *,
         mark_edited: bool = False,
     ) -> None:
-        """Reescribe un solo día preservando ids de meal_entries e items que no cambiaron."""
+        """Reescribe un solo día. Borra en SQL (no en el identity map) para que
+        un segundo cambio el mismo día no reinserté `meal_items.id` que siguen
+        vivos: el cascade ORM + reutilizar PK choca UNIQUE en SQLite.
+        """
         row = await self._row(plan_id)
         if row is None:
             raise TenantIsolationError("Plan inexistente para este tenant")
@@ -239,12 +249,11 @@ class SqlPlanRepository:
                 slot = MealSlot(existing_meal.slot)
                 preserve_meals[slot] = existing_meal.id
                 preserve_items[slot] = {item.food_id: item.id for item in existing_meal.items}
-
-        if existing is not None:
-            await self._s.delete(existing)
-            await self._s.flush()
+            await self._wipe_day(existing)
+            await self._s.refresh(row, ["days"])
 
         meal_rows: list[MealEntryRow] = []
+        taken_item_ids: set[int] = set()
         for i, day_meal in enumerate(day.meals):
             meal_id = day_meal.id or preserve_meals.get(day_meal.slot)
             entry = MealEntryRow(
@@ -263,6 +272,7 @@ class SqlPlanRepository:
                 items=self._item_rows(
                     day_meal.items,
                     preserve_ids=preserve_items.get(day_meal.slot, {}),
+                    taken_ids=taken_item_ids,
                 ),
             )
             meal_rows.append(entry)
@@ -282,6 +292,27 @@ class SqlPlanRepository:
             row.edit_count = (row.edit_count or 0) + 1
 
         await self._s.flush()
+
+    async def _wipe_day(self, existing: DayPlanRow) -> None:
+        """Saca el día y sus comidas de la base, y del identity map."""
+        meal_ids = [meal.id for meal in existing.meals]
+        day_id = existing.id
+        if meal_ids:
+            await self._s.execute(
+                delete(MealItemRow).where(MealItemRow.meal_entry_id.in_(meal_ids))
+            )
+        await self._s.execute(delete(MealEntryRow).where(MealEntryRow.day_plan_id == day_id))
+        await self._s.execute(delete(DayPlanRow).where(DayPlanRow.id == day_id))
+        await self._s.flush()
+        sync = self._s.sync_session
+        for meal in existing.meals:
+            for item in meal.items:
+                if object_session(item) is sync:
+                    sync.expunge(item)
+            if object_session(meal) is sync:
+                sync.expunge(meal)
+        if object_session(existing) is sync:
+            sync.expunge(existing)
 
     async def count_approved_for_client(self, client_id: UUID) -> int:
         """Cuántos menús DEFINITIVOS lleva. Es el número humano de la versión:

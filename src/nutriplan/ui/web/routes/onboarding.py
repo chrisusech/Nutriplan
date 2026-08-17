@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.application.analytics import Event
@@ -37,6 +38,7 @@ from nutriplan.ui.web.deps import (
 router = APIRouter()
 
 _SEX_ALIASES = {"mujer": Sex.FEMALE, "f": Sex.FEMALE, "hombre": Sex.MALE, "m": Sex.MALE}
+_SAVE_FAILED = "No se pudo guardar tu perfil. Inténtalo otra vez."
 
 
 def _coerce(enum: Any, raw: str, label: str) -> Any:
@@ -106,6 +108,24 @@ async def _food_groups(
     return groups
 
 
+async def _onboarding_error(
+    request: Request,
+    session: AsyncSession,
+    *,
+    error: str,
+    form: dict[str, Any],
+    food_ids: list[str],
+) -> HTMLResponse:
+    return render(
+        request,
+        "onboarding.html",
+        active_tab="onboarding",
+        error=error,
+        form=form,
+        groups=await _food_groups(request, session, set(food_ids)),
+    )
+
+
 @router.get("/onboarding", response_model=None)
 async def onboarding_page(
     request: Request, session: Annotated[AsyncSession, Depends(db_session)]
@@ -155,6 +175,18 @@ async def submit_onboarding(
     account_id = account_id_of(request)
     meal_slots, food_ids = meal_slots or [], food_ids or []
     restrictions, context_tags = restrictions or [], context_tags or []
+    form = {
+        "name": name,
+        "sex": sex,
+        "age_years": age_years,
+        "height_cm": height_cm,
+        "weight_kg": weight_kg,
+        "goal": goal,
+        "activity_level": activity_level,
+        "restrictions": restrictions,
+        "eating_pattern_raw": eating_pattern_raw,
+        "meal_slots": meal_slots,
+    }
     # El nombre vive en la cuenta: si aquí lo corrigen, se corrige allá.
     await container_of(request).auth_repo(session).set_name(account_id, name)
     try:
@@ -179,28 +211,13 @@ async def submit_onboarding(
             client_repo=repos.clients,
         )
     except (ValidationError, ValueError) as exc:
-        return render(
-            request,
-            "onboarding.html",
-            active_tab="onboarding",
-            error=str(exc),
-            form={
-                "name": name,
-                "sex": sex,
-                "age_years": age_years,
-                "height_cm": height_cm,
-                "weight_kg": weight_kg,
-                "goal": goal,
-                "activity_level": activity_level,
-                "restrictions": restrictions,
-                "eating_pattern_raw": eating_pattern_raw,
-                "meal_slots": meal_slots,
-            },
-            groups=await _food_groups(request, session, set(food_ids)),
+        return await _onboarding_error(
+            request, session, error=str(exc), form=form, food_ids=food_ids
         )
     # El peso del alta cuenta como check-in de esta semana: si no, la primera
     # generación pediría pesarse otra vez el mismo día.
     await seed_weight_from_profile(client=client, weights=repos.weights)
+    macros_error: str | None = None
     if conoce_macros.strip().lower() == "si":
         from nutriplan.application.compute_targets import compute_and_store_targets
         from nutriplan.application.user_macros import user_macro_plan
@@ -223,18 +240,30 @@ async def submit_onboarding(
                 overrides=overrides,
             )
         except (CalculationError, ValueError) as exc:
-            from urllib.parse import quote
+            macros_error = str(exc)
+    if macros_error is None:
+        await track_event(
+            request,
+            session,
+            Event.ONBOARDING_DONE,
+            comidas=len(client.meal_slots),
+            marco_alimentos=len(client.liked_food_ids),
+            conto_habitos=client.eating_pattern_raw is not None,
+            contexto=client.context_tags,
+            objetivo=client.goal.value,
+            tiene_ciudad=client.city is not None,
+        )
+    # FastAPI hace el commit del yield *después* de enviar el 303: si falla, el
+    # iPhone ya creyó que salió bien y vuelve al paso del nombre.
+    try:
+        await session.commit()
+    except OperationalError:
+        await session.rollback()
+        return await _onboarding_error(
+            request, session, error=_SAVE_FAILED, form=form, food_ids=food_ids
+        )
+    if macros_error is not None:
+        from urllib.parse import quote
 
-            return RedirectResponse("/perfil?error=" + quote(str(exc)), status_code=303)
-    await track_event(
-        request,
-        session,
-        Event.ONBOARDING_DONE,
-        comidas=len(client.meal_slots),
-        marco_alimentos=len(client.liked_food_ids),
-        conto_habitos=client.eating_pattern_raw is not None,
-        contexto=client.context_tags,
-        objetivo=client.goal.value,
-        tiene_ciudad=client.city is not None,
-    )
+        return RedirectResponse("/perfil?error=" + quote(macros_error), status_code=303)
     return RedirectResponse("/", status_code=303)

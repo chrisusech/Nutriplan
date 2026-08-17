@@ -2,8 +2,8 @@
 
 No es "Mis alimentos" con otro nombre. Aquella pantalla contesta *"¿con qué
 puedo armarte el menú?"* y vale para siempre; esta contesta *"¿qué tienes ya
-comprado?"* y caduca el lunes. Por eso se guarda contra el inicio de semana y no
-hay que venir a desmarcar nada: la semana que viene nace vacía.
+comprado?"* y caduca al terminar la tira. Por eso se guarda contra el inicio
+de la semana y no hay que venir a desmarcar nada: la semana que viene nace vacía.
 
 Se ofrece solo lo que está en su menú: marcar algo que no come no significa nada.
 """
@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.application.food_pool import resolve_allowed_foods
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import client_week_start
 from nutriplan.ui.web.deps import account_id_of, db_session, render, repos_of
 from nutriplan.ui.web.gate import week_gate
 from nutriplan.ui.web.nav import safe_return
@@ -34,7 +34,8 @@ async def pantry(
     if client is None:
         return RedirectResponse("/onboarding", status_code=303)
 
-    semana = iso_week_start()
+    plan = await repos.plans.get(client.active_plan_id) if client.active_plan_id else None
+    semana = client_week_start(plan.week_start if plan else None)
     allowed = await resolve_allowed_foods(client, food_repo=repos.foods, client_repo=repos.clients)
     en_casa = await repos.clients.list_pantry_food_ids(client.id, semana)
     marcados = frozenset(str(fid) for fid in en_casa)
@@ -79,9 +80,9 @@ async def save_pantry(
             client, food_repo=repos.foods, client_repo=repos.clients
         )
     }
-    await repos.clients.set_pantry(
-        client.id, iso_week_start(), [fid for fid in ids if fid in allowed]
-    )
+    plan = await repos.plans.get(client.active_plan_id) if client.active_plan_id else None
+    semana = client_week_start(plan.week_start if plan else None)
+    await repos.clients.set_pantry(client.id, semana, [fid for fid in ids if fid in allowed])
     await session.commit()
     form = await request.form()
     asked = form.get("volver")

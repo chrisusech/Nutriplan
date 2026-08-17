@@ -254,6 +254,22 @@ async def test_sin_saldo_la_puerta_dice_exactamente_que_hacer() -> None:
     assert "Activa tu plan" in motivo
 
 
+async def test_rehacer_una_tira_vencida_no_es_gratis() -> None:
+    """Acabó la semana: regenerarla no puede colarse como si aún viviera."""
+    cuenta = _cuenta()
+    puede, motivo = await can_generate_week(
+        account=cuenta,
+        client_id=uuid4(),
+        memberships=_Membresias([]),
+        plans=_Planes(semanas=1),
+        generations=_Generaciones(esta_semana=1),
+        week_start=date(2026, 8, 1),
+        now=AHORA,
+    )
+    assert not puede
+    assert "Activa tu plan" in motivo
+
+
 async def test_rehacer_la_semana_en_curso_no_gasta_otra_semana() -> None:
     """Ya pagó ESTA semana: pedirla de nuevo no puede cobrarle dos veces."""
     cuenta = _cuenta()

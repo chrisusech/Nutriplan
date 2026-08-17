@@ -1,18 +1,26 @@
 """Cambiar un solo plato de la semana, sin gastar otra semana de membresía.
 
-Los candidatos salen del motor (el mismo pool con el que se armó el menú). El
-solver recuadra el día. Un mensaje libre sesga el ranking; no inventa alimentos.
+El motor completa proteína/carbo del slot si faltan; el solver recuadra el día.
+Un mensaje libre no es el título del plato: eso lo pone el motor o la IA.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from nutriplan.domain.dish_recipe import dish_key
 from nutriplan.domain.errors import GenerationError, ValidationError
-from nutriplan.domain.meal_template import Dish
+from nutriplan.domain.generation_rules import (
+    CARB_GROUP,
+    PROTEIN_GROUP,
+    SLOT_STRUCTURE,
+    SlotStructure,
+)
+from nutriplan.domain.meal_template import Dish, _name_from_foods
 from nutriplan.domain.models import (
     DayPlan,
+    FoodCategory,
     FoodItem,
     MacroTargets,
     MealEntry,
@@ -22,6 +30,13 @@ from nutriplan.domain.models import (
 from nutriplan.domain.nutrition_config import NutritionConfig
 from nutriplan.domain.portioning import solve_day_portions
 from nutriplan.domain.restaurant import is_eating_out
+from nutriplan.domain.swap_note import (
+    asks_for_fries,
+    closest_fries_or_potato,
+    dish_from_foods,
+    food_hits_needles,
+    food_needles,
+)
 from nutriplan.domain.validation import day_totals
 
 _SLOT_ORDER = list(MealSlot)
@@ -109,3 +124,117 @@ def _solve_day(
         )
     rebuilt.sort(key=lambda m: _SLOT_ORDER.index(m.slot))
     return DayPlan(day_index=day_index, meals=rebuilt, totals=day_totals(rebuilt))
+
+
+def complete_dish(
+    slot: MealSlot,
+    foods: Sequence[FoodItem],
+    catalog: Sequence[FoodItem],
+    *,
+    note: str = "",
+    name: str = "",
+    free_salad: bool | None = None,
+) -> Dish | None:
+    """Si el slot exige proteína/carbo y el pick no los trae, se añaden del catálogo."""
+    rule = SLOT_STRUCTURE[slot]
+    unique = _dedupe(foods)
+    if not unique:
+        return None
+    if rule.requires_protein and not any(f.category in PROTEIN_GROUP for f in unique):
+        fill = _fill_role(catalog, PROTEIN_GROUP, slot, note)
+        if fill is not None:
+            unique = _dedupe([*unique, fill])
+    if rule.requires_carb and not rule.carb_optional:
+        if not any(f.category in CARB_GROUP for f in unique):
+            fill = _fill_carb(catalog, slot, note)
+            if fill is not None:
+                unique = _dedupe([*unique, fill])
+    unique = _trim(_role_order(unique), rule)
+    if not unique:
+        return None
+    salad = rule.free_salad_default if free_salad is None else free_salad
+    title = name.strip()[:80]
+    if not title or title.lower() == note.strip().lower()[:80]:
+        title = _name_from_foods(tuple(unique))
+    dish = dish_from_foods(slot, unique, name=title)
+    if dish is None:
+        return None
+    if salad == dish.free_salad:
+        return dish
+    return Dish(
+        template_id=dish.template_id,
+        name=dish.name,
+        slot=dish.slot,
+        foods=dish.foods,
+        free_salad=salad,
+    )
+
+
+def _fill_carb(catalog: Sequence[FoodItem], slot: MealSlot, note: str) -> FoodItem | None:
+    if asks_for_fries(note):
+        closest = closest_fries_or_potato(list(catalog))
+        if closest is not None:
+            return closest
+    return _fill_role(catalog, CARB_GROUP, slot, note)
+
+
+def _fill_role(
+    catalog: Sequence[FoodItem],
+    group: set[FoodCategory],
+    slot: MealSlot,
+    note: str,
+) -> FoodItem | None:
+    needles = food_needles(note)
+    candidates = [food for food in catalog if food.category in group and slot in food.meal_slots]
+    if not candidates:
+        candidates = [food for food in catalog if food.category in group]
+    named = [food for food in candidates if needles and food_hits_needles(food, needles)]
+    pool = named or candidates
+    if not pool:
+        return None
+    return min(pool, key=lambda food: (not food.engine_default, food.kcal_100g, food.name_es))
+
+
+def _trim(foods: list[FoodItem], rule: SlotStructure) -> list[FoodItem]:
+    if len(foods) <= rule.max_items:
+        return foods
+    proteins = [food for food in foods if food.category in PROTEIN_GROUP]
+    carbs = [food for food in foods if food.category in CARB_GROUP]
+    rest = [food for food in foods if food not in proteins and food not in carbs]
+    ordered: list[FoodItem] = []
+    seen: set[UUID] = set()
+    for food in (
+        (proteins[:1] if rule.requires_protein else [])
+        + (carbs[:1] if rule.requires_carb and not rule.carb_optional else [])
+        + rest
+        + proteins[1:]
+        + carbs[1:]
+    ):
+        if food.id in seen or len(ordered) >= rule.max_items:
+            continue
+        seen.add(food.id)
+        ordered.append(food)
+    return ordered
+
+
+def _role_order(foods: Sequence[FoodItem]) -> list[FoodItem]:
+    """Proteína, carbo, el resto: el título de menú se lee como un plato."""
+    proteins = [food for food in foods if food.category in PROTEIN_GROUP]
+    carbs = [food for food in foods if food.category in CARB_GROUP]
+    rest = [
+        food
+        for food in foods
+        if food.category not in PROTEIN_GROUP and food.category not in CARB_GROUP
+    ]
+    return _dedupe([*proteins, *carbs, *rest])
+
+
+def _dedupe(foods: Sequence[FoodItem]) -> list[FoodItem]:
+    seen: set[UUID] = set()
+    out: list[FoodItem] = []
+    for food in foods:
+        if food.id in seen:
+            continue
+        seen.add(food.id)
+        out.append(food)
+    return out

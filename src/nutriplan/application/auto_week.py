@@ -1,7 +1,7 @@
-"""El domingo arma la semana siguiente a quien ya cerró.
+"""Al terminar la tira se arma la semana siguiente a quien ya cerró.
 
-No regenera la que se está comiendo. Si el menú del lunes nuevo ya existe,
-solo se activa cuando ese lunes llega.
+No regenera la que se está comiendo. Si el menú nuevo ya existe, solo se
+activa cuando llega su primer día.
 """
 
 from __future__ import annotations
@@ -22,14 +22,9 @@ from nutriplan.application.plan_cache import plan_cache_key
 from nutriplan.application.recent_dishes import dishes_of_previous_week
 from nutriplan.application.taste_profile import taste_profile_for
 from nutriplan.container import Container
-from nutriplan.domain.auto_week import (
-    closed_and_target_weeks,
-    in_auto_window,
-    now_bogota,
-    should_activate,
-)
+from nutriplan.domain.auto_week import in_auto_window, now_bogota, should_activate
 from nutriplan.domain.models import Account, Client
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import next_week_start, plan_is_live, today_bogota
 from nutriplan.ports.job_repository import JobStatus
 from nutriplan.ports.repository import ClientRepository, PlanRepository
 
@@ -43,32 +38,34 @@ async def promote_current_week(
     clients: ClientRepository,
     today: date | None = None,
 ) -> Client:
-    """Si ya hay menú de este lunes, ese es EL plan. El de ayer se archiva."""
-    week = iso_week_start(today or now_bogota().date())
-    current = await plans.for_week(client.id, week)
-    if current is None or client.active_plan_id == current.id:
+    """Si ya hay menú que cubre hoy, ese es EL plan. El de ayer se archiva."""
+    day = today or today_bogota()
+    covering = None
+    for plan in await plans.list_for_client(client.id):
+        if plan_is_live(plan.week_start, day) and (
+            covering is None or plan.week_start > covering.week_start
+        ):
+            covering = plan
+    if covering is None or client.active_plan_id == covering.id:
         return client
-    await clients.set_active_plan(client.id, current.id)
-    return client.model_copy(update={"active_plan_id": current.id})
+    await clients.set_active_plan(client.id, covering.id)
+    return client.model_copy(update={"active_plan_id": covering.id})
 
 
 async def run_auto_week(
     container: Container, *, when: datetime | None = None, force: bool = False
 ) -> int:
     """Genera el menú objetivo a quien cerró y tiene saldo. Devuelve cuántos."""
-    if not force and not in_auto_window(when):
-        return 0
-    closed_week, target_week = closed_and_target_weeks(when)
-    activate = should_activate(target_week, when)
+    today = now_bogota(when).date()
     generated = 0
     async with container.session_factory() as session:
         admin = container.admin_repo(session)
         memberships = container.membership_repo(session)
         auth = container.auth_repo(session)
-        candidates = await admin.closed_without_next_plan(
-            closed_week=closed_week, target_week=target_week
-        )
+        candidates = await admin.closed_without_next_plan(today=today)
         for cand in candidates:
+            if not force and not in_auto_window(cand.closed_week, when):
+                continue
             account = await auth.get_by_id(cand.user_id)
             if account is None:
                 continue
@@ -84,24 +81,20 @@ async def run_auto_week(
             )
             if not state.can_generate:
                 continue
+            target = next_week_start(cand.closed_week)
             ok = await _generate_one(
                 container,
                 session=session,
                 client=client,
                 account=account,
-                week=target_week,
-                activate=activate,
+                week=target,
+                activate=should_activate(target, when),
             )
             if ok:
                 generated += 1
         await session.commit()
     if generated:
-        logger.info(
-            "auto_week_done",
-            n=generated,
-            closed=str(closed_week),
-            target=str(target_week),
-        )
+        logger.info("auto_week_done", n=generated, today=str(today))
     return generated
 
 
@@ -195,7 +188,7 @@ async def _generate_one(
 
 
 async def auto_week_loop(container: Container) -> None:
-    """Cada cuarto de hora, si estamos en la ventana."""
+    """Cada cuarto de hora, si toca a alguien."""
     import asyncio
 
     while True:

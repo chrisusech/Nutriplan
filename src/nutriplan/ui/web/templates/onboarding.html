@@ -6,6 +6,10 @@
 <button type="button" class="back" data-back aria-label="Volver">
   <span class="icon">arrow_back</span>
 </button>
+{# El inicio no se pinta con la sesión viva: salir es lo que enseña el plato. #}
+<form method="post" action="/logout" hx-boost="false" hidden data-leave>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+</form>
 <div class="onb-progress" role="progressbar" aria-label="Progreso del cuestionario">
   <i class="onb-progress-fill" data-progress></i>
 </div>
@@ -217,7 +221,7 @@
     <section class="onb-step">
       <span class="onb-badge"><span class="icon">favorite</span></span>
       <h2>Selecciona lo que te guste comer.</h2>
-      <p class="onb-hint">Si no marcas nada, elegimos nosotros: puede salir pescado u otros platos que no comes. Si marcas, hace falta proteína, carbohidrato y grasa, no solo el primer grupo.</p>
+      <p class="onb-hint">Si no marcas nada, pueden salir alimentos que no comes (como pescado). Si marcas, hace falta proteína, carbohidrato y grasa, no solo el primer grupo.</p>
       {% for group in groups %}
       <details class="food-group">
         <summary>

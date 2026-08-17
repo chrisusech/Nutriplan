@@ -28,6 +28,7 @@ from nutriplan.domain.models import (
     PlanStatus,
     Sex,
 )
+from nutriplan.domain.week import today_bogota
 from nutriplan.ports.job_repository import JobStatus
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -140,6 +141,7 @@ async def test_del_onboarding_al_menu_aprobado(ctx) -> None:
     assert len(cycles) == 1  # una sola semana, no 15+15
     first = cycles[0]
     assert len(first.days) == 7
+    assert first.week_start == today_bogota()
 
     # 5) Reproducibilidad: regenerar devuelve el MISMO plan sin re-generar
     again = await generate_plan_for_client(

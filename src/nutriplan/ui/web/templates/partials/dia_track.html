@@ -7,7 +7,7 @@
   {% if aviso %}<p class="alert">{{ aviso }}</p>{% endif %}
   {% if error %}<p class="alert">{{ error }}</p>{% endif %}
 
-  <ul class="meals stagger">
+  <ul class="meals">
     {% for meal in day.meals %}
     <li>
       <details class="meal{% if meal.eaten %} eaten{% endif %}" id="nota-{{ meal.slot }}"
@@ -31,9 +31,11 @@
           <div class="recipe">
             <p class="muted">Elige el restaurante y el plato: sus macros entran
               al día y recuadramos el resto.</p>
+            {% if plan_mutable %}
             <a class="btn btn-primary btn-block" href="/menu/fuera?dia={{ dia }}&slot={{ meal.slot }}">
               <span class="icon">restaurant</span>Voy a comer fuera
             </a>
+            {% endif %}
             {% include "partials/meal_eaten.html" %}
           </div>
         {% elif meal.is_out %}
@@ -50,9 +52,11 @@
               </ul>
             </div>
             <div class="meal-actions">
+              {% if plan_mutable %}
               <a class="btn btn-ghost" href="/menu/fuera?dia={{ dia }}&slot={{ meal.slot }}">
                 Cambiar de restaurante
               </a>
+              {% endif %}
               {% include "partials/meal_eaten.html" %}
             </div>
           </div>
@@ -100,12 +104,14 @@
             </div>
 
             <div class="meal-actions">
+              {% if plan_mutable %}
               <a class="btn btn-ghost" href="/menu/fuera?dia={{ dia }}&slot={{ meal.slot }}">
                 <span class="icon">restaurant</span>Voy a comer fuera
               </a>
               <a class="btn btn-ghost" href="/menu/cambiar?dia={{ dia }}&slot={{ meal.slot }}">
                 Cambiar este plato
               </a>
+              {% endif %}
               {% include "partials/meal_eaten.html" %}
             </div>
 

@@ -4,6 +4,7 @@ Reemplaza al dashboard de clientes del entrenador. Aquí solo hay una persona
 —quien está mirando— y su menú.
 """
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -17,7 +18,7 @@ from nutriplan.domain.dish_recipe import DishRecipe
 from nutriplan.domain.errors import ValidationError
 from nutriplan.domain.models import MealSlot, PlanCycle
 from nutriplan.domain.streak import current_streak
-from nutriplan.domain.week import iso_week_start, today_weekday
+from nutriplan.domain.week import client_week_start, last_plan_day
 from nutriplan.ui.web import week_view
 from nutriplan.ui.web.deps import (
     account_id_of,
@@ -28,7 +29,7 @@ from nutriplan.ui.web.deps import (
     repos_of,
     track_event,
 )
-from nutriplan.ui.web.gate import week_gate
+from nutriplan.ui.web.gate import plan_mutable, week_gate
 from nutriplan.ui.web.public_errors import sanitize_public_error
 
 router = APIRouter()
@@ -41,10 +42,10 @@ def _safe_day(raw: str | None) -> int:
         return 0
 
 
-def _open_day(raw: str | None) -> int:
-    """Sin `?dia=` se abre hoy. Un valor raro se acota; no se vuelve al lunes."""
+def _open_day(raw: str | None, week_start: date | None = None) -> int:
+    """Sin `?dia=` se abre hoy. Si la tira ya venció, el último día."""
     if raw is None:
-        return today_weekday()
+        return last_plan_day(week_start) if week_start is not None else 0
     return _safe_day(raw)
 
 
@@ -87,11 +88,15 @@ async def my_week(
 
     plan = await repos.plans.get(client.active_plan_id) if client.active_plan_id else None
     gate = await week_gate(request, session, client, plan=plan)
-    dia = _open_day(request.query_params.get("dia"))
+    dia = _open_day(request.query_params.get("dia"), plan.week_start if plan else None)
     day = next((d for d in plan.days if d.day_index == dia), None) if plan else None
     # Cuántas cosas dijo tener en casa: la entrada a esa pantalla se acompaña del
     # número para que se vea que lo marcado sigue ahí.
-    en_casa_n = len(await repos.clients.list_pantry_food_ids(client.id, iso_week_start()))
+    en_casa_n = len(
+        await repos.clients.list_pantry_food_ids(
+            client.id, client_week_start(plan.week_start if plan else None)
+        )
+    )
     if plan is None or day is None:
         # Sin plan la pantalla no se disculpa: celebra el perfil recién hecho y
         # ofrece el único botón que hay que tocar.
@@ -112,7 +117,7 @@ async def my_week(
     ratings = await repos.ratings.for_day(plan.id, dia)
     # Contra qué se compara lo comido: sin el objetivo no hay anillo que pintar.
     targets = await repos.targets.get(plan.targets_id)
-    vista = week_view.day_view(day, foods, recipes, ratings)
+    vista = week_view.day_view(day, foods, recipes, ratings, week_start=plan.week_start)
     planes = await repos.plans.list_for_client(client.id)
 
     return render(
@@ -126,11 +131,12 @@ async def my_week(
         progreso=week_view.day_progress(vista, targets.daily if targets else None),
         racha=current_streak(planes),
         can_regenerate=gate.allowed and is_super_user(request),
-        waiting_sunday=gate.reason.startswith("El domingo"),
+        waiting_next_week=gate.waiting_next_week,
         needs_checkin=gate.needs_checkin,
         unlock_hint=gate.reason,
         closure=gate.closure,
         membership=gate.membership,
+        plan_mutable=plan_mutable(plan),
         en_casa_n=en_casa_n,
         # La comida que se queda abierta al volver de calificar: sin esto la
         # tarjeta se cierra al recargar, la pregunta por el «por qué» no llega a
@@ -164,7 +170,7 @@ async def _comi_swap(
     recipes = await _recipes_for_day(request, session, plan, day_index)
     ratings = await repos.ratings.for_day(plan.id, day_index)
     targets = await repos.targets.get(plan.targets_id)
-    vista = week_view.day_view(day, foods, recipes, ratings)
+    vista = week_view.day_view(day, foods, recipes, ratings, week_start=plan.week_start)
     meal_vm = next((m for m in vista["meals"] if m["slot"] == slot.value), None)
     if meal_vm is None:
         meal_vm = {"slot": slot.value, "eaten": False}
@@ -178,6 +184,7 @@ async def _comi_swap(
         progreso=week_view.day_progress(vista, targets.daily if targets else None),
         racha=current_streak(planes),
         meal=meal_vm,
+        plan_mutable=plan_mutable(plan),
     )
 
 
@@ -249,7 +256,7 @@ async def _rate_form(
     foods = {f.id: f for f in await repos.foods.get_by_ids(ids)}
     recipes = await _recipes_for_day(request, session, plan, day_index)
     ratings = await repos.ratings.for_day(plan.id, day_index)
-    vista = week_view.day_view(day, foods, recipes, ratings)
+    vista = week_view.day_view(day, foods, recipes, ratings, week_start=plan.week_start)
     meal_vm = next((m for m in vista["meals"] if m["slot"] == slot), {"slot": slot})
     return render(
         request,

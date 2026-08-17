@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.week import today_bogota
 
 
 class Sex(StrEnum):
@@ -444,7 +444,7 @@ class MealEntry(BaseModel):
 
 
 class DayPlan(BaseModel):
-    day_index: int = Field(ge=0, le=6)  # 0..6 (lunes..domingo)
+    day_index: int = Field(ge=0, le=6)  # 0..6 desde week_start, no lunes..domingo
     meals: list[MealEntry]
     totals: MacroTargets
 
@@ -459,11 +459,12 @@ class PlanCycle(BaseModel):
     tenant_id: UUID
     client_id: UUID
     targets_id: UUID
-    days: list[DayPlan]  # exactamente 7, uno por día de la semana
-    # A QUÉ semana pertenece el plan (lunes ISO). Sin esto, `day_index` es un
-    # rótulo suelto: no hay forma de saber si un plan es el de esta semana o el
-    # de hace un mes, y ni el historial ni el consumo de la membresía existen.
-    week_start: date = Field(default_factory=iso_week_start)
+    days: list[DayPlan]  # exactamente 7, uno por día de la tira
+    # Primer día de ESTA tira de 7 (la fecha en que se generó el menú). Sin
+    # esto, `day_index` es un rótulo suelto: no hay forma de saber si un plan
+    # es el de esta semana o el de hace un mes, y ni el historial ni el
+    # consumo de la membresía existen.
+    week_start: date = Field(default_factory=today_bogota)
     variant: int = Field(default=0, ge=0)
     # El número humano del plan ("Plan nutricional v3"). `variant` es su gemelo
     # técnico: entra en el input_hash para que dos versiones no colisionen en la

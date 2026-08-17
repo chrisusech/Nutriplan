@@ -12,16 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutriplan.application.analytics import Event
 from nutriplan.application.food_pool import resolve_allowed_foods
+from nutriplan.application.membership import membership_of
 from nutriplan.application.taste_profile import extract_taste_signals
 from nutriplan.application.weekly_checkin import (
     submit_weekly_checkin,
     week_closure,
 )
 from nutriplan.domain.errors import ValidationError
-from nutriplan.domain.week import iso_week_start
+from nutriplan.domain.membership import MembershipState
+from nutriplan.domain.models import Client
+from nutriplan.domain.week import client_week_start
 from nutriplan.domain.week_recap import week_recap
 from nutriplan.ui.web.deps import (
     account_id_of,
+    acting_account,
     container_of,
     db_session,
     render,
@@ -32,6 +36,20 @@ from nutriplan.ui.web.deps import (
 router = APIRouter()
 
 
+async def _membership_of(
+    request: Request, session: AsyncSession, client: Client | None
+) -> MembershipState | None:
+    account = await acting_account(request, session)
+    if account is None or client is None:
+        return None
+    return await membership_of(
+        account=account,
+        client_id=client.id,
+        memberships=container_of(request).membership_repo(session),
+        plans=repos_of(request, session).plans,
+    )
+
+
 @router.get("/check-in", response_model=None)
 async def checkin_form(
     request: Request, session: Annotated[AsyncSession, Depends(db_session)]
@@ -40,15 +58,17 @@ async def checkin_form(
     client = await repos.clients.get_by_user(account_id_of(request))
     if client is None:
         return RedirectResponse("/onboarding", status_code=303)
-    entry = await repos.weights.for_week(client.id, iso_week_start())
     plan = (
         await repos.plans.get(client.active_plan_id) if client.active_plan_id is not None else None
     )
+    week = client_week_start(plan.week_start if plan else None)
+    entry = await repos.weights.for_week(client.id, week)
     closure = await week_closure(
         client=client,
         weights=repos.weights,
         ratings=repos.ratings,
         meals_in_plan=sum(len(d.meals) for d in plan.days) if plan else 0,
+        week_start=plan.week_start if plan else None,
     )
     recap = None
     if plan is not None:
@@ -65,6 +85,7 @@ async def checkin_form(
         already=entry is not None,
         closure=closure,
         recap=recap,
+        membership=await _membership_of(request, session, client),
     )
 
 
@@ -98,6 +119,7 @@ async def checkin_submit(
             llm=container.llm_client,
             prompts_dir=container.settings.prompts_dir,
             model=container.settings.llm_model_generate,
+            week_start=plan.week_start if plan else None,
         )
     except ValidationError as exc:
         return await _form_with_error(request, session, weight_kg, comentario, str(exc))
@@ -109,6 +131,7 @@ async def checkin_submit(
         weights=repos.weights,
         ratings=repos.ratings,
         meals_in_plan=meals_in_plan,
+        week_start=plan.week_start if plan else None,
     )
     if not closure.is_first_week and not closure.ratings_done:
         return await _form_with_error(
@@ -126,7 +149,7 @@ async def checkin_submit(
     interpreted = await extract_taste_signals(
         client=client,
         plan_cycle_id=client.active_plan_id,
-        week_start=iso_week_start(),
+        week_start=plan.week_start if plan else client_week_start(None),
         weekly_comment=comentario,
         allowed=allowed,
         ratings=repos.ratings,
@@ -158,18 +181,19 @@ async def checkin_ready(
     client = await repos.clients.get_by_user(account_id_of(request))
     if client is None:
         return RedirectResponse("/onboarding", status_code=303)
-    week = iso_week_start()
-    entry = await repos.weights.for_week(client.id, week)
-    if entry is None:
-        return RedirectResponse("/check-in", status_code=303)
     plan = (
         await repos.plans.get(client.active_plan_id) if client.active_plan_id is not None else None
     )
+    week = client_week_start(plan.week_start if plan else None)
+    entry = await repos.weights.for_week(client.id, week)
+    if entry is None:
+        return RedirectResponse("/check-in", status_code=303)
     closure = await week_closure(
         client=client,
         weights=repos.weights,
         ratings=repos.ratings,
         meals_in_plan=sum(len(d.meals) for d in plan.days) if plan else 0,
+        week_start=plan.week_start if plan else None,
     )
     if not closure.is_closed:
         return RedirectResponse("/check-in", status_code=303)
@@ -187,6 +211,7 @@ async def checkin_ready(
         interpreted=interpreted,
         en_casa_n=len(await repos.clients.list_pantry_food_ids(client.id, week)),
         pantry_volver="/listo",
+        membership=await _membership_of(request, session, client),
     )
 
 
@@ -210,6 +235,7 @@ async def _form_with_error(
             weights=repos.weights,
             ratings=repos.ratings,
             meals_in_plan=sum(len(d.meals) for d in plan.days) if plan else 0,
+            week_start=plan.week_start if plan else None,
         )
         if client is not None
         else None
@@ -230,4 +256,5 @@ async def _form_with_error(
         recap=recap,
         error=error,
         already=bool(closure and closure.has_weight),
+        membership=await _membership_of(request, session, client),
     )

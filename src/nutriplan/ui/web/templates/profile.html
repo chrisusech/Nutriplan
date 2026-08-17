@@ -129,7 +129,7 @@
   <li>
     <a class="row" href="/check-in">
       <span class="row-icon"><span class="icon">monitor_weight</span></span>
-      <span class="row-text">Actualizar mi peso<span class="row-sub">Cierra la semana y adapta las kcal</span></span>
+      <span class="row-text">Actualizar mi peso<span class="row-sub">Peso y resumen de tu semana</span></span>
       <span class="row-chevron"><span class="icon">chevron_right</span></span>
     </a>
   </li>
@@ -161,11 +161,15 @@
 {% include "partials/membership.html" %}
 
 {% if needs_checkin %}
+{% if membership and not membership.can_generate %}
+<p class="muted">¿Terminaste tu semana? <a href="/check-in">Ver resumen</a>.</p>
+{% else %}
 <p class="alert">
-  Antes de regenerar, <a href="/check-in">cierra tu semana</a>:
+  Antes de regenerar, <a href="/check-in">mira tu resumen</a>:
   {% if closure and closure.missing %}{{ closure.missing|join('; ') }}.{% else %}
   peso y comentario.{% endif %}
 </p>
+{% endif %}
 {% elif can_regenerate %}
 <form method="post" action="/menu/generar" class="regen"
       hx-post="/menu/generar" hx-target="main" hx-swap="innerHTML">
@@ -174,8 +178,8 @@
     <span class="icon">auto_awesome</span>Generar otra semana
   </button>
 </form>
-{% elif waiting_sunday %}
-<p class="alert">El domingo preparamos tu siguiente menú.</p>
+{% elif waiting_next_week %}
+<p class="alert">Al terminar tu semana preparamos el siguiente menú.</p>
 {% elif unlock_hint %}
 <p class="alert">{{ unlock_hint }}</p>
 {% endif %}

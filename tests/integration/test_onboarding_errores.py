@@ -186,3 +186,31 @@ def test_unos_macros_imposibles_en_el_alta_no_repiten_el_onboarding(app) -> None
     )
     assert resp.status_code == 303
     assert resp.headers["location"].startswith("/perfil")
+
+
+def test_si_no_se_puede_guardar_no_finje_exito(app, monkeypatch) -> None:
+    """Un 303 con el commit aún por hacer devolvía al paso del nombre."""
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.ext.asyncio.session import AsyncSession
+
+    # El POST de tests pide CSRF con GET /entrar. Eso, con sesión, acaba en un
+    # commit vacío: hay que cachear el token *antes* de romper el commit.
+    html = app.get("/onboarding").text
+    match = re.search(r'name="_csrf" value="([^"]+)"', html)
+    assert match is not None
+    app._csrf_cache = match.group(1)  # type: ignore[attr-defined]
+
+    real = AsyncSession.commit
+    visto = {"n": 0}
+
+    async def el_primero_falla(self: AsyncSession) -> None:
+        visto["n"] += 1
+        if visto["n"] == 1:
+            raise OperationalError("commit", {}, Exception("database or disk is full"))
+        await real(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", el_primero_falla)
+    resp = _enviar(app)
+    assert resp.status_code == 200
+    assert "No se pudo guardar tu perfil" in resp.text
+    assert "data-submit" in resp.text
