@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 NutriPlan generates weekly nutrition menus (7 days, up to 5 meals/day) that the user
 reads **in the app** — there is no PDF/DOCX export. It is being pivoted from a trainer
 console to an end-user mobile app; the plan for that work lives in
-`.claude/plans/`. The README is in Spanish and code comments/domain names are Spanish —
-match that language when editing them.
+`.claude/plans/`. Code comments, domain names, `PENDIENTE.md` and `docs/` are in Spanish —
+match that language when editing them. `README.md` is the exception: it is the public face of
+the repo and is written in English. Do not translate it back.
 
 ## Commands
 

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Una serie de pushes al mismo ref no encola runs: solo interesa el último.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          # No hay .python-version: la versión se fija aquí, como en el Dockerfile.
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen --extra apple
+      # Solo `ruff check`. `ruff format --check` no es gate a propósito: ver el
+      # comentario en pyproject.toml.
+      - run: uv run ruff check .
+
+  types:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # `packages = ["nutriplan"]` exige el paquete instalado, no solo en el path.
+      - run: uv sync --frozen --extra apple
+      - run: uv run mypy
+
+  tests:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen --extra apple
+      # Sin secretos a propósito: tests/conftest.py borra las claves del LLM y
+      # corta httpx fuera de localhost, así que una llamada real falla en vez de
+      # colarse. La base SQLite la crea cada test en su tmp_path.
+      - run: uv run pytest --cov-fail-under=90
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
