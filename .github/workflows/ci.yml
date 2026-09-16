@@ -22,7 +22,7 @@ jobs:
           python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --extra apple
+      - run: uv sync --frozen --all-extras
       # Solo `ruff check`. `ruff format --check` no es gate a propósito: ver el
       # comentario en pyproject.toml.
       - run: uv run ruff check .
@@ -38,7 +38,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       # `packages = ["nutriplan"]` exige el paquete instalado, no solo en el path.
-      - run: uv sync --frozen --extra apple
+      - run: uv sync --frozen --all-extras
       - run: uv run mypy
 
   tests:
@@ -52,7 +52,7 @@ jobs:
           python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --extra apple
+      - run: uv sync --frozen --all-extras
       # Sin secretos a propósito: tests/conftest.py borra las claves del LLM y
       # corta httpx fuera de localhost, así que una llamada real falla en vez de
       # colarse. La base SQLite la crea cada test en su tmp_path.
